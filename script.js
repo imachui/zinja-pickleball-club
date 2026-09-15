@@ -3,15 +3,13 @@ const SUPABASE_URL = "https://kbafnegagyjwiztyfmxpr.supabase.co";
 // IMPORTANT:
 // Ilagay dito ang SUPABASE PUBLISHABLE KEY mo.
 // HUWAG gamitin ang sb_secret_ key.
-const SUPABASE_KEY = "sb_publishable_djA6ivm66-hfO3WLub527w_AbOa8rvc
+const SUPABASE_KEY = "sb_publishable_djA6ivm66-hfO3WLub527w_AbOa8rvc";
 
 const headers = {
   "apikey": SUPABASE_KEY,
   "Authorization": `Bearer ${SUPABASE_KEY}`,
   "Content-Type": "application/json"
-};
-
-// ===============================
+};// ===============================
 // BASIC SETUP
 // ===============================
 
@@ -34,7 +32,6 @@ const playResult = document.getElementById("playResult");
 
 function generateCancelCode() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-
   let code = "";
 
   for (let i = 0; i < 6; i++) {
@@ -101,7 +98,6 @@ async function loadBookings() {
     if (!container) {
       container = document.createElement("div");
       container.id = "liveBookings";
-
       bookingForm.parentElement.appendChild(container);
     }
 
@@ -159,7 +155,6 @@ async function loadOpenPlay() {
     if (!container) {
       container = document.createElement("div");
       container.id = "liveOpenPlay";
-
       playForm.parentElement.appendChild(container);
     }
 
@@ -265,9 +260,7 @@ bookingForm.onsubmit = async function(e) {
 
         <hr>
 
-        <p>
-          🔐 <strong>Your Cancellation Code:</strong>
-        </p>
+        <p>🔐 <strong>Your Cancellation Code:</strong></p>
 
         <h2>${cancellationCode}</h2>
 
@@ -366,9 +359,7 @@ playForm.onsubmit = async function(e) {
 
         <hr>
 
-        <p>
-          🔐 <strong>Your Cancellation Code:</strong>
-        </p>
+        <p>🔐 <strong>Your Cancellation Code:</strong></p>
 
         <h2>${cancellationCode}</h2>
 
@@ -447,7 +438,6 @@ function createCancellationBoxes() {
       cancelBooking;
   }
 
-
   if (!document.getElementById("cancelOpenPlayBox")) {
 
     const box = document.createElement("div");
@@ -510,7 +500,6 @@ async function cancelBooking() {
   if (!mobile || !code) {
     resultBox.innerHTML =
       "⚠️ Please enter your mobile number and cancellation code.";
-
     return;
   }
 
@@ -537,7 +526,6 @@ async function cancelBooking() {
 
       resultBox.innerHTML =
         "❌ Unable to cancel booking.";
-
       return;
     }
 
@@ -555,7 +543,6 @@ async function cancelBooking() {
 
       resultBox.innerHTML =
         "❌ Booking not found. Check your mobile number and cancellation code.";
-
     }
 
   } catch (error) {
@@ -586,7 +573,6 @@ async function cancelOpenPlay() {
   if (!mobile || !code) {
     resultBox.innerHTML =
       "⚠️ Please enter your mobile number and cancellation code.";
-
     return;
   }
 
@@ -613,7 +599,6 @@ async function cancelOpenPlay() {
 
       resultBox.innerHTML =
         "❌ Unable to cancel registration.";
-
       return;
     }
 
@@ -631,7 +616,6 @@ async function cancelOpenPlay() {
 
       resultBox.innerHTML =
         "❌ Registration not found. Check your mobile number and cancellation code.";
-
     }
 
   } catch (error) {
@@ -655,6 +639,7 @@ loadOpenPlay();
 
 
 // Refresh live lists every 30 seconds
+
 setInterval(() => {
   loadBookings();
   loadOpenPlay();
