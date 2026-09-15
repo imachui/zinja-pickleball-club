@@ -6,6 +6,9 @@ const headers = {
   "Content-Type": "application/json"
 };
 
+// Dito natin idinagdag ang POLL_MS para hindi mag-crash ang script
+const POLL_MS = 30000; // Mag-aauto-refresh every 30 seconds
+
 // ====================
 // HELPERS
 // ====================
@@ -153,7 +156,7 @@ async function loadBookings() {
 
   try {
     const rows = await supabaseFetch(
-      "/rest/v1/public_bookings?select=*&order=booking_date.asc,booking_time.asc"
+      "/rest/v1/public_bookings?select=*&order=booking_date.asc,start_time.asc"
     );
 
     if (!rows || rows.length === 0) {
@@ -165,12 +168,12 @@ async function loadBookings() {
       .map(
         (booking) => `
       <div class="booking-item">
-        <strong>${escapeHtml(booking.name)}</strong>
+        <strong>${escapeHtml(booking.customer_name)}</strong>
         <div>
           ${escapeHtml(booking.booking_date)}
-          · ${formatTime(booking.booking_time)}
+          · ${formatTime(booking.start_time)}
           · Court ${escapeHtml(booking.court)}
-          · ${escapeHtml(booking.duration)} hour(s)
+          · ${escapeHtml(booking.duration_hours)} hour(s)
         </div>
       </div>
     `
@@ -212,7 +215,7 @@ async function loadOpenPlay() {
       .map(
         (player) => `
       <div class="open-play-item">
-        <strong>${escapeHtml(player.name)}</strong>
+        <strong>${escapeHtml(player.player_name)}</strong>
         <div>
           ${escapeHtml(player.play_date)}
           · ${formatTime(player.play_time)}
@@ -303,7 +306,7 @@ async function handleBookingSubmit(event) {
     );
 
     const existing = await supabaseFetch(
-      `/rest/v1/public_bookings?select=booking_date,booking_time,court,duration&booking_date=eq.${encodeURIComponent(
+      `/rest/v1/public_bookings?select=booking_date,start_time,court,duration_hours&booking_date=eq.${encodeURIComponent(
         bookingDate
       )}&court=eq.${encodeURIComponent(court)}`
     );
@@ -312,8 +315,8 @@ async function handleBookingSubmit(event) {
       bookingOverlaps(
         bookingTime,
         duration,
-        booking.booking_time,
-        booking.duration
+        booking.start_time,
+        booking.duration_hours
       )
     );
 
@@ -361,7 +364,7 @@ async function handleBookingSubmit(event) {
 
     showResult(
       result,
-      `Booking confirmed! Court ${court}, ${bookingDate} at ${formatTime(
+      `Thank you, ${name}! Booking confirmed for Court ${court}, ${bookingDate} at ${formatTime(
         bookingTime
       )}. Cancellation code: ${cancellationCode}. Please save this code.`,
       true
@@ -469,7 +472,7 @@ async function handleOpenPlaySubmit(event) {
 
     showResult(
       result,
-      `Open Play registration confirmed! ${playDate} at ${formatTime(
+      `Thank you, ${name}! Open Play registration confirmed for ${playDate} at ${formatTime(
         playTime
       )}. Cancellation code: ${cancellationCode}. Please save this code.`,
       true
