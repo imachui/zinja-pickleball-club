@@ -6,7 +6,6 @@ const headers = {
   "Content-Type": "application/json"
 };
 
-// Dito natin idinagdag ang POLL_MS para hindi mag-crash ang script
 const POLL_MS = 30000; // Mag-aauto-refresh every 30 seconds
 
 // ====================
@@ -288,10 +287,11 @@ async function handleBookingSubmit(event) {
     return;
   }
 
-  if (![1, 2].includes(duration)) {
+  // ITO ANG BINAGO NATIN: Ngayon ay 1 hanggang 10 hours na ang tinatanggap
+  if (isNaN(duration) || duration < 1 || duration > 10) {
     showResult(
       result,
-      "Please select a valid duration.",
+      "Please select a valid duration (1 to 10 hours).",
       false
     );
 
