@@ -44,7 +44,6 @@
       <input id="date" type="date" required>
       <input id="time" type="time" required>
       
-      <!-- ITO ANG PINAKAMAHALAGANG FIX: May value="1" at value="2" na -->
       <select id="court" required>
         <option value="">Select Court</option>
         <option value="1">Court 1</option>
@@ -56,12 +55,18 @@
         <option value="1">1 hour — ₱150</option>
         <option value="2">2 hours — ₱300</option>
         <option value="3">3 hours — ₱450</option>
+        <option value="4">4 hours — ₱600</option>
+        <option value="5">5 hours — ₱750</option>
+        <option value="6">6 hours — ₱900</option>
+        <option value="7">7 hours — ₱1,050</option>
+        <option value="8">8 hours — ₱1,200</option>
+        <option value="9">9 hours — ₱1,350</option>
+        <option value="10">10 hours — ₱1,500</option>
       </select>
       
       <button class="btn" type="submit">Prepare Booking</button>
     </form>
     <div id="bookingResult"></div>
-    <!-- Lalagyan ng listahan ng bookings -->
     <div id="bookingsList" style="margin-top: 20px;"></div>
   </section>
 
@@ -85,7 +90,6 @@
       <button class="btn" type="submit">Join Open Play</button>
     </form>
     <div id="playResult"></div>
-    <!-- Lalagyan ng listahan ng Open Play -->
     <div id="openPlayList" style="margin-top: 20px;"></div>
   </section>
 
