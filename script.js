@@ -1,12 +1,11 @@
 const SUPABASE_URL = "https://kbafnegagyiwztyfmxpr.supabase.co";
+
 const SUPABASE_KEY = "sb_publishable_djA6ivm66-hfO3WLub527w_AbOa8rvc";
 
 const headers = {
   apikey: SUPABASE_KEY,
   "Content-Type": "application/json"
 };
-
-const POLL_MS = 30000;
 
 // ====================
 // HELPERS
