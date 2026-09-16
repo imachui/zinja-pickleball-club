@@ -65,7 +65,6 @@
         <option value="10">10 hours — ₱1,500</option>
       </select>
       
-      <!-- LIVE AVAILABILITY CHECK: Lalabas dito ang listahan ng booked times -->
       <div id="availabilityInfo" style="margin: 10px 0;"></div>
       
       <button class="btn" type="submit">Prepare Booking</button>
@@ -76,12 +75,12 @@
 
   <section id="openplay" class="dark">
     <h2>Join Open Play</h2>
-    <p>Open Play is ₱50 per player.</p>
+    <p>Open Play is ₱50 per player. Sessions run <strong>5:00 PM to 12:00 AM</strong> daily.</p>
     <form id="playForm">
       <input id="player" placeholder="Full Name" required>
       <input id="playerPhone" placeholder="Mobile Number" required>
       <input id="playDate" type="date" required>
-      <input id="playTime" type="time" required>
+      <!-- Ang playTime ay naka-fix na sa 17:00 (5PM) -->
       
       <select id="level" required>
         <option value="">Skill Level</option>
@@ -91,13 +90,15 @@
         <option value="Any level">Any level</option>
       </select>
       
+      <!-- OPEN PLAY CAPACITY INFO: Dito lalabas ang slots info -->
+      <div id="openPlayInfo" style="margin: 10px 0;"></div>
+      
       <button class="btn" type="submit">Join Open Play</button>
     </form>
     <div id="playResult"></div>
     <div id="openPlayList" style="margin-top: 20px;"></div>
   </section>
 
-  <!-- CLUB HIGHLIGHTS SECTION -->
   <section id="highlights">
     <h2>🏆 Club Highlights</h2>
     <p>Share your best Pickleball moments! (Photos & 1080p 60fps videos, max 100MB)</p>
