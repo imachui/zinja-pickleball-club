@@ -16,10 +16,6 @@ const OPEN_PLAY_START_TIME = "17:00";
 const PLAYERS_PER_COURT = 16;
 const TOTAL_COURTS = 2;
 
-// ====================
-// HELPERS
-// ====================
-
 function generateCancelCode() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "";
@@ -116,10 +112,6 @@ function getSavedCancellation(type) {
   } catch { return null; }
 }
 
-// ====================
-// DOWNLOAD VIA ANDROID APP
-// ====================
-
 function downloadViaAndroid(url, fileName) {
   if (typeof AndroidDownloader !== "undefined" && AndroidDownloader.downloadFile) {
     try {
@@ -138,10 +130,6 @@ function downloadViaAndroid(url, fileName) {
   a.click();
   document.body.removeChild(a);
 }
-
-// ====================
-// OPEN PLAY CAPACITY CHECK
-// ====================
 
 async function checkOpenPlayCapacity(playDate) {
   if (!playDate) return null;
@@ -212,10 +200,6 @@ function setupOpenPlayInfo() {
   if (playDateInput) playDateInput.addEventListener("change", updateOpenPlayInfo);
 }
 
-// ====================
-// LIVE AVAILABILITY CHECK (BOOKING)
-// ====================
-
 async function checkAvailability() {
   const bookingDate = document.getElementById("date")?.value;
   const court = Number(document.getElementById("court")?.value);
@@ -250,10 +234,6 @@ function setupAvailabilityCheck() {
   if (courtSelect) courtSelect.addEventListener("change", checkAvailability);
 }
 
-// ====================
-// LOAD BOOKINGS
-// ====================
-
 async function loadBookings() {
   const container = document.getElementById("bookingsList");
   if (!container) return;
@@ -287,10 +267,6 @@ async function loadBookings() {
   }
 }
 
-// ====================
-// LOAD OPEN PLAY
-// ====================
-
 async function loadOpenPlay() {
   const container = document.getElementById("openPlayList");
   if (!container) return;
@@ -323,10 +299,6 @@ async function loadOpenPlay() {
     container.innerHTML = "<p>Unable to load Open Play right now.</p>";
   }
 }
-
-// ====================
-// COURT BOOKING SUBMIT
-// ====================
 
 async function handleBookingSubmit(event) {
   event.preventDefault();
@@ -384,10 +356,6 @@ async function handleBookingSubmit(event) {
   }
 }
 
-// ====================
-// OPEN PLAY SUBMIT
-// ====================
-
 async function handleOpenPlaySubmit(event) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -438,10 +406,6 @@ async function handleOpenPlaySubmit(event) {
     showResult(result, `Something went wrong. ${error.message || "Please try again."}`, false);
   }
 }
-
-// ====================
-// CANCELLATION BOXES
-// ====================
 
 function createCancellationBoxes() {
   const bookingForm = document.getElementById("bookingForm");
@@ -530,7 +494,7 @@ async function cancelOpenPlay() {
   } catch (error) { showResult(result, `Cancellation failed. ${error.message || "Please try again."}`, false); }
 }
 
-// ====================
+// END OF PART 1// ====================
 // CLUB CHAT (TEXT + EMOJI ONLY)
 // ====================
 
