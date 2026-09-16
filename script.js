@@ -16,10 +16,6 @@ const OPEN_PLAY_START_TIME = "17:00";
 const PLAYERS_PER_COURT = 16;
 const TOTAL_COURTS = 2;
 
-// ====================
-// HELPERS
-// ====================
-
 function generateCancelCode() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "";
@@ -116,10 +112,6 @@ function getSavedCancellation(type) {
   } catch { return null; }
 }
 
-// ====================
-// DOWNLOAD VIA ANDROID APP
-// ====================
-
 function downloadViaAndroid(url, fileName) {
   if (typeof AndroidDownloader !== "undefined" && AndroidDownloader.downloadFile) {
     try {
@@ -138,10 +130,6 @@ function downloadViaAndroid(url, fileName) {
   a.click();
   document.body.removeChild(a);
 }
-
-// ====================
-// OPEN PLAY CAPACITY CHECK
-// ====================
 
 async function checkOpenPlayCapacity(playDate) {
   if (!playDate) return null;
@@ -212,10 +200,6 @@ function setupOpenPlayInfo() {
   if (playDateInput) playDateInput.addEventListener("change", updateOpenPlayInfo);
 }
 
-// ====================
-// LIVE AVAILABILITY CHECK (BOOKING)
-// ====================
-
 async function checkAvailability() {
   const bookingDate = document.getElementById("date")?.value;
   const court = Number(document.getElementById("court")?.value);
@@ -250,10 +234,6 @@ function setupAvailabilityCheck() {
   if (courtSelect) courtSelect.addEventListener("change", checkAvailability);
 }
 
-// ====================
-// LOAD BOOKINGS
-// ====================
-
 async function loadBookings() {
   const container = document.getElementById("bookingsList");
   if (!container) return;
@@ -287,10 +267,6 @@ async function loadBookings() {
   }
 }
 
-// ====================
-// LOAD OPEN PLAY
-// ====================
-
 async function loadOpenPlay() {
   const container = document.getElementById("openPlayList");
   if (!container) return;
@@ -323,10 +299,6 @@ async function loadOpenPlay() {
     container.innerHTML = "<p>Unable to load Open Play right now.</p>";
   }
 }
-
-// ====================
-// COURT BOOKING SUBMIT
-// ====================
 
 async function handleBookingSubmit(event) {
   event.preventDefault();
@@ -384,10 +356,6 @@ async function handleBookingSubmit(event) {
   }
 }
 
-// ====================
-// OPEN PLAY SUBMIT
-// ====================
-
 async function handleOpenPlaySubmit(event) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -438,10 +406,6 @@ async function handleOpenPlaySubmit(event) {
     showResult(result, `Something went wrong. ${error.message || "Please try again."}`, false);
   }
 }
-
-// ====================
-// CANCELLATION BOXES
-// ====================
 
 function createCancellationBoxes() {
   const bookingForm = document.getElementById("bookingForm");
@@ -530,8 +494,8 @@ async function cancelOpenPlay() {
   } catch (error) { showResult(result, `Cancellation failed. ${error.message || "Please try again."}`, false); }
 }
 
-// ====================
-// CLUB CHAT (TEXT + EMOJI ONLY) - DARK THEME
+// END OF PART 1// ====================
+// CLUB CHAT (TEXT + EMOJI ONLY)
 // ====================
 
 async function loadChatMessages() {
@@ -732,4 +696,73 @@ async function loadMedia() {
         <div style="padding:10px;">
           <div style="font-size:0.8em;color:#888;margin-bottom:8px;">${isVideo ? "🎥 Video" : "📷 Photo"} · ${sizeMB}MB</div>
           <button onclick="downloadViaAndroid('${publicUrl}', '${m.file_name}')" style="display:inline-block;margin-right:8px;padding:6px 12px;background:#7c3aed;color:white;text-decoration:none;border:none;border-radius:6px;font-size:0.85em;cursor:pointer;">⬇ Download</button>
-          <button onclick="deleteMedia('${m.file_path}', ${m.id})" style="padding:6px 12px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;font-size:0.
+          <button onclick="deleteMedia('${m.file_path}', ${m.id})" style="padding:6px 12px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;font-size:0.85em;">🗑 Delete</button>
+        </div>
+      </div>`;
+    }).join("");
+  } catch (error) {
+    console.error("Media load error:", error);
+    gallery.innerHTML = "<p style='grid-column:1/-1;'>Unable to load media.</p>";
+  }
+}
+
+async function deleteMedia(filePath, id) {
+  if (!confirm("Are you sure you want to delete this?")) return;
+  try {
+    await fetch(`${SUPABASE_URL}/storage/v1/object/${MEDIA_BUCKET}/${filePath}`, {
+      method: "DELETE",
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
+    });
+    await supabaseFetch(`/rest/v1/media?id=eq.${id}`, { method: "DELETE" });
+    await loadMedia();
+  } catch (error) { alert("Failed to delete: " + error.message); }
+}
+
+function setupMediaUpload() {
+  const uploadBtn = document.getElementById("uploadBtn");
+  const fileInput = document.getElementById("mediaUpload");
+  const result = document.getElementById("uploadResult");
+  if (!uploadBtn || !fileInput) return;
+
+  uploadBtn.addEventListener("click", async () => {
+    const file = fileInput.files[0];
+    if (!file) { showResult(result, "Please select a file first.", false); return; }
+
+    try {
+      showResult(result, "Uploading... Please wait. (This may take a while for videos)", true);
+      await uploadMedia(file);
+      showResult(result, "Upload successful! 🎉", true);
+      fileInput.value = "";
+      await loadMedia();
+    } catch (error) {
+      console.error("Upload error:", error);
+      showResult(result, `Upload failed: ${error.message}`, false);
+    }
+  });
+}
+
+// ====================
+// START
+// ====================
+
+document.addEventListener("DOMContentLoaded", () => {
+  const bookingForm = document.getElementById("bookingForm");
+  const playForm = document.getElementById("playForm");
+
+  if (bookingForm) bookingForm.addEventListener("submit", handleBookingSubmit);
+  if (playForm) playForm.addEventListener("submit", handleOpenPlaySubmit);
+
+  createCancellationBoxes();
+  setupAvailabilityCheck();
+  setupOpenPlayInfo();
+  setupChat();
+  loadBookings();
+  loadOpenPlay();
+  setupMediaUpload();
+  loadMedia();
+
+  setInterval(() => {
+    loadBookings();
+    loadOpenPlay();
+  }, POLL_MS);
+});
