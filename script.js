@@ -6,7 +6,9 @@ const headers = {
   "Content-Type": "application/json"
 };
 
-const POLL_MS = 30000; // Mag-aauto-refresh every 30 seconds
+const POLL_MS = 30000;
+const MEDIA_BUCKET = "zinja-media";
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB (about 1 min of 1080p 60fps)
 
 // ====================
 // HELPERS
@@ -15,11 +17,9 @@ const POLL_MS = 30000; // Mag-aauto-refresh every 30 seconds
 function generateCancelCode() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "";
-
   for (let i = 0; i < 8; i++) {
     code += chars[Math.floor(Math.random() * chars.length)];
   }
-
   return code;
 }
 
@@ -34,22 +34,28 @@ function escapeHtml(value) {
 
 function formatTime(time) {
   if (!time) return "";
-
   const parts = String(time).split(":");
   const hour = Number(parts[0]);
   const minute = parts[1] ?? "00";
-
   if (Number.isNaN(hour)) return escapeHtml(time);
-
   const suffix = hour >= 12 ? "PM" : "AM";
   const displayHour = hour % 12 || 12;
-
   return `${displayHour}:${minute} ${suffix}`;
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return "Unknown Date";
+  const d = new Date(dateStr + "T00:00:00");
+  return d.toLocaleDateString("en-US", {
+    weekday: "short",
+    year: "numeric",
+    month: "short",
+    day: "numeric"
+  });
 }
 
 function showResult(element, message, success = true) {
   if (!element) return;
-
   element.textContent = message;
   element.style.display = "block";
   element.style.padding = "10px";
@@ -67,59 +73,42 @@ async function supabaseFetch(path, options = {}) {
       ...(options.headers || {})
     }
   });
-
   const text = await response.text();
-
   let data = null;
-
   try {
     data = text ? JSON.parse(text) : null;
   } catch {
     data = text;
   }
-
   if (!response.ok) {
     const detail =
       typeof data === "string"
         ? data
-        : data?.message ||
-          data?.hint ||
-          data?.details ||
-          `HTTP ${response.status}`;
-
+        : data?.message || data?.hint || data?.details || `HTTP ${response.status}`;
     throw new Error(detail);
   }
-
   return data;
 }
 
 function timeToMinutes(time) {
   if (!time) return 0;
-
   const parts = String(time).split(":");
   const hour = Number(parts[0]) || 0;
   const minute = Number(parts[1]) || 0;
-
   return hour * 60 + minute;
 }
 
 function bookingOverlaps(newTime, newDuration, oldTime, oldDuration) {
   const newStart = timeToMinutes(newTime);
   const newEnd = newStart + Number(newDuration) * 60;
-
   const oldStart = timeToMinutes(oldTime);
   const oldEnd = oldStart + Number(oldDuration) * 60;
-
   return newStart < oldEnd && oldStart < newEnd;
 }
 
 function saveCancellation(type, data) {
   try {
-    const key =
-      type === "booking"
-        ? "zinja_last_booking"
-        : "zinja_last_open_play";
-
+    const key = type === "booking" ? "zinja_last_booking" : "zinja_last_open_play";
     localStorage.setItem(key, JSON.stringify(data));
   } catch (error) {
     console.warn("Could not save cancellation info:", error);
@@ -128,13 +117,8 @@ function saveCancellation(type, data) {
 
 function getSavedCancellation(type) {
   try {
-    const key =
-      type === "booking"
-        ? "zinja_last_booking"
-        : "zinja_last_open_play";
-
+    const key = type === "booking" ? "zinja_last_booking" : "zinja_last_open_play";
     const value = localStorage.getItem(key);
-
     return value ? JSON.parse(value) : null;
   } catch {
     return null;
@@ -142,7 +126,7 @@ function getSavedCancellation(type) {
 }
 
 // ====================
-// LOAD BOOKINGS
+// LOAD BOOKINGS (MAY DATE GROUPING)
 // ====================
 
 async function loadBookings() {
@@ -158,36 +142,58 @@ async function loadBookings() {
       "/rest/v1/public_bookings?select=*&order=booking_date.asc,start_time.asc"
     );
 
-    if (!rows || rows.length === 0) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const cutoff = new Date(today);
+    cutoff.setDate(cutoff.getDate() - 30);
+    const cutoffStr = cutoff.toISOString().split("T")[0];
+
+    const filtered = (rows || []).filter(
+      (r) => r.booking_date && r.booking_date >= cutoffStr
+    );
+
+    if (filtered.length === 0) {
       container.innerHTML = "<p>No court bookings yet.</p>";
       return;
     }
 
-    container.innerHTML = rows
+    const grouped = {};
+    filtered.forEach((r) => {
+      if (!grouped[r.booking_date]) grouped[r.booking_date] = [];
+      grouped[r.booking_date].push(r);
+    });
+
+    container.innerHTML = Object.entries(grouped)
       .map(
-        (booking) => `
-      <div class="booking-item">
-        <strong>${escapeHtml(booking.customer_name)}</strong>
-        <div>
-          ${escapeHtml(booking.booking_date)}
-          · ${formatTime(booking.start_time)}
-          · Court ${escapeHtml(booking.court)}
-          · ${escapeHtml(booking.duration_hours)} hour(s)
-        </div>
+        ([date, bookings]) => `
+      <div class="date-group" style="margin-bottom: 20px;">
+        <h4 style="border-bottom: 2px solid #7c3aed; padding-bottom: 5px; color: #7c3aed;">
+          📅 ${formatDate(date)}
+        </h4>
+        ${bookings
+          .map(
+            (b) => `
+          <div class="booking-item" style="padding: 8px 0; border-bottom: 1px solid #eee;">
+            <strong>${escapeHtml(b.customer_name)}</strong>
+            <div style="font-size: 0.9em; color: #666;">
+              ${formatTime(b.start_time)} · Court ${escapeHtml(b.court)} · ${escapeHtml(b.duration_hours)} hour(s)
+            </div>
+          </div>
+        `
+          )
+          .join("")}
       </div>
     `
       )
       .join("");
   } catch (error) {
     console.error("Bookings error:", error);
-
-    container.innerHTML =
-      "<p>Unable to load bookings right now. Please try again later.</p>";
+    container.innerHTML = "<p>Unable to load bookings right now.</p>";
   }
 }
 
 // ====================
-// LOAD OPEN PLAY
+// LOAD OPEN PLAY (MAY DATE GROUPING)
 // ====================
 
 async function loadOpenPlay() {
@@ -203,32 +209,53 @@ async function loadOpenPlay() {
       "/rest/v1/public_open_play?select=*&order=play_date.asc,play_time.asc"
     );
 
-    if (!rows || rows.length === 0) {
-      container.innerHTML =
-        "<p>No Open Play registrations yet.</p>";
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const cutoff = new Date(today);
+    cutoff.setDate(cutoff.getDate() - 30);
+    const cutoffStr = cutoff.toISOString().split("T")[0];
 
+    const filtered = (rows || []).filter(
+      (r) => r.play_date && r.play_date >= cutoffStr
+    );
+
+    if (filtered.length === 0) {
+      container.innerHTML = "<p>No Open Play registrations yet.</p>";
       return;
     }
 
-    container.innerHTML = rows
+    const grouped = {};
+    filtered.forEach((r) => {
+      if (!grouped[r.play_date]) grouped[r.play_date] = [];
+      grouped[r.play_date].push(r);
+    });
+
+    container.innerHTML = Object.entries(grouped)
       .map(
-        (player) => `
-      <div class="open-play-item">
-        <strong>${escapeHtml(player.player_name)}</strong>
-        <div>
-          ${escapeHtml(player.play_date)}
-          · ${formatTime(player.play_time)}
-          · ${escapeHtml(player.skill_level || "Not specified")}
-        </div>
+        ([date, players]) => `
+      <div class="date-group" style="margin-bottom: 20px;">
+        <h4 style="border-bottom: 2px solid #7c3aed; padding-bottom: 5px; color: #7c3aed;">
+          📅 ${formatDate(date)}
+        </h4>
+        ${players
+          .map(
+            (p) => `
+          <div class="open-play-item" style="padding: 8px 0; border-bottom: 1px solid #eee;">
+            <strong>${escapeHtml(p.player_name)}</strong>
+            <div style="font-size: 0.9em; color: #666;">
+              ${formatTime(p.play_time)} · ${escapeHtml(p.skill_level || "Not specified")}
+            </div>
+          </div>
+        `
+          )
+          .join("")}
       </div>
     `
       )
       .join("");
   } catch (error) {
     console.error("Open Play error:", error);
-
-    container.innerHTML =
-      "<p>Unable to load Open Play registrations right now.</p>";
+    container.innerHTML = "<p>Unable to load Open Play right now.</p>";
   }
 }
 
@@ -238,72 +265,33 @@ async function loadOpenPlay() {
 
 async function handleBookingSubmit(event) {
   event.preventDefault();
-
   const form = event.currentTarget;
   const result = document.getElementById("bookingResult");
 
-  const name =
-    document.getElementById("name")?.value.trim();
+  const name = document.getElementById("name")?.value.trim();
+  const mobile = document.getElementById("phone")?.value.trim();
+  const bookingDate = document.getElementById("date")?.value;
+  const bookingTime = document.getElementById("time")?.value;
+  const court = Number(document.getElementById("court")?.value);
+  const duration = Number(document.getElementById("duration")?.value);
 
-  const mobile =
-    document.getElementById("phone")?.value.trim();
-
-  const bookingDate =
-    document.getElementById("date")?.value;
-
-  const bookingTime =
-    document.getElementById("time")?.value;
-
-  const court =
-    Number(document.getElementById("court")?.value);
-
-  const duration =
-    Number(document.getElementById("duration")?.value);
-
-  if (
-    !name ||
-    !mobile ||
-    !bookingDate ||
-    !bookingTime ||
-    !court ||
-    !duration
-  ) {
-    showResult(
-      result,
-      "Please complete all booking fields.",
-      false
-    );
-
+  if (!name || !mobile || !bookingDate || !bookingTime || !court || !duration) {
+    showResult(result, "Please complete all booking fields.", false);
     return;
   }
 
   if (![1, 2].includes(court)) {
-    showResult(
-      result,
-      "Please select Court 1 or Court 2.",
-      false
-    );
-
+    showResult(result, "Please select Court 1 or Court 2.", false);
     return;
   }
 
-  // ITO ANG BINAGO NATIN: Ngayon ay 1 hanggang 10 hours na ang tinatanggap
   if (isNaN(duration) || duration < 1 || duration > 10) {
-    showResult(
-      result,
-      "Please select a valid duration (1 to 10 hours).",
-      false
-    );
-
+    showResult(result, "Please select a valid duration (1 to 10 hours).", false);
     return;
   }
 
   try {
-    showResult(
-      result,
-      "Checking court availability...",
-      true
-    );
+    showResult(result, "Checking court availability...", true);
 
     const existing = await supabaseFetch(
       `/rest/v1/public_bookings?select=booking_date,start_time,court,duration_hours&booking_date=eq.${encodeURIComponent(
@@ -312,81 +300,43 @@ async function handleBookingSubmit(event) {
     );
 
     const conflict = (existing || []).some((booking) =>
-      bookingOverlaps(
-        bookingTime,
-        duration,
-        booking.start_time,
-        booking.duration_hours
-      )
+      bookingOverlaps(bookingTime, duration, booking.start_time, booking.duration_hours)
     );
 
     if (conflict) {
-      showResult(
-        result,
-        "Sorry, that court and time are already booked. Please choose another time or court.",
-        false
-      );
-
+      showResult(result, "Sorry, that court and time are already booked.", false);
       return;
     }
 
-    const cancellationCode =
-      generateCancelCode();
+    const cancellationCode = generateCancelCode();
 
-    await supabaseFetch(
-      "/rest/v1/bookings",
-      {
-        method: "POST",
+    await supabaseFetch("/rest/v1/bookings", {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({
+        customer_name: name,
+        mobile: mobile,
+        booking_date: bookingDate,
+        start_time: bookingTime,
+        court: court,
+        duration_hours: duration,
+        cancellation_code: cancellationCode
+      })
+    });
 
-        headers: {
-          Prefer: "return=representation"
-        },
-
-        body: JSON.stringify({
-          customer_name: name,
-          mobile: mobile,
-          booking_date: bookingDate,
-          start_time: bookingTime,
-          court: court,
-          duration_hours: duration,
-          cancellation_code: cancellationCode
-        })
-      }
-    );
-
-    saveCancellation(
-      "booking",
-      {
-        mobile,
-        code: cancellationCode
-      }
-    );
+    saveCancellation("booking", { mobile, code: cancellationCode });
 
     showResult(
       result,
-      `Thank you, ${name}! Booking confirmed for Court ${court}, ${bookingDate} at ${formatTime(
-        bookingTime
-      )}. Cancellation code: ${cancellationCode}. Please save this code.`,
+      `Thank you, ${name}! Booking confirmed for Court ${court}, ${bookingDate} at ${formatTime(bookingTime)}. Cancellation code: ${cancellationCode}.`,
       true
     );
 
     form.reset();
-
     await loadBookings();
-
   } catch (error) {
-    console.error(
-      "Booking error:",
-      error
-    );
-
-    showResult(
-      result,
-      `Something went wrong. ${
-        error.message || "Please try again."
-      }`,
-      false
-    );
+    console.error("Booking error:", error);
+    showResult(result, `Something went wrong. ${error.message || "Please try again."}`, false);
   }
 }
 
@@ -396,105 +346,51 @@ async function handleBookingSubmit(event) {
 
 async function handleOpenPlaySubmit(event) {
   event.preventDefault();
-
   const form = event.currentTarget;
-  const result =
-    document.getElementById("playResult");
+  const result = document.getElementById("playResult");
 
-  const name =
-    document.getElementById("player")?.value.trim();
+  const name = document.getElementById("player")?.value.trim();
+  const mobile = document.getElementById("playerPhone")?.value.trim();
+  const playDate = document.getElementById("playDate")?.value;
+  const playTime = document.getElementById("playTime")?.value;
+  const skillLevel = document.getElementById("level")?.value;
 
-  const mobile =
-    document.getElementById("playerPhone")?.value.trim();
-
-  const playDate =
-    document.getElementById("playDate")?.value;
-
-  const playTime =
-    document.getElementById("playTime")?.value;
-
-  const skillLevel =
-    document.getElementById("level")?.value;
-
-  if (
-    !name ||
-    !mobile ||
-    !playDate ||
-    !playTime ||
-    !skillLevel
-  ) {
-    showResult(
-      result,
-      "Please complete all Open Play fields.",
-      false
-    );
-
+  if (!name || !mobile || !playDate || !playTime || !skillLevel) {
+    showResult(result, "Please complete all Open Play fields.", false);
     return;
   }
 
   try {
-    showResult(
-      result,
-      "Submitting your Open Play registration...",
-      true
-    );
+    showResult(result, "Submitting your Open Play registration...", true);
 
-    const cancellationCode =
-      generateCancelCode();
+    const cancellationCode = generateCancelCode();
 
-    await supabaseFetch(
-      "/rest/v1/open_play",
-      {
-        method: "POST",
+    await supabaseFetch("/rest/v1/open_play", {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({
+        player_name: name,
+        mobile: mobile,
+        play_date: playDate,
+        play_time: playTime,
+        skill_level: skillLevel,
+        cancellation_code: cancellationCode
+      })
+    });
 
-        headers: {
-          Prefer: "return=representation"
-        },
-
-        body: JSON.stringify({
-          player_name: name,
-          mobile: mobile,
-          play_date: playDate,
-          play_time: playTime,
-          skill_level: skillLevel,
-          cancellation_code: cancellationCode
-        })
-      }
-    );
-
-    saveCancellation(
-      "open_play",
-      {
-        mobile,
-        code: cancellationCode
-      }
-    );
+    saveCancellation("open_play", { mobile, code: cancellationCode });
 
     showResult(
       result,
-      `Thank you, ${name}! Open Play registration confirmed for ${playDate} at ${formatTime(
-        playTime
-      )}. Cancellation code: ${cancellationCode}. Please save this code.`,
+      `Thank you, ${name}! Open Play confirmed for ${playDate} at ${formatTime(playTime)}. Cancellation code: ${cancellationCode}.`,
       true
     );
 
     form.reset();
-
     await loadOpenPlay();
-
   } catch (error) {
-    console.error(
-      "Open Play error:",
-      error
-    );
-
-    showResult(
-      result,
-      `Something went wrong. ${
-        error.message || "Please try again."
-      }`,
-      false
-    );
+    console.error("Open Play error:", error);
+    showResult(result, `Something went wrong. ${error.message || "Please try again."}`, false);
   }
 }
 
@@ -503,399 +399,275 @@ async function handleOpenPlaySubmit(event) {
 // ====================
 
 function createCancellationBoxes() {
-  const bookingForm =
-    document.getElementById("bookingForm");
+  const bookingForm = document.getElementById("bookingForm");
+  const playForm = document.getElementById("playForm");
 
-  const playForm =
-    document.getElementById("playForm");
-
-  if (
-    bookingForm &&
-    !document.getElementById("cancelBookingBox")
-  ) {
+  if (bookingForm && !document.getElementById("cancelBookingBox")) {
     bookingForm.insertAdjacentHTML(
       "afterend",
       `
-      <div
-        id="cancelBookingBox"
-        class="cancellation-box"
-        style="margin-top:20px;padding:16px;border:1px solid #ddd;border-radius:12px;"
-      >
+      <div id="cancelBookingBox" style="margin-top:20px;padding:16px;border:1px solid #ddd;border-radius:12px;">
         <h3>Cancel My Court Booking</h3>
-
-        <p>
-          Enter the mobile number and cancellation code
-          you received when booking.
-        </p>
-
-        <input
-          id="cancelBookingMobile"
-          type="tel"
-          placeholder="Mobile number"
-          style="display:block;width:100%;margin:8px 0;padding:10px;"
-        >
-
-        <input
-          id="cancelBookingCode"
-          type="text"
-          placeholder="Cancellation code"
-          maxlength="8"
-          style="display:block;width:100%;margin:8px 0;padding:10px;text-transform:uppercase;"
-        >
-
-        <button
-          type="button"
-          id="cancelBookingButton"
-        >
-          Cancel Booking
-        </button>
-
+        <p>Enter the mobile number and cancellation code you received when booking.</p>
+        <input id="cancelBookingMobile" type="tel" placeholder="Mobile number" style="display:block;width:100%;margin:8px 0;padding:10px;">
+        <input id="cancelBookingCode" type="text" placeholder="Cancellation code" maxlength="8" style="display:block;width:100%;margin:8px 0;padding:10px;text-transform:uppercase;">
+        <button type="button" id="cancelBookingButton">Cancel Booking</button>
         <div id="cancelBookingResult"></div>
       </div>
       `
     );
 
-    document
-      .getElementById(
-        "cancelBookingButton"
-      )
-      ?.addEventListener(
-        "click",
-        cancelBooking
-      );
+    document.getElementById("cancelBookingButton")?.addEventListener("click", cancelBooking);
 
-    const saved =
-      getSavedCancellation("booking");
-
+    const saved = getSavedCancellation("booking");
     if (saved) {
-      const mobileInput =
-        document.getElementById(
-          "cancelBookingMobile"
-        );
-
-      const codeInput =
-        document.getElementById(
-          "cancelBookingCode"
-        );
-
-      if (mobileInput)
-        mobileInput.value =
-          saved.mobile || "";
-
-      if (codeInput)
-        codeInput.value =
-          saved.code || "";
+      const mobileInput = document.getElementById("cancelBookingMobile");
+      const codeInput = document.getElementById("cancelBookingCode");
+      if (mobileInput) mobileInput.value = saved.mobile || "";
+      if (codeInput) codeInput.value = saved.code || "";
     }
   }
 
-  if (
-    playForm &&
-    !document.getElementById("cancelOpenPlayBox")
-  ) {
+  if (playForm && !document.getElementById("cancelOpenPlayBox")) {
     playForm.insertAdjacentHTML(
       "afterend",
       `
-      <div
-        id="cancelOpenPlayBox"
-        class="cancellation-box"
-        style="margin-top:20px;padding:16px;border:1px solid #ddd;border-radius:12px;"
-      >
+      <div id="cancelOpenPlayBox" style="margin-top:20px;padding:16px;border:1px solid #ddd;border-radius:12px;">
         <h3>Cancel My Open Play Registration</h3>
-
-        <p>
-          Enter the mobile number and cancellation code
-          you received when joining.
-        </p>
-
-        <input
-          id="cancelOpenPlayMobile"
-          type="tel"
-          placeholder="Mobile number"
-          style="display:block;width:100%;margin:8px 0;padding:10px;"
-        >
-
-        <input
-          id="cancelOpenPlayCode"
-          type="text"
-          placeholder="Cancellation code"
-          maxlength="8"
-          style="display:block;width:100%;margin:8px 0;padding:10px;text-transform:uppercase;"
-        >
-
-        <button
-          type="button"
-          id="cancelOpenPlayButton"
-        >
-          Cancel Registration
-        </button>
-
+        <p>Enter the mobile number and cancellation code you received when joining.</p>
+        <input id="cancelOpenPlayMobile" type="tel" placeholder="Mobile number" style="display:block;width:100%;margin:8px 0;padding:10px;">
+        <input id="cancelOpenPlayCode" type="text" placeholder="Cancellation code" maxlength="8" style="display:block;width:100%;margin:8px 0;padding:10px;text-transform:uppercase;">
+        <button type="button" id="cancelOpenPlayButton">Cancel Registration</button>
         <div id="cancelOpenPlayResult"></div>
       </div>
       `
     );
 
-    document
-      .getElementById(
-        "cancelOpenPlayButton"
-      )
-      ?.addEventListener(
-        "click",
-        cancelOpenPlay
-      );
+    document.getElementById("cancelOpenPlayButton")?.addEventListener("click", cancelOpenPlay);
 
-    const saved =
-      getSavedCancellation("open_play");
-
+    const saved = getSavedCancellation("open_play");
     if (saved) {
-      const mobileInput =
-        document.getElementById(
-          "cancelOpenPlayMobile"
-        );
-
-      const codeInput =
-        document.getElementById(
-          "cancelOpenPlayCode"
-        );
-
-      if (mobileInput)
-        mobileInput.value =
-          saved.mobile || "";
-
-      if (codeInput)
-        codeInput.value =
-          saved.code || "";
+      const mobileInput = document.getElementById("cancelOpenPlayMobile");
+      const codeInput = document.getElementById("cancelOpenPlayCode");
+      if (mobileInput) mobileInput.value = saved.mobile || "";
+      if (codeInput) codeInput.value = saved.code || "";
     }
   }
 }
-
-// ====================
-// CANCEL BOOKING
-// ====================
 
 async function cancelBooking() {
-  const mobile =
-    document
-      .getElementById(
-        "cancelBookingMobile"
-      )
-      ?.value.trim();
-
-  const code =
-    document
-      .getElementById(
-        "cancelBookingCode"
-      )
-      ?.value.trim()
-      .toUpperCase();
-
-  const result =
-    document.getElementById(
-      "cancelBookingResult"
-    );
+  const mobile = document.getElementById("cancelBookingMobile")?.value.trim();
+  const code = document.getElementById("cancelBookingCode")?.value.trim().toUpperCase();
+  const result = document.getElementById("cancelBookingResult");
 
   if (!mobile || !code) {
-    showResult(
-      result,
-      "Please enter your mobile number and cancellation code.",
-      false
-    );
-
+    showResult(result, "Please enter your mobile number and cancellation code.", false);
     return;
   }
 
   try {
-    showResult(
-      result,
-      "Cancelling booking...",
-      true
-    );
-
-    const data =
-      await supabaseFetch(
-        "/rest/v1/rpc/cancel_booking",
-        {
-          method: "POST",
-
-          body: JSON.stringify({
-            p_mobile: mobile,
-            p_code: code
-          })
-        }
-      );
+    showResult(result, "Cancelling booking...", true);
+    const data = await supabaseFetch("/rest/v1/rpc/cancel_booking", {
+      method: "POST",
+      body: JSON.stringify({ p_mobile: mobile, p_code: code })
+    });
 
     if (data === true) {
-      try {
-        localStorage.removeItem(
-          "zinja_last_booking"
-        );
-      } catch {}
-
-      showResult(
-        result,
-        "Your court booking has been cancelled.",
-        true
-      );
-
+      try { localStorage.removeItem("zinja_last_booking"); } catch {}
+      showResult(result, "Your court booking has been cancelled.", true);
       await loadBookings();
-
     } else {
-      showResult(
-        result,
-        "No matching booking was found. Please check your mobile number and cancellation code.",
-        false
-      );
+      showResult(result, "No matching booking was found.", false);
     }
-
   } catch (error) {
-    console.error(
-      "Cancel booking error:",
-      error
-    );
+    showResult(result, `Cancellation failed. ${error.message || "Please try again."}`, false);
+  }
+}
 
-    showResult(
-      result,
-      `Cancellation failed. ${
-        error.message || "Please try again."
-      }`,
-      false
-    );
+async function cancelOpenPlay() {
+  const mobile = document.getElementById("cancelOpenPlayMobile")?.value.trim();
+  const code = document.getElementById("cancelOpenPlayCode")?.value.trim().toUpperCase();
+  const result = document.getElementById("cancelOpenPlayResult");
+
+  if (!mobile || !code) {
+    showResult(result, "Please enter your mobile number and cancellation code.", false);
+    return;
+  }
+
+  try {
+    showResult(result, "Cancelling registration...", true);
+    const data = await supabaseFetch("/rest/v1/rpc/cancel_open_play", {
+      method: "POST",
+      body: JSON.stringify({ p_mobile: mobile, p_code: code })
+    });
+
+    if (data === true) {
+      try { localStorage.removeItem("zinja_last_open_play"); } catch {}
+      showResult(result, "Your Open Play registration has been cancelled.", true);
+      await loadOpenPlay();
+    } else {
+      showResult(result, "No matching Open Play registration was found.", false);
+    }
+  } catch (error) {
+    showResult(result, `Cancellation failed. ${error.message || "Please try again."}`, false);
   }
 }
 
 // ====================
-// CANCEL OPEN PLAY
+// MEDIA UPLOAD & GALLERY
 // ====================
 
-async function cancelOpenPlay() {
-  const mobile =
-    document
-      .getElementById(
-        "cancelOpenPlayMobile"
-      )
-      ?.value.trim();
-
-  const code =
-    document
-      .getElementById(
-        "cancelOpenPlayCode"
-      )
-      ?.value.trim()
-      .toUpperCase();
-
-  const result =
-    document.getElementById(
-      "cancelOpenPlayResult"
-    );
-
-  if (!mobile || !code) {
-    showResult(
-      result,
-      "Please enter your mobile number and cancellation code.",
-      false
-    );
-
-    return;
+async function uploadMedia(file) {
+  if (file.size > MAX_FILE_SIZE) {
+    throw new Error(`File is too large (${(file.size/1024/1024).toFixed(1)}MB). Maximum is 100MB. Please compress your 1080p video.`);
   }
+
+  const ext = file.name.split(".").pop();
+  const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
+  const filePath = `uploads/${fileName}`;
+
+  const response = await fetch(
+    `${SUPABASE_URL}/storage/v1/object/${MEDIA_BUCKET}/${filePath}`,
+    {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": file.type,
+        "x-upsert": "false"
+      },
+      body: file
+    }
+  );
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(err);
+  }
+
+  await supabaseFetch("/rest/v1/media", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({
+      file_name: fileName,
+      file_path: filePath,
+      file_type: file.type.startsWith("video") ? "video" : "image",
+      file_size: file.size
+    })
+  });
+
+  return filePath;
+}
+
+async function loadMedia() {
+  const gallery = document.getElementById("mediaGallery");
+  if (!gallery) return;
 
   try {
-    showResult(
-      result,
-      "Cancelling registration...",
-      true
+    const rows = await supabaseFetch(
+      "/rest/v1/media?select=*&order=created_at.desc&limit=50"
     );
 
-    const data =
-      await supabaseFetch(
-        "/rest/v1/rpc/cancel_open_play",
-        {
-          method: "POST",
-
-          body: JSON.stringify({
-            p_mobile: mobile,
-            p_code: code
-          })
-        }
-      );
-
-    if (data === true) {
-      try {
-        localStorage.removeItem(
-          "zinja_last_open_play"
-        );
-      } catch {}
-
-      showResult(
-        result,
-        "Your Open Play registration has been cancelled.",
-        true
-      );
-
-      await loadOpenPlay();
-
-    } else {
-      showResult(
-        result,
-        "No matching Open Play registration was found. Please check your mobile number and cancellation code.",
-        false
-      );
+    if (!rows || rows.length === 0) {
+      gallery.innerHTML = "<p style='grid-column: 1/-1;'>No media uploaded yet. Be the first to share!</p>";
+      return;
     }
 
+    gallery.innerHTML = rows.map(m => {
+      const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${MEDIA_BUCKET}/${m.file_path}`;
+      const isVideo = m.file_type === "video";
+      const sizeMB = (m.file_size / 1024 / 1024).toFixed(1);
+      
+      return `
+        <div class="media-card" style="border: 1px solid #ddd; border-radius: 12px; overflow: hidden; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+          ${isVideo 
+            ? `<video src="${publicUrl}" controls preload="metadata" style="width: 100%; height: 200px; object-fit: cover; background: #000;"></video>`
+            : `<img src="${publicUrl}" style="width: 100%; height: 200px; object-fit: cover;" loading="lazy" alt="Highlight">`
+          }
+          <div style="padding: 10px;">
+            <div style="font-size: 0.8em; color: #888; margin-bottom: 8px;">
+              ${isVideo ? "🎥 Video" : "📷 Photo"} · ${sizeMB}MB
+            </div>
+            <a href="${publicUrl}" download="${m.file_name}" style="display: inline-block; margin-right: 8px; padding: 6px 12px; background: #7c3aed; color: white; text-decoration: none; border-radius: 6px; font-size: 0.85em;">⬇ Download</a>
+            <button onclick="deleteMedia('${m.file_path}', ${m.id})" style="padding: 6px 12px; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85em;">🗑 Delete</button>
+          </div>
+        </div>
+      `;
+    }).join("");
   } catch (error) {
-    console.error(
-      "Cancel Open Play error:",
-      error
-    );
-
-    showResult(
-      result,
-      `Cancellation failed. ${
-        error.message || "Please try again."
-      }`,
-      false
-    );
+    console.error("Media load error:", error);
+    gallery.innerHTML = "<p style='grid-column: 1/-1;'>Unable to load media.</p>";
   }
+}
+
+async function deleteMedia(filePath, id) {
+  if (!confirm("Are you sure you want to delete this?")) return;
+
+  try {
+    await fetch(`${SUPABASE_URL}/storage/v1/object/${MEDIA_BUCKET}/${filePath}`, {
+      method: "DELETE",
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`
+      }
+    });
+
+    await supabaseFetch(`/rest/v1/media?id=eq.${id}`, {
+      method: "DELETE"
+    });
+
+    await loadMedia();
+  } catch (error) {
+    alert("Failed to delete: " + error.message);
+  }
+}
+
+function setupMediaUpload() {
+  const uploadBtn = document.getElementById("uploadBtn");
+  const fileInput = document.getElementById("mediaUpload");
+  const result = document.getElementById("uploadResult");
+
+  if (!uploadBtn || !fileInput) return;
+
+  uploadBtn.addEventListener("click", async () => {
+    const file = fileInput.files[0];
+    if (!file) {
+      showResult(result, "Please select a file first.", false);
+      return;
+    }
+
+    try {
+      showResult(result, "Uploading... Please wait. (This may take a while for videos)", true);
+      await uploadMedia(file);
+      showResult(result, "Upload successful! 🎉", true);
+      fileInput.value = "";
+      await loadMedia();
+    } catch (error) {
+      console.error("Upload error:", error);
+      showResult(result, `Upload failed: ${error.message}`, false);
+    }
+  });
 }
 
 // ====================
 // START
 // ====================
 
-document.addEventListener(
-  "DOMContentLoaded",
-  () => {
-    const bookingForm =
-      document.getElementById(
-        "bookingForm"
-      );
+document.addEventListener("DOMContentLoaded", () => {
+  const bookingForm = document.getElementById("bookingForm");
+  const playForm = document.getElementById("playForm");
 
-    const playForm =
-      document.getElementById(
-        "playForm"
-      );
+  if (bookingForm) bookingForm.addEventListener("submit", handleBookingSubmit);
+  if (playForm) playForm.addEventListener("submit", handleOpenPlaySubmit);
 
-    if (bookingForm) {
-      bookingForm.addEventListener(
-        "submit",
-        handleBookingSubmit
-      );
-    }
+  createCancellationBoxes();
+  loadBookings();
+  loadOpenPlay();
+  setupMediaUpload();
+  loadMedia();
 
-    if (playForm) {
-      playForm.addEventListener(
-        "submit",
-        handleOpenPlaySubmit
-      );
-    }
-
-    createCancellationBoxes();
-
+  setInterval(() => {
     loadBookings();
-
     loadOpenPlay();
-
-    setInterval(() => {
-      loadBookings();
-      loadOpenPlay();
-    }, POLL_MS);
-  }
-);
+  }, POLL_MS);
+});
