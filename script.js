@@ -122,7 +122,6 @@ function getSavedCancellation(type) {
 // ====================
 
 function downloadViaAndroid(url, fileName) {
-  // Check kung nasa Android app (may JavaScript interface)
   if (typeof AndroidDownloader !== "undefined" && AndroidDownloader.downloadFile) {
     try {
       AndroidDownloader.downloadFile(url, fileName);
@@ -132,7 +131,6 @@ function downloadViaAndroid(url, fileName) {
     }
   }
 
-  // Fallback: Regular browser download
   const a = document.createElement("a");
   a.href = url;
   a.download = fileName;
@@ -534,6 +532,161 @@ async function cancelOpenPlay() {
 }
 
 // ====================
+// CLUB CHAT (TEXT + EMOJI ONLY)
+// ====================
+
+async function loadChatMessages() {
+  const container = document.getElementById("chatMessages");
+  if (!container) return;
+
+  try {
+    const rows = await supabaseFetch(
+      "/rest/v1/chat_messages?select=*&order=created_at.asc&limit=100"
+    );
+
+    if (!rows || rows.length === 0) {
+      container.innerHTML = "<p style='text-align:center;color:#888;'>No messages yet today. Be the first to say hi! 👋</p>";
+      return;
+    }
+
+    const currentScroll = container.scrollTop + container.clientHeight;
+    const wasAtBottom = currentScroll >= container.scrollHeight - 50;
+
+    container.innerHTML = rows.map(msg => {
+      const time = new Date(msg.created_at).toLocaleTimeString("en-US", {
+        hour: "numeric", minute: "2-digit"
+      });
+
+      return `
+        <div style="margin-bottom: 12px; padding: 10px; background: white; border-radius: 8px; border-left: 3px solid #7c3aed;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+            <strong style="color: #7c3aed;">${escapeHtml(msg.player_name)}</strong>
+            <small style="color: #888;">${time}</small>
+          </div>
+          <div style="word-wrap: break-word; font-size: 1.05em;">${escapeHtml(msg.message)}</div>
+        </div>
+      `;
+    }).join("");
+
+    if (wasAtBottom) {
+      container.scrollTop = container.scrollHeight;
+    }
+  } catch (error) {
+    console.error("Chat load error:", error);
+    container.innerHTML = "<p style='text-align:center;color:#ef4444;'>Unable to load chat. Please refresh.</p>";
+  }
+}
+
+async function sendChatMessage() {
+  const nameInput = document.getElementById("chatName");
+  const messageInput = document.getElementById("chatInput");
+
+  const name = nameInput?.value.trim();
+  const message = messageInput?.value.trim();
+
+  if (!name) {
+    alert("Please enter your name first.");
+    nameInput?.focus();
+    return;
+  }
+
+  if (!message) {
+    alert("Please type a message.");
+    return;
+  }
+
+  if (message.length > 500) {
+    alert("Message is too long. Maximum is 500 characters.");
+    return;
+  }
+
+  try {
+    localStorage.setItem("zinja_chat_name", name);
+  } catch {}
+
+  try {
+    const sendBtn = document.getElementById("sendChatBtn");
+    if (sendBtn) {
+      sendBtn.disabled = true;
+      sendBtn.textContent = "...";
+    }
+
+    await supabaseFetch("/rest/v1/chat_messages", {
+      method: "POST",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({
+        player_name: name,
+        message: message
+      })
+    });
+
+    messageInput.value = "";
+    messageInput.focus();
+
+    await loadChatMessages();
+
+    if (sendBtn) {
+      sendBtn.disabled = false;
+      sendBtn.textContent = "Send";
+    }
+  } catch (error) {
+    console.error("Send chat error:", error);
+    alert("Failed to send message: " + error.message);
+
+    const sendBtn = document.getElementById("sendChatBtn");
+    if (sendBtn) {
+      sendBtn.disabled = false;
+      sendBtn.textContent = "Send";
+    }
+  }
+}
+
+function insertEmoji(emoji) {
+  const input = document.getElementById("chatInput");
+  if (!input) return;
+  input.value += emoji;
+  input.focus();
+}
+
+function setupChatEmojiPicker() {
+  const emojiBtn = document.getElementById("emojiBtn");
+  const emojiPicker = document.getElementById("emojiPicker");
+
+  if (!emojiBtn || !emojiPicker) return;
+
+  emojiBtn.addEventListener("click", () => {
+    emojiPicker.style.display = emojiPicker.style.display === "none" ? "block" : "none";
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!emojiPicker.contains(e.target) && !emojiBtn.contains(e.target)) {
+      emojiPicker.style.display = "none";
+    }
+  });
+}
+
+function setupChatName() {
+  const nameInput = document.getElementById("chatName");
+  if (!nameInput) return;
+
+  try {
+    const savedName = localStorage.getItem("zinja_chat_name");
+    if (savedName) nameInput.value = savedName;
+  } catch {}
+}
+
+function setupChat() {
+  const chatSection = document.getElementById("chat");
+  if (!chatSection) return;
+
+  setupChatName();
+  setupChatEmojiPicker();
+  loadChatMessages();
+
+  setInterval(loadChatMessages, 5000);
+}
+
+// ====================
 // MEDIA UPLOAD & GALLERY
 // ====================
 
@@ -575,7 +728,6 @@ async function loadMedia() {
       const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${MEDIA_BUCKET}/${m.file_path}`;
       const isVideo = m.file_type === "video";
       const sizeMB = (m.file_size / 1024 / 1024).toFixed(1);
-      // IMPORTANTE: Gamitin ang downloadViaAndroid function
       return `<div class="media-card" style="border:1px solid #ddd;border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
         ${isVideo ? `<video src="${publicUrl}" controls preload="metadata" style="width:100%;height:200px;object-fit:cover;background:#000;"></video>` : `<img src="${publicUrl}" style="width:100%;height:200px;object-fit:cover;" loading="lazy" alt="Highlight">`}
         <div style="padding:10px;">
@@ -640,6 +792,7 @@ document.addEventListener("DOMContentLoaded", () => {
   createCancellationBoxes();
   setupAvailabilityCheck();
   setupOpenPlayInfo();
+  setupChat();
   loadBookings();
   loadOpenPlay();
   setupMediaUpload();
