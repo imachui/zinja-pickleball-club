@@ -532,7 +532,7 @@ async function cancelOpenPlay() {
 }
 
 // ====================
-// CLUB CHAT (TEXT + EMOJI ONLY)
+// CLUB CHAT (TEXT + EMOJI ONLY) - DARK THEME
 // ====================
 
 async function loadChatMessages() {
@@ -545,7 +545,7 @@ async function loadChatMessages() {
     );
 
     if (!rows || rows.length === 0) {
-      container.innerHTML = "<p style='text-align:center;color:#888;'>No messages yet today. Be the first to say hi! 👋</p>";
+      container.innerHTML = "<p style='text-align:center;color:#aaa;'>No messages yet today. Be the first to say hi! 👋</p>";
       return;
     }
 
@@ -558,12 +558,12 @@ async function loadChatMessages() {
       });
 
       return `
-        <div style="margin-bottom: 12px; padding: 10px; background: white; border-radius: 8px; border-left: 3px solid #7c3aed;">
+        <div style="margin-bottom: 12px; padding: 10px; background: #2a2a4a; border-radius: 8px; border-left: 3px solid #7c3aed;">
           <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-            <strong style="color: #7c3aed;">${escapeHtml(msg.player_name)}</strong>
-            <small style="color: #888;">${time}</small>
+            <strong style="color: #a78bfa;">${escapeHtml(msg.player_name)}</strong>
+            <small style="color: #aaa;">${time}</small>
           </div>
-          <div style="word-wrap: break-word; font-size: 1.05em;">${escapeHtml(msg.message)}</div>
+          <div style="word-wrap: break-word; font-size: 1.05em; color: #ffffff;">${escapeHtml(msg.message)}</div>
         </div>
       `;
     }).join("");
@@ -736,70 +736,4 @@ async function loadMedia() {
           <button onclick="deleteMedia('${m.file_path}', ${m.id})" style="padding:6px 12px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;font-size:0.85em;">🗑 Delete</button>
         </div>
       </div>`;
-    }).join("");
-  } catch (error) {
-    console.error("Media load error:", error);
-    gallery.innerHTML = "<p style='grid-column:1/-1;'>Unable to load media.</p>";
-  }
-}
-
-async function deleteMedia(filePath, id) {
-  if (!confirm("Are you sure you want to delete this?")) return;
-  try {
-    await fetch(`${SUPABASE_URL}/storage/v1/object/${MEDIA_BUCKET}/${filePath}`, {
-      method: "DELETE",
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
-    });
-    await supabaseFetch(`/rest/v1/media?id=eq.${id}`, { method: "DELETE" });
-    await loadMedia();
-  } catch (error) { alert("Failed to delete: " + error.message); }
-}
-
-function setupMediaUpload() {
-  const uploadBtn = document.getElementById("uploadBtn");
-  const fileInput = document.getElementById("mediaUpload");
-  const result = document.getElementById("uploadResult");
-  if (!uploadBtn || !fileInput) return;
-
-  uploadBtn.addEventListener("click", async () => {
-    const file = fileInput.files[0];
-    if (!file) { showResult(result, "Please select a file first.", false); return; }
-
-    try {
-      showResult(result, "Uploading... Please wait. (This may take a while for videos)", true);
-      await uploadMedia(file);
-      showResult(result, "Upload successful! 🎉", true);
-      fileInput.value = "";
-      await loadMedia();
-    } catch (error) {
-      console.error("Upload error:", error);
-      showResult(result, `Upload failed: ${error.message}`, false);
-    }
-  });
-}
-
-// ====================
-// START
-// ====================
-
-document.addEventListener("DOMContentLoaded", () => {
-  const bookingForm = document.getElementById("bookingForm");
-  const playForm = document.getElementById("playForm");
-
-  if (bookingForm) bookingForm.addEventListener("submit", handleBookingSubmit);
-  if (playForm) playForm.addEventListener("submit", handleOpenPlaySubmit);
-
-  createCancellationBoxes();
-  setupAvailabilityCheck();
-  setupOpenPlayInfo();
-  setupChat();
-  loadBookings();
-  loadOpenPlay();
-  setupMediaUpload();
-  loadMedia();
-
-  setInterval(() => {
-    loadBookings();
-    loadOpenPlay();
-  }, POLL_MS);
-});
+    }).join
