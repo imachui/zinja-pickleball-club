@@ -531,7 +531,7 @@ async function cancelOpenPlay() {
 }
 
 // ====================
-// CLUB CHAT (TEXT + EMOJI ONLY) - DARK THEME
+// CLUB CHAT (TEXT + EMOJI ONLY)
 // ====================
 
 async function loadChatMessages() {
@@ -732,4 +732,73 @@ async function loadMedia() {
         <div style="padding:10px;">
           <div style="font-size:0.8em;color:#888;margin-bottom:8px;">${isVideo ? "🎥 Video" : "📷 Photo"} · ${sizeMB}MB</div>
           <button onclick="downloadViaAndroid('${publicUrl}', '${m.file_name}')" style="display:inline-block;margin-right:8px;padding:6px 12px;background:#7c3aed;color:white;text-decoration:none;border:none;border-radius:6px;font-size:0.85em;cursor:pointer;">⬇ Download</button>
-          <button onclick="deleteMedia('${m.file_path}', ${m.id})" style="padding:6px 12px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;font-size:0.
+          <button onclick="deleteMedia('${m.file_path}', ${m.id})" style="padding:6px 12px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;font-size:0.85em;">🗑 Delete</button>
+        </div>
+      </div>`;
+    }).join("");
+  } catch (error) {
+    console.error("Media load error:", error);
+    gallery.innerHTML = "<p style='grid-column:1/-1;'>Unable to load media.</p>";
+  }
+}
+
+async function deleteMedia(filePath, id) {
+  if (!confirm("Are you sure you want to delete this?")) return;
+  try {
+    await fetch(`${SUPABASE_URL}/storage/v1/object/${MEDIA_BUCKET}/${filePath}`, {
+      method: "DELETE",
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
+    });
+    await supabaseFetch(`/rest/v1/media?id=eq.${id}`, { method: "DELETE" });
+    await loadMedia();
+  } catch (error) { alert("Failed to delete: " + error.message); }
+}
+
+function setupMediaUpload() {
+  const uploadBtn = document.getElementById("uploadBtn");
+  const fileInput = document.getElementById("mediaUpload");
+  const result = document.getElementById("uploadResult");
+  if (!uploadBtn || !fileInput) return;
+
+  uploadBtn.addEventListener("click", async () => {
+    const file = fileInput.files[0];
+    if (!file) { showResult(result, "Please select a file first.", false); return; }
+
+    try {
+      showResult(result, "Uploading... Please wait. (This may take a while for videos)", true);
+      await uploadMedia(file);
+      showResult(result, "Upload successful! 🎉", true);
+      fileInput.value = "";
+      await loadMedia();
+    } catch (error) {
+      console.error("Upload error:", error);
+      showResult(result, `Upload failed: ${error.message}`, false);
+    }
+  });
+}
+
+// ====================
+// START
+// ====================
+
+document.addEventListener("DOMContentLoaded", () => {
+  const bookingForm = document.getElementById("bookingForm");
+  const playForm = document.getElementById("playForm");
+
+  if (bookingForm) bookingForm.addEventListener("submit", handleBookingSubmit);
+  if (playForm) playForm.addEventListener("submit", handleOpenPlaySubmit);
+
+  createCancellationBoxes();
+  setupAvailabilityCheck();
+  setupOpenPlayInfo();
+  setupChat();
+  loadBookings();
+  loadOpenPlay();
+  setupMediaUpload();
+  loadMedia();
+
+  setInterval(() => {
+    loadBookings();
+    loadOpenPlay();
+  }, POLL_MS);
+});
