@@ -8,7 +8,14 @@ const headers = {
 
 const POLL_MS = 30000;
 const MEDIA_BUCKET = "zinja-media";
-const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+const MAX_FILE_SIZE = 100 * 1024 * 1024;
+
+// ===== OPEN PLAY CONFIGURATION =====
+const OPEN_PLAY_START_MIN = 17 * 60;  // 5:00 PM = 1020 minutes
+const OPEN_PLAY_END_MIN = 24 * 60;    // 12:00 AM = 1440 minutes
+const OPEN_PLAY_START_TIME = "17:00"; // 5:00 PM para sa database
+const PLAYERS_PER_COURT = 16;         // 16 players per court
+const TOTAL_COURTS = 2;               // Court 1 at Court 2
 
 // ====================
 // HELPERS
@@ -54,7 +61,6 @@ function formatDate(dateStr) {
   });
 }
 
-// BAGONG HELPER: Kalkulahin ang end time base sa start time + duration
 function addHoursToTime(time, hours) {
   if (!time) return "";
   const parts = String(time).split(":");
@@ -138,7 +144,105 @@ function getSavedCancellation(type) {
 }
 
 // ====================
-// LIVE AVAILABILITY CHECK
+// OPEN PLAY CAPACITY CHECK
+// ====================
+
+async function checkOpenPlayCapacity(playDate) {
+  if (!playDate) return null;
+
+  // 1. Kunin lahat ng bookings sa petsang ito
+  const bookings = await supabaseFetch(
+    `/rest/v1/public_bookings?select=court,start_time,duration_hours&booking_date=eq.${encodeURIComponent(playDate)}`
+  );
+
+  // 2. Hanapin kung aling courts ang occupied during 5PM-12AM
+  const occupiedCourts = new Set();
+  (bookings || []).forEach(b => {
+    const bStart = timeToMinutes(b.start_time);
+    const bEnd = bStart + Number(b.duration_hours) * 60;
+    // Check kung may overlap sa 5PM-12AM window
+    if (bStart < OPEN_PLAY_END_MIN && OPEN_PLAY_START_MIN < bEnd) {
+      occupiedCourts.add(Number(b.court));
+    }
+  });
+
+  const availableCourts = [];
+  for (let c = 1; c <= TOTAL_COURTS; c++) {
+    if (!occupiedCourts.has(c)) availableCourts.push(c);
+  }
+
+  const maxSlots = availableCourts.length * PLAYERS_PER_COURT;
+
+  // 3. Bilangin ang existing open play registrations
+  const registrations = await supabaseFetch(
+    `/rest/v1/public_open_play?select=id&play_date=eq.${encodeURIComponent(playDate)}`
+  );
+  const currentCount = (registrations || []).length;
+
+  return {
+    availableCourts,
+    maxSlots,
+    currentCount,
+    spotsLeft: maxSlots - currentCount,
+    isFull: currentCount >= maxSlots,
+    noCourts: availableCourts.length === 0
+  };
+}
+
+async function updateOpenPlayInfo() {
+  const playDate = document.getElementById("playDate")?.value;
+  const infoDiv = document.getElementById("openPlayInfo");
+
+  if (!infoDiv) return;
+
+  if (!playDate) {
+    infoDiv.innerHTML = "";
+    return;
+  }
+
+  try {
+    infoDiv.innerHTML = "<p>⏳ Checking available slots...</p>";
+    const cap = await checkOpenPlayCapacity(playDate);
+
+    if (cap.noCourts) {
+      infoDiv.innerHTML = `
+        <div style="background: #ffebee; padding: 12px; border-radius: 8px; border-left: 4px solid #ef4444;">
+          <strong>❌ Open Play unavailable on ${formatDate(playDate)}</strong>
+          <p style="margin: 6px 0 0 0; font-size: 0.9em;">Both courts are booked during Open Play hours (5PM-12AM).</p>
+        </div>
+      `;
+      return;
+    }
+
+    const statusColor = cap.isFull ? "#ef4444" : (cap.spotsLeft < 5 ? "#ff9800" : "#4caf50");
+    const statusBg = cap.isFull ? "#ffebee" : (cap.spotsLeft < 5 ? "#fff3e0" : "#e8f5e9");
+    const courtLabel = cap.availableCourts.length === 2
+      ? "🏓 2 Courts (both available)"
+      : `🏓 1 Court (Court ${cap.availableCourts[0]})`;
+
+    infoDiv.innerHTML = `
+      <div style="background: ${statusBg}; padding: 12px; border-radius: 8px; border-left: 4px solid ${statusColor};">
+        <strong>Open Play on ${formatDate(playDate)} (5PM - 12AM)</strong>
+        <p style="margin: 6px 0; font-size: 0.95em;">${courtLabel}</p>
+        <p style="margin: 6px 0; font-size: 0.95em;">
+          <strong>${cap.currentCount}/${cap.maxSlots}</strong> slots taken 
+          ${cap.isFull ? "— <strong>FULL</strong>" : `— <strong>${cap.spotsLeft}</strong> slots left`}
+        </p>
+      </div>
+    `;
+  } catch (error) {
+    console.error("Open play info error:", error);
+    infoDiv.innerHTML = "";
+  }
+}
+
+function setupOpenPlayInfo() {
+  const playDateInput = document.getElementById("playDate");
+  if (playDateInput) playDateInput.addEventListener("change", updateOpenPlayInfo);
+}
+
+// ====================
+// LIVE AVAILABILITY CHECK (BOOKING)
 // ====================
 
 async function checkAvailability() {
@@ -169,7 +273,7 @@ async function checkAvailability() {
       .map(b => {
         const start = formatTime(b.start_time);
         const end = addHoursToTime(b.start_time, b.duration_hours);
-        return `<li><strong>${start} - ${end}</strong> (${escapeHtml(b.customer_name || "Booked")})</li>`;
+        return `<li><strong>${start} - ${end}</strong></li>`;
       })
       .join("");
 
@@ -188,13 +292,12 @@ async function checkAvailability() {
 function setupAvailabilityCheck() {
   const dateInput = document.getElementById("date");
   const courtSelect = document.getElementById("court");
-
   if (dateInput) dateInput.addEventListener("change", checkAvailability);
   if (courtSelect) courtSelect.addEventListener("change", checkAvailability);
 }
 
 // ====================
-// LOAD BOOKINGS (MAY DATE GROUPING)
+// LOAD BOOKINGS
 // ====================
 
 async function loadBookings() {
@@ -261,7 +364,7 @@ async function loadBookings() {
 }
 
 // ====================
-// LOAD OPEN PLAY (MAY DATE GROUPING)
+// LOAD OPEN PLAY
 // ====================
 
 async function loadOpenPlay() {
@@ -303,7 +406,7 @@ async function loadOpenPlay() {
         ([date, players]) => `
       <div class="date-group" style="margin-bottom: 20px;">
         <h4 style="border-bottom: 2px solid #7c3aed; padding-bottom: 5px; color: #7c3aed;">
-          📅 ${formatDate(date)}
+          📅 ${formatDate(date)} · ${players.length} player(s)
         </h4>
         ${players
           .map(
@@ -311,7 +414,7 @@ async function loadOpenPlay() {
           <div class="open-play-item" style="padding: 8px 0; border-bottom: 1px solid #eee;">
             <strong>${escapeHtml(p.player_name)}</strong>
             <div style="font-size: 0.9em; color: #666;">
-              ${formatTime(p.play_time)} · ${escapeHtml(p.skill_level || "Not specified")}
+              ${escapeHtml(p.skill_level || "Not specified")}
             </div>
           </div>
         `
@@ -328,7 +431,7 @@ async function loadOpenPlay() {
 }
 
 // ====================
-// COURT BOOKING (MAY CONFLICT DETECTION NA)
+// COURT BOOKING SUBMIT
 // ====================
 
 async function handleBookingSubmit(event) {
@@ -367,7 +470,6 @@ async function handleBookingSubmit(event) {
       )}&court=eq.${encodeURIComponent(court)}`
     );
 
-    // Hanapin kung alin ang nag-co-conflict
     const conflictingBooking = (existing || []).find((booking) =>
       bookingOverlaps(bookingTime, duration, booking.start_time, booking.duration_hours)
     );
@@ -377,14 +479,12 @@ async function handleBookingSubmit(event) {
       const conflictEnd = addHoursToTime(conflictingBooking.start_time, conflictingBooking.duration_hours);
       const newEnd = addHoursToTime(bookingTime, duration);
 
-      // Detailed error message sa form
       showResult(
         result,
         `❌ BOOKING CONFLICT! Court ${court} on ${formatDate(bookingDate)} is already booked from ${conflictStart} to ${conflictEnd}. Your requested time (${formatTime(bookingTime)} to ${newEnd}) overlaps. Please choose a different time or court.`,
         false
       );
 
-      // Popup alert para hindi maiwasan
       alert(
         `⚠️ BOOKING CONFLICT!\n\n` +
         `Court ${court} on ${formatDate(bookingDate)}\n\n` +
@@ -396,7 +496,6 @@ async function handleBookingSubmit(event) {
       return;
     }
 
-    // Walang conflict — ituloy ang booking
     const cancellationCode = generateCancelCode();
 
     await supabaseFetch("/rest/v1/bookings", {
@@ -423,8 +522,6 @@ async function handleBookingSubmit(event) {
     );
 
     form.reset();
-
-    // I-clear din ang availability info
     const availabilityDiv = document.getElementById("availabilityInfo");
     if (availabilityDiv) availabilityDiv.innerHTML = "";
 
@@ -436,7 +533,7 @@ async function handleBookingSubmit(event) {
 }
 
 // ====================
-// OPEN PLAY
+// OPEN PLAY SUBMIT (MAY CAPACITY CHECK)
 // ====================
 
 async function handleOpenPlaySubmit(event) {
@@ -447,17 +544,52 @@ async function handleOpenPlaySubmit(event) {
   const name = document.getElementById("player")?.value.trim();
   const mobile = document.getElementById("playerPhone")?.value.trim();
   const playDate = document.getElementById("playDate")?.value;
-  const playTime = document.getElementById("playTime")?.value;
   const skillLevel = document.getElementById("level")?.value;
 
-  if (!name || !mobile || !playDate || !playTime || !skillLevel) {
+  if (!name || !mobile || !playDate || !skillLevel) {
     showResult(result, "Please complete all Open Play fields.", false);
     return;
   }
 
   try {
-    showResult(result, "Submitting your Open Play registration...", true);
+    showResult(result, "⏳ Checking Open Play availability...", true);
 
+    const cap = await checkOpenPlayCapacity(playDate);
+
+    // Scenario 1: WALANG COURT AVAILABLE
+    if (cap.noCourts) {
+      showResult(
+        result,
+        `❌ Open Play is CANCELLED on ${formatDate(playDate)}. Both courts are booked during Open Play hours (5PM-12AM). Please choose another date.`,
+        false
+      );
+      alert(
+        `⚠️ OPEN PLAY UNAVAILABLE\n\n` +
+        `${formatDate(playDate)}\n\n` +
+        `Both courts are booked during Open Play hours (5PM-12AM).\n\n` +
+        `Please choose a different date.`
+      );
+      return;
+    }
+
+    // Scenario 2: PUNO NA ANG SLOTS
+    if (cap.isFull) {
+      showResult(
+        result,
+        `❌ Open Play is FULL on ${formatDate(playDate)}. ${cap.currentCount}/${cap.maxSlots} slots taken. Please choose another date.`,
+        false
+      );
+      alert(
+        `⚠️ OPEN PLAY FULL\n\n` +
+        `${formatDate(playDate)}\n\n` +
+        `${cap.currentCount}/${cap.maxSlots} slots taken.\n` +
+        `Available courts: ${cap.availableCourts.length}\n\n` +
+        `Please choose a different date.`
+      );
+      return;
+    }
+
+    // PROCEED: MAY SLOT PA
     const cancellationCode = generateCancelCode();
 
     await supabaseFetch("/rest/v1/open_play", {
@@ -467,7 +599,7 @@ async function handleOpenPlaySubmit(event) {
         player_name: name,
         mobile: mobile,
         play_date: playDate,
-        play_time: playTime,
+        play_time: OPEN_PLAY_START_TIME,
         skill_level: skillLevel,
         cancellation_code: cancellationCode
       })
@@ -475,13 +607,17 @@ async function handleOpenPlaySubmit(event) {
 
     saveCancellation("open_play", { mobile, code: cancellationCode });
 
+    const newCount = cap.currentCount + 1;
     showResult(
       result,
-      `Thank you, ${name}! Open Play confirmed for ${playDate} at ${formatTime(playTime)}. Cancellation code: ${cancellationCode}.`,
+      `✅ Thank you, ${name}! Open Play confirmed for ${formatDate(playDate)} (5PM-12AM). Cancellation code: ${cancellationCode}.\n\n📊 Slots: ${newCount}/${cap.maxSlots} taken.`,
       true
     );
 
     form.reset();
+    const infoDiv = document.getElementById("openPlayInfo");
+    if (infoDiv) infoDiv.innerHTML = "";
+
     await loadOpenPlay();
   } catch (error) {
     console.error("Open Play error:", error);
@@ -614,7 +750,7 @@ async function cancelOpenPlay() {
 
 async function uploadMedia(file) {
   if (file.size > MAX_FILE_SIZE) {
-    throw new Error(`File is too large (${(file.size/1024/1024).toFixed(1)}MB). Maximum is 100MB. Please compress your 1080p video.`);
+    throw new Error(`File is too large (${(file.size/1024/1024).toFixed(1)}MB). Maximum is 100MB.`);
   }
 
   const ext = file.name.split(".").pop();
@@ -756,7 +892,8 @@ document.addEventListener("DOMContentLoaded", () => {
   if (playForm) playForm.addEventListener("submit", handleOpenPlaySubmit);
 
   createCancellationBoxes();
-  setupAvailabilityCheck();  // BAGO: Live availability check
+  setupAvailabilityCheck();
+  setupOpenPlayInfo();
   loadBookings();
   loadOpenPlay();
   setupMediaUpload();
