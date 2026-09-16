@@ -10,7 +10,6 @@ const POLL_MS = 30000;
 const MEDIA_BUCKET = "zinja-media";
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
-// ===== OPEN PLAY CONFIGURATION =====
 const OPEN_PLAY_START_MIN = 17 * 60;
 const OPEN_PLAY_END_MIN = 24 * 60;
 const OPEN_PLAY_START_TIME = "17:00";
@@ -256,7 +255,7 @@ function setupAvailabilityCheck() {
 // ====================
 
 async function loadBookings() {
-  const container = document.getElementById("bookingsList") || document.getElementById("bookingList") || document.querySelector("[data-bookings-list]");
+  const container = document.getElementById("bookingsList");
   if (!container) return;
 
   try {
@@ -293,7 +292,7 @@ async function loadBookings() {
 // ====================
 
 async function loadOpenPlay() {
-  const container = document.getElementById("openPlayList") || document.getElementById("playList") || document.querySelector("[data-open-play-list]");
+  const container = document.getElementById("openPlayList");
   if (!container) return;
 
   try {
@@ -386,7 +385,7 @@ async function handleBookingSubmit(event) {
 }
 
 // ====================
-// OPEN PLAY SUBMIT (MAY CAPACITY CHECK)
+// OPEN PLAY SUBMIT
 // ====================
 
 async function handleOpenPlaySubmit(event) {
@@ -733,7 +732,4 @@ async function loadMedia() {
         <div style="padding:10px;">
           <div style="font-size:0.8em;color:#888;margin-bottom:8px;">${isVideo ? "🎥 Video" : "📷 Photo"} · ${sizeMB}MB</div>
           <button onclick="downloadViaAndroid('${publicUrl}', '${m.file_name}')" style="display:inline-block;margin-right:8px;padding:6px 12px;background:#7c3aed;color:white;text-decoration:none;border:none;border-radius:6px;font-size:0.85em;cursor:pointer;">⬇ Download</button>
-          <button onclick="deleteMedia('${m.file_path}', ${m.id})" style="padding:6px 12px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;font-size:0.85em;">🗑 Delete</button>
-        </div>
-      </div>`;
-    }).join
+          <button onclick="deleteMedia('${m.file_path}', ${m.id})" style="padding:6px 12px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;font-size:0.
