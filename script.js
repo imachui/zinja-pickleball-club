@@ -8,7 +8,7 @@ const headers = {
 
 const POLL_MS = 30000;
 const MEDIA_BUCKET = "zinja-media";
-const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB (about 1 min of 1080p 60fps)
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 
 // ====================
 // HELPERS
@@ -52,6 +52,18 @@ function formatDate(dateStr) {
     month: "short",
     day: "numeric"
   });
+}
+
+// BAGONG HELPER: Kalkulahin ang end time base sa start time + duration
+function addHoursToTime(time, hours) {
+  if (!time) return "";
+  const parts = String(time).split(":");
+  const totalMinutes = (Number(parts[0]) || 0) * 60 + (Number(parts[1]) || 0) + Number(hours) * 60;
+  const endHour = Math.floor(totalMinutes / 60) % 24;
+  const endMinute = totalMinutes % 60;
+  const suffix = endHour >= 12 ? "PM" : "AM";
+  const displayHour = endHour % 12 || 12;
+  return `${displayHour}:${String(endMinute).padStart(2, "0")} ${suffix}`;
 }
 
 function showResult(element, message, success = true) {
@@ -126,6 +138,62 @@ function getSavedCancellation(type) {
 }
 
 // ====================
+// LIVE AVAILABILITY CHECK
+// ====================
+
+async function checkAvailability() {
+  const bookingDate = document.getElementById("date")?.value;
+  const court = Number(document.getElementById("court")?.value);
+  const availabilityDiv = document.getElementById("availabilityInfo");
+
+  if (!availabilityDiv) return;
+
+  if (!bookingDate || !court) {
+    availabilityDiv.innerHTML = "";
+    return;
+  }
+
+  try {
+    const existing = await supabaseFetch(
+      `/rest/v1/public_bookings?select=start_time,duration_hours,customer_name&booking_date=eq.${encodeURIComponent(
+        bookingDate
+      )}&court=eq.${encodeURIComponent(court)}`
+    );
+
+    if (!existing || existing.length === 0) {
+      availabilityDiv.innerHTML = `<p style="color: #1b5e20; background: #e8f5e9; padding: 10px; border-radius: 8px; border-left: 4px solid #4caf50;">✅ Court ${court} is fully available on ${formatDate(bookingDate)}!</p>`;
+      return;
+    }
+
+    const bookedSlots = existing
+      .map(b => {
+        const start = formatTime(b.start_time);
+        const end = addHoursToTime(b.start_time, b.duration_hours);
+        return `<li><strong>${start} - ${end}</strong> (${escapeHtml(b.customer_name || "Booked")})</li>`;
+      })
+      .join("");
+
+    availabilityDiv.innerHTML = `
+      <div style="background: #fff3e0; padding: 10px; border-radius: 8px; border-left: 4px solid #ff9800;">
+        <strong>⚠️ Court ${court} is partially booked on ${formatDate(bookingDate)}:</strong>
+        <ul style="margin: 8px 0 0 20px; padding: 0;">${bookedSlots}</ul>
+        <small style="color: #666;">Please avoid these times when booking.</small>
+      </div>
+    `;
+  } catch (error) {
+    console.error("Availability check error:", error);
+  }
+}
+
+function setupAvailabilityCheck() {
+  const dateInput = document.getElementById("date");
+  const courtSelect = document.getElementById("court");
+
+  if (dateInput) dateInput.addEventListener("change", checkAvailability);
+  if (courtSelect) courtSelect.addEventListener("change", checkAvailability);
+}
+
+// ====================
 // LOAD BOOKINGS (MAY DATE GROUPING)
 // ====================
 
@@ -176,7 +244,7 @@ async function loadBookings() {
           <div class="booking-item" style="padding: 8px 0; border-bottom: 1px solid #eee;">
             <strong>${escapeHtml(b.customer_name)}</strong>
             <div style="font-size: 0.9em; color: #666;">
-              ${formatTime(b.start_time)} · Court ${escapeHtml(b.court)} · ${escapeHtml(b.duration_hours)} hour(s)
+              ${formatTime(b.start_time)} - ${addHoursToTime(b.start_time, b.duration_hours)} · Court ${escapeHtml(b.court)} · ${escapeHtml(b.duration_hours)} hour(s)
             </div>
           </div>
         `
@@ -260,7 +328,7 @@ async function loadOpenPlay() {
 }
 
 // ====================
-// COURT BOOKING
+// COURT BOOKING (MAY CONFLICT DETECTION NA)
 // ====================
 
 async function handleBookingSubmit(event) {
@@ -291,23 +359,44 @@ async function handleBookingSubmit(event) {
   }
 
   try {
-    showResult(result, "Checking court availability...", true);
+    showResult(result, "⏳ Checking court availability...", true);
 
     const existing = await supabaseFetch(
-      `/rest/v1/public_bookings?select=booking_date,start_time,court,duration_hours&booking_date=eq.${encodeURIComponent(
+      `/rest/v1/public_bookings?select=booking_date,start_time,court,duration_hours,customer_name&booking_date=eq.${encodeURIComponent(
         bookingDate
       )}&court=eq.${encodeURIComponent(court)}`
     );
 
-    const conflict = (existing || []).some((booking) =>
+    // Hanapin kung alin ang nag-co-conflict
+    const conflictingBooking = (existing || []).find((booking) =>
       bookingOverlaps(bookingTime, duration, booking.start_time, booking.duration_hours)
     );
 
-    if (conflict) {
-      showResult(result, "Sorry, that court and time are already booked.", false);
+    if (conflictingBooking) {
+      const conflictStart = formatTime(conflictingBooking.start_time);
+      const conflictEnd = addHoursToTime(conflictingBooking.start_time, conflictingBooking.duration_hours);
+      const newEnd = addHoursToTime(bookingTime, duration);
+
+      // Detailed error message sa form
+      showResult(
+        result,
+        `❌ BOOKING CONFLICT! Court ${court} on ${formatDate(bookingDate)} is already booked from ${conflictStart} to ${conflictEnd}. Your requested time (${formatTime(bookingTime)} to ${newEnd}) overlaps. Please choose a different time or court.`,
+        false
+      );
+
+      // Popup alert para hindi maiwasan
+      alert(
+        `⚠️ BOOKING CONFLICT!\n\n` +
+        `Court ${court} on ${formatDate(bookingDate)}\n\n` +
+        `Already reserved: ${conflictStart} - ${conflictEnd}\n` +
+        `Your requested: ${formatTime(bookingTime)} - ${newEnd}\n\n` +
+        `Please choose a different time or court.`
+      );
+
       return;
     }
 
+    // Walang conflict — ituloy ang booking
     const cancellationCode = generateCancelCode();
 
     await supabaseFetch("/rest/v1/bookings", {
@@ -326,13 +415,19 @@ async function handleBookingSubmit(event) {
 
     saveCancellation("booking", { mobile, code: cancellationCode });
 
+    const endTime = addHoursToTime(bookingTime, duration);
     showResult(
       result,
-      `Thank you, ${name}! Booking confirmed for Court ${court}, ${bookingDate} at ${formatTime(bookingTime)}. Cancellation code: ${cancellationCode}.`,
+      `✅ Thank you, ${name}! Booking confirmed for Court ${court}, ${formatDate(bookingDate)} from ${formatTime(bookingTime)} to ${endTime}. Cancellation code: ${cancellationCode}.`,
       true
     );
 
     form.reset();
+
+    // I-clear din ang availability info
+    const availabilityDiv = document.getElementById("availabilityInfo");
+    if (availabilityDiv) availabilityDiv.innerHTML = "";
+
     await loadBookings();
   } catch (error) {
     console.error("Booking error:", error);
@@ -577,10 +672,10 @@ async function loadMedia() {
       const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${MEDIA_BUCKET}/${m.file_path}`;
       const isVideo = m.file_type === "video";
       const sizeMB = (m.file_size / 1024 / 1024).toFixed(1);
-      
+
       return `
         <div class="media-card" style="border: 1px solid #ddd; border-radius: 12px; overflow: hidden; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-          ${isVideo 
+          ${isVideo
             ? `<video src="${publicUrl}" controls preload="metadata" style="width: 100%; height: 200px; object-fit: cover; background: #000;"></video>`
             : `<img src="${publicUrl}" style="width: 100%; height: 200px; object-fit: cover;" loading="lazy" alt="Highlight">`
           }
@@ -661,6 +756,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (playForm) playForm.addEventListener("submit", handleOpenPlaySubmit);
 
   createCancellationBoxes();
+  setupAvailabilityCheck();  // BAGO: Live availability check
   loadBookings();
   loadOpenPlay();
   setupMediaUpload();
