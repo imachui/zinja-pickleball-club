@@ -118,6 +118,31 @@ function getSavedCancellation(type) {
 }
 
 // ====================
+// DOWNLOAD VIA ANDROID APP
+// ====================
+
+function downloadViaAndroid(url, fileName) {
+  // Check kung nasa Android app (may JavaScript interface)
+  if (typeof AndroidDownloader !== "undefined" && AndroidDownloader.downloadFile) {
+    try {
+      AndroidDownloader.downloadFile(url, fileName);
+      return;
+    } catch (err) {
+      console.error("Android download failed:", err);
+    }
+  }
+
+  // Fallback: Regular browser download
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  a.target = "_blank";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+// ====================
 // OPEN PLAY CAPACITY CHECK
 // ====================
 
@@ -550,11 +575,12 @@ async function loadMedia() {
       const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${MEDIA_BUCKET}/${m.file_path}`;
       const isVideo = m.file_type === "video";
       const sizeMB = (m.file_size / 1024 / 1024).toFixed(1);
+      // IMPORTANTE: Gamitin ang downloadViaAndroid function
       return `<div class="media-card" style="border:1px solid #ddd;border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
         ${isVideo ? `<video src="${publicUrl}" controls preload="metadata" style="width:100%;height:200px;object-fit:cover;background:#000;"></video>` : `<img src="${publicUrl}" style="width:100%;height:200px;object-fit:cover;" loading="lazy" alt="Highlight">`}
         <div style="padding:10px;">
           <div style="font-size:0.8em;color:#888;margin-bottom:8px;">${isVideo ? "🎥 Video" : "📷 Photo"} · ${sizeMB}MB</div>
-          <a href="${publicUrl}" download="${m.file_name}" style="display:inline-block;margin-right:8px;padding:6px 12px;background:#7c3aed;color:white;text-decoration:none;border-radius:6px;font-size:0.85em;">⬇ Download</a>
+          <button onclick="downloadViaAndroid('${publicUrl}', '${m.file_name}')" style="display:inline-block;margin-right:8px;padding:6px 12px;background:#7c3aed;color:white;text-decoration:none;border:none;border-radius:6px;font-size:0.85em;cursor:pointer;">⬇ Download</button>
           <button onclick="deleteMedia('${m.file_path}', ${m.id})" style="padding:6px 12px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;font-size:0.85em;">🗑 Delete</button>
         </div>
       </div>`;
