@@ -15,6 +15,7 @@
       <a href="#booking">Book a Court</a>
       <a href="#openplay">Open Play</a>
       <a href="#highlights">Highlights</a>
+      <a href="#download">Get App</a>
       <a href="#contact">Contact</a>
     </nav>
   </header>
@@ -26,6 +27,7 @@
       <p>Welcome to ZINJA Pickleball Club — your local place for court rentals and Open Play.</p>
       <a class="btn" href="#booking">Book a Court</a>
       <a class="btn alt" href="#openplay">Join Open Play</a>
+      <a class="btn" href="#download" style="background: linear-gradient(135deg, #10b981, #059669);">📱 Get Android App</a>
     </div>
     <img class="hero-logo" src="logo.png" alt="ZINJA Hero Logo">
   </section>
@@ -34,6 +36,43 @@
     <div><b>🏓 2 Courts</b><p>Two courts available.</p></div>
     <div><b>₱150 / hour</b><p>Affordable court rental.</p></div>
     <div><b>₱50 Open Play</b><p>Join other players.</p></div>
+  </section>
+
+  <!-- ==================== -->
+  <!-- APP DOWNLOAD SECTION -->
+  <!-- ==================== -->
+  <section id="download" style="background: linear-gradient(135deg, #7c3aed 0%, #06b6d4 100%); padding: 60px 20px; text-align: center; color: white; position: relative; overflow: hidden;">
+    <div style="max-width: 700px; margin: 0 auto; position: relative; z-index: 2;">
+      <h2 style="color: white; font-size: 2em; margin-bottom: 10px;">📱 Get the ZINJA App</h2>
+      <p style="margin-bottom: 25px; font-size: 1.15em; opacity: 0.95;">
+        Book courts, join Open Play, and share highlights — lahat sa isang app!
+      </p>
+      
+      <div style="display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; align-items: center;">
+        <a href="ZINJA-Pickleball.apk" download 
+           style="display: inline-flex; align-items: center; gap: 10px; padding: 16px 35px; background: white; color: #7c3aed; text-decoration: none; border-radius: 50px; font-weight: bold; font-size: 1.05em; box-shadow: 0 6px 20px rgba(0,0,0,0.25); transition: transform 0.2s;">
+          ⬇ Download APK
+        </a>
+        
+        <div style="display: inline-flex; align-items: center; gap: 8px; padding: 16px 25px; background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.3); border-radius: 50px; font-size: 1.05em;">
+          🤖 Android 7.0+
+        </div>
+      </div>
+      
+      <p style="margin-top: 25px; font-size: 0.9em; opacity: 0.85;">
+        Version 1.0 · Free · No ads
+      </p>
+
+      <div style="margin-top: 30px; padding: 15px; background: rgba(255,255,255,0.1); border-radius: 12px; text-align: left; font-size: 0.9em;">
+        <p style="margin: 0 0 8px 0; font-weight: bold;">⚠️ How to install:</p>
+        <ol style="margin: 0; padding-left: 20px; line-height: 1.6;">
+          <li>I-tap ang "Download APK" button</li>
+          <li>Payagan ang "Install from unknown sources"</li>
+          <li>Buksan ang na-download na APK file</li>
+          <li>I-tap ang "Install" at buksan ang app!</li>
+        </ol>
+      </div>
+    </div>
   </section>
 
   <section id="booking">
@@ -80,7 +119,6 @@
       <input id="player" placeholder="Full Name" required>
       <input id="playerPhone" placeholder="Mobile Number" required>
       <input id="playDate" type="date" required>
-      <!-- Ang playTime ay naka-fix na sa 17:00 (5PM) -->
       
       <select id="level" required>
         <option value="">Skill Level</option>
@@ -90,7 +128,6 @@
         <option value="Any level">Any level</option>
       </select>
       
-      <!-- OPEN PLAY CAPACITY INFO: Dito lalabas ang slots info -->
       <div id="openPlayInfo" style="margin: 10px 0;"></div>
       
       <button class="btn" type="submit">Join Open Play</button>
