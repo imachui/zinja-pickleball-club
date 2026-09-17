@@ -17,7 +17,16 @@ const PLAYERS_PER_COURT = 16;
 const TOTAL_COURTS = 2;
 
 // ====================
-// WEEKLY CLOSURE (PHT: Friday 5PM - Saturday 6PM)
+// PRICING CONFIG
+// ====================
+
+const MORNING_START_MIN = 6 * 60;
+const MORNING_END_MIN = 17 * 60;
+const MORNING_RATE = 100;
+const EVENING_RATE = 150;
+
+// ====================
+// WEEKLY CLOSURE
 // ====================
 
 const CLOSURE_DAY_START = 5;
@@ -127,6 +136,83 @@ function getSavedCancellation(type) {
     return value ? JSON.parse(value) : null;
   } catch { return null; }
 }
+
+// ====================
+// PRICING FUNCTIONS
+// ====================
+
+function calculateBookingPrice(startTime, durationHours) {
+  if (!startTime || !durationHours) return { total: 0, rate: 0, breakdown: "" };
+  const startMin = timeToMinutes(startTime);
+  let total = 0;
+  let morningHours = 0;
+  let eveningHours = 0;
+
+  for (let i = 0; i < Number(durationHours); i++) {
+    const hourStart = startMin + (i * 60);
+    if (hourStart >= MORNING_START_MIN && hourStart < MORNING_END_MIN) {
+      total += MORNING_RATE;
+      morningHours++;
+    } else {
+      total += EVENING_RATE;
+      eveningHours++;
+    }
+  }
+
+  let breakdown = "";
+  if (morningHours > 0 && eveningHours > 0) {
+    breakdown = `${morningHours}h × ₱${MORNING_RATE} + ${eveningHours}h × ₱${EVENING_RATE}`;
+  }
+
+  const rate = morningHours >= eveningHours ? MORNING_RATE : EVENING_RATE;
+  return { total, rate, breakdown, morningHours, eveningHours };
+}
+
+function updatePriceDisplay() {
+  const timeInput = document.getElementById("time")?.value;
+  const durationInput = Number(document.getElementById("duration")?.value);
+  const priceDiv = document.getElementById("priceDisplay");
+  const rateEl = document.getElementById("ratePerHour");
+  const totalEl = document.getElementById("totalPrice");
+  const noteEl = document.getElementById("rateNote");
+
+  if (!priceDiv) return;
+
+  if (!timeInput || !durationInput) {
+    priceDiv.style.display = "none";
+    return;
+  }
+
+  const calc = calculateBookingPrice(timeInput, durationInput);
+  priceDiv.style.display = "block";
+  rateEl.textContent = `₱${calc.rate}`;
+  totalEl.textContent = `₱${calc.total.toLocaleString()}`;
+
+  if (calc.breakdown) {
+    noteEl.textContent = `Mixed rate: ${calc.breakdown}`;
+  } else {
+    noteEl.textContent = calc.rate === MORNING_RATE
+      ? "☀️ Day rate (6AM-5PM)"
+      : "🌙 Evening rate (5PM-12AM)";
+  }
+}
+
+function setupPriceDisplay() {
+  const timeInput = document.getElementById("time");
+  const durationInput = document.getElementById("duration");
+  if (timeInput) {
+    timeInput.addEventListener("change", updatePriceDisplay);
+    timeInput.addEventListener("input", updatePriceDisplay);
+  }
+  if (durationInput) {
+    durationInput.addEventListener("change", updatePriceDisplay);
+    durationInput.addEventListener("input", updatePriceDisplay);
+  }
+}
+
+// ====================
+// CLOSURE FUNCTIONS
+// ====================
 
 function checkClosureForBooking(dateStr, timeStr, durationHours) {
   if (!dateStr || !timeStr) return { closed: false };
@@ -350,7 +436,7 @@ async function loadBookings() {
         ${bookings.map(b => `
           <div class="booking-item" style="padding:8px 0;border-bottom:1px solid #eee;">
             <strong>${escapeHtml(b.customer_name)}</strong>
-            <div style="font-size:0.9em;color:#666;">${formatTime(b.start_time)} - ${addHoursToTime(b.start_time, b.duration_hours)} · Court ${escapeHtml(b.court)} · ${escapeHtml(b.duration_hours)} hour(s)</div>
+            <div style="font-size:0.9em;color:#666;">${formatTime(b.start_time)} - ${addHoursToTime(b.start_time, b.duration_hours)} · Court ${escapeHtml(b.court)} · ${escapeHtml(b.duration_hours)} hour(s)${b.price ? ` · <strong style="color:#7c3aed;">₱${Number(b.price).toLocaleString()}</strong>` : ""}</div>
           </div>
         `).join("")}
       </div>
@@ -436,18 +522,32 @@ async function handleBookingSubmit(event) {
       return;
     }
 
+    const priceCalc = calculateBookingPrice(bookingTime, duration);
     const cancellationCode = generateCancelCode();
+
     await supabaseFetch("/rest/v1/bookings", {
       method: "POST",
       headers: { Prefer: "return=representation" },
-      body: JSON.stringify({ customer_name: name, mobile, booking_date: bookingDate, start_time: bookingTime, court, duration_hours: duration, cancellation_code: cancellationCode })
+      body: JSON.stringify({
+        customer_name: name,
+        mobile,
+        booking_date: bookingDate,
+        start_time: bookingTime,
+        court,
+        duration_hours: duration,
+        cancellation_code: cancellationCode,
+        price: priceCalc.total,
+        hourly_rate: priceCalc.rate
+      })
     });
 
     saveCancellation("booking", { mobile, code: cancellationCode });
     const endTime = addHoursToTime(bookingTime, duration);
-    showResult(result, `✅ Thank you, ${name}! Booking confirmed for Court ${court}, ${formatDate(bookingDate)} from ${formatTime(bookingTime)} to ${endTime}. Cancellation code: ${cancellationCode}.`, true);
+    showResult(result, `✅ Thank you, ${name}! Booking confirmed for Court ${court}, ${formatDate(bookingDate)} from ${formatTime(bookingTime)} to ${endTime}. 💰 Total: ₱${priceCalc.total.toLocaleString()}. Cancellation code: ${cancellationCode}.`, true);
 
     form.reset();
+    const priceDiv = document.getElementById("priceDisplay");
+    if (priceDiv) priceDiv.style.display = "none";
     const availabilityDiv = document.getElementById("availabilityInfo");
     if (availabilityDiv) availabilityDiv.innerHTML = "";
     await loadBookings();
@@ -760,27 +860,46 @@ function setupChat() {
 }
 
 // ====================
-// MEDIA UPLOAD & GALLERY
+// MEDIA UPLOAD & GALLERY (WITH ALBUM)
 // ====================
 
-async function uploadMedia(file) {
-  if (file.size > MAX_FILE_SIZE) throw new Error(`File is too large (${(file.size/1024/1024).toFixed(1)}MB). Maximum is 100MB.`);
+let currentAlbumFilter = "all";
+let allMediaCache = [];
+
+async function uploadMedia(file, album = "General") {
+  if (file.size > MAX_FILE_SIZE) {
+    throw new Error(`File is too large (${(file.size/1024/1024).toFixed(1)}MB). Maximum is 100MB.`);
+  }
   const ext = file.name.split(".").pop();
   const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
   const filePath = `uploads/${fileName}`;
 
   const response = await fetch(`${SUPABASE_URL}/storage/v1/object/${MEDIA_BUCKET}/${filePath}`, {
     method: "POST",
-    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, "Content-Type": file.type, "x-upsert": "false" },
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": file.type,
+      "x-upsert": "false"
+    },
     body: file
   });
 
-  if (!response.ok) { const err = await response.text(); throw new Error(err); }
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(err);
+  }
 
   await supabaseFetch("/rest/v1/media", {
     method: "POST",
     headers: { Prefer: "return=representation" },
-    body: JSON.stringify({ file_name: fileName, file_path: filePath, file_type: file.type.startsWith("video") ? "video" : "image", file_size: file.size })
+    body: JSON.stringify({
+      file_name: fileName,
+      file_path: filePath,
+      file_type: file.type.startsWith("video") ? "video" : "image",
+      file_size: file.size,
+      album: album
+    })
   });
 
   return filePath;
@@ -791,29 +910,56 @@ async function loadMedia() {
   if (!gallery) return;
 
   try {
-    const rows = await supabaseFetch("/rest/v1/media?select=*&order=created_at.desc&limit=50");
-    if (!rows || rows.length === 0) {
-      gallery.innerHTML = "<p style='grid-column:1/-1;'>No media uploaded yet. Be the first to share!</p>";
-      return;
-    }
-
-    gallery.innerHTML = rows.map(m => {
-      const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${MEDIA_BUCKET}/${m.file_path}`;
-      const isVideo = m.file_type === "video";
-      const sizeMB = (m.file_size / 1024 / 1024).toFixed(1);
-      return `<div class="media-card" style="border:1px solid #ddd;border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
-        ${isVideo ? `<video src="${publicUrl}" controls preload="metadata" style="width:100%;height:200px;object-fit:cover;background:#000;"></video>` : `<img src="${publicUrl}" style="width:100%;height:200px;object-fit:cover;" loading="lazy" alt="Highlight">`}
-        <div style="padding:10px;">
-          <div style="font-size:0.8em;color:#888;margin-bottom:8px;">${isVideo ? "🎥 Video" : "📷 Photo"} · ${sizeMB}MB</div>
-          <button onclick="downloadViaAndroid('${publicUrl}', '${m.file_name}')" style="display:inline-block;margin-right:8px;padding:6px 12px;background:#7c3aed;color:white;text-decoration:none;border:none;border-radius:6px;font-size:0.85em;cursor:pointer;">⬇ Download</button>
-          <button onclick="deleteMedia('${m.file_path}', ${m.id})" style="padding:6px 12px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;font-size:0.85em;">🗑 Delete</button>
-        </div>
-      </div>`;
-    }).join("");
+    const rows = await supabaseFetch("/rest/v1/media?select=*&order=created_at.desc&limit=100");
+    allMediaCache = rows || [];
+    renderMediaGallery();
   } catch (error) {
     console.error("Media load error:", error);
     gallery.innerHTML = "<p style='grid-column:1/-1;'>Unable to load media.</p>";
   }
+}
+
+function renderMediaGallery() {
+  const gallery = document.getElementById("mediaGallery");
+  if (!gallery) return;
+
+  let filtered = allMediaCache;
+  if (currentAlbumFilter !== "all") {
+    filtered = allMediaCache.filter(m => (m.album || "General") === currentAlbumFilter);
+  }
+
+  if (!filtered.length) {
+    gallery.innerHTML = `<p style='grid-column:1/-1; text-align:center; padding:20px; color:#666;'>No media in this album yet.</p>`;
+    return;
+  }
+
+  gallery.innerHTML = filtered.map(m => {
+    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${MEDIA_BUCKET}/${m.file_path}`;
+    const isVideo = m.file_type === "video";
+    const sizeMB = (m.file_size / 1024 / 1024).toFixed(1);
+    const album = m.album || "General";
+    return `<div class="media-card" style="border:1px solid #ddd;border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+      ${isVideo
+        ? `<video src="${publicUrl}" controls preload="metadata" style="width:100%;height:200px;object-fit:cover;background:#000;"></video>`
+        : `<img src="${publicUrl}" style="width:100%;height:200px;object-fit:cover;" loading="lazy" alt="Highlight">`}
+      <div style="padding:10px;">
+        <div style="font-size:0.8em;color:#888;margin-bottom:8px;">
+          ${isVideo ? "🎥 Video" : "📷 Photo"} · ${sizeMB}MB
+          <span style="display:inline-block;margin-left:6px;padding:2px 8px;background:#e9d5ff;color:#7c3aed;border-radius:10px;font-weight:600;">📁 ${escapeHtml(album)}</span>
+        </div>
+        <button onclick="downloadViaAndroid('${publicUrl}', '${m.file_name}')" style="display:inline-block;margin-right:8px;padding:6px 12px;background:#7c3aed;color:white;text-decoration:none;border:none;border-radius:6px;font-size:0.85em;cursor:pointer;">⬇ Download</button>
+        <button onclick="deleteMedia('${m.file_path}', ${m.id})" style="padding:6px 12px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;font-size:0.85em;">🗑 Delete</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function filterByAlbum(album) {
+  currentAlbumFilter = album;
+  document.querySelectorAll(".album-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.album === album);
+  });
+  renderMediaGallery();
 }
 
 async function deleteMedia(filePath, id) {
@@ -821,11 +967,16 @@ async function deleteMedia(filePath, id) {
   try {
     await fetch(`${SUPABASE_URL}/storage/v1/object/${MEDIA_BUCKET}/${filePath}`, {
       method: "DELETE",
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`
+      }
     });
     await supabaseFetch(`/rest/v1/media?id=eq.${id}`, { method: "DELETE" });
     await loadMedia();
-  } catch (error) { alert("Failed to delete: " + error.message); }
+  } catch (error) {
+    alert("Failed to delete: " + error.message);
+  }
 }
 
 function setupMediaUpload() {
@@ -835,18 +986,45 @@ function setupMediaUpload() {
   if (!uploadBtn || !fileInput) return;
 
   uploadBtn.addEventListener("click", async () => {
-    const file = fileInput.files[0];
-    if (!file) { showResult(result, "Please select a file first.", false); return; }
+    const files = Array.from(fileInput.files);
+    if (!files.length) {
+      showResult(result, "Please select at least one file.", false);
+      return;
+    }
+
+    const album = document.getElementById("mediaAlbum")?.value || "General";
+    let successCount = 0;
+    let failCount = 0;
 
     try {
-      showResult(result, "Uploading... Please wait. (This may take a while for videos)", true);
-      await uploadMedia(file);
-      showResult(result, "Upload successful! 🎉", true);
+      uploadBtn.disabled = true;
+      showResult(result, `⏳ Uploading ${files.length} file(s) to "${album}" album...`, true);
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        try {
+          showResult(result, `⏳ Uploading ${i + 1}/${files.length}: ${file.name} (${(file.size/1024/1024).toFixed(1)}MB)`, true);
+          await uploadMedia(file, album);
+          successCount++;
+        } catch (err) {
+          console.error(`Failed to upload ${file.name}:`, err);
+          failCount++;
+        }
+      }
+
+      if (failCount === 0) {
+        showResult(result, `✅ Upload successful! ${successCount} file(s) uploaded to "${album}". 🎉`, true);
+      } else {
+        showResult(result, `⚠️ ${successCount} uploaded, ${failCount} failed.`, false);
+      }
+
       fileInput.value = "";
       await loadMedia();
     } catch (error) {
       console.error("Upload error:", error);
       showResult(result, `Upload failed: ${error.message}`, false);
+    } finally {
+      uploadBtn.disabled = false;
     }
   });
 }
@@ -863,6 +1041,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (playForm) playForm.addEventListener("submit", handleOpenPlaySubmit);
 
   createCancellationBoxes();
+  setupPriceDisplay();
   setupAvailabilityCheck();
   setupOpenPlayInfo();
   setupChat();
