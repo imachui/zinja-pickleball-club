@@ -860,10 +860,10 @@ function setupChat() {
 }
 
 // ====================
-// MEDIA UPLOAD & GALLERY (WITH ALBUM)
+// MEDIA UPLOAD & GALLERY (IPHONE-STYLE ALBUM)
 // ====================
 
-let currentAlbumFilter = "all";
+let currentOpenAlbum = null;
 let allMediaCache = [];
 
 async function uploadMedia(file, album = "General") {
@@ -906,47 +906,136 @@ async function uploadMedia(file, album = "General") {
 }
 
 async function loadMedia() {
-  const gallery = document.getElementById("mediaGallery");
-  if (!gallery) return;
+  const albumGrid = document.getElementById("albumGrid");
+  if (!albumGrid) return;
 
   try {
-    const rows = await supabaseFetch("/rest/v1/media?select=*&order=created_at.desc&limit=100");
+    const rows = await supabaseFetch("/rest/v1/media?select=*&order=created_at.desc&limit=200");
     allMediaCache = rows || [];
-    renderMediaGallery();
+    if (currentOpenAlbum) {
+      openAlbum(currentOpenAlbum);
+    } else {
+      renderAlbumView();
+    }
   } catch (error) {
     console.error("Media load error:", error);
-    gallery.innerHTML = "<p style='grid-column:1/-1;'>Unable to load media.</p>";
+    albumGrid.innerHTML = "<p style='grid-column:1/-1;'>Unable to load media.</p>";
   }
 }
 
-function renderMediaGallery() {
-  const gallery = document.getElementById("mediaGallery");
-  if (!gallery) return;
+function renderAlbumView() {
+  const albumView = document.getElementById("albumView");
+  const albumDetailView = document.getElementById("albumDetailView");
+  const albumGrid = document.getElementById("albumGrid");
+  if (!albumView || !albumGrid) return;
 
-  let filtered = allMediaCache;
-  if (currentAlbumFilter !== "all") {
-    filtered = allMediaCache.filter(m => (m.album || "General") === currentAlbumFilter);
-  }
+  currentOpenAlbum = null;
+  albumView.style.display = "block";
+  if (albumDetailView) albumDetailView.style.display = "none";
 
-  if (!filtered.length) {
-    gallery.innerHTML = `<p style='grid-column:1/-1; text-align:center; padding:20px; color:#666;'>No media in this album yet.</p>`;
+  if (!allMediaCache.length) {
+    albumGrid.innerHTML = "<p style='grid-column:1/-1;text-align:center;padding:40px;color:#888;'>No photos yet. Be the first to share! 📸</p>";
     return;
   }
 
-  gallery.innerHTML = filtered.map(m => {
+  const albums = {};
+  allMediaCache.forEach(m => {
+    const albumName = m.album || "General";
+    if (!albums[albumName]) albums[albumName] = [];
+    albums[albumName].push(m);
+  });
+
+  const totalCount = allMediaCache.length;
+  const totalLabel = `${totalCount} item${totalCount === 1 ? "" : "s"}`;
+
+  let html = "";
+
+  // All Photos card (cover = most recent)
+  if (allMediaCache[0]) {
+    const cover = allMediaCache[0];
+    const coverUrl = `${SUPABASE_URL}/storage/v1/object/public/${MEDIA_BUCKET}/${cover.file_path}`;
+    const coverIsVideo = cover.file_type === "video";
+    html += `
+      <div class="album-card" onclick="openAlbum('__all__')" style="cursor:pointer;border-radius:16px;overflow:hidden;background:#fff;box-shadow:0 4px 12px rgba(0,0,0,0.08);transition:all 0.2s;">
+        <div style="position:relative;aspect-ratio:1;background:#f0f0f0;overflow:hidden;">
+          ${coverIsVideo
+            ? `<video src="${coverUrl}" muted preload="metadata" style="width:100%;height:100%;object-fit:cover;"></video>`
+            : `<img src="${coverUrl}" style="width:100%;height:100%;object-fit:cover;">`}
+          <div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(to top,rgba(0,0,0,0.75),transparent);padding:35px 12px 12px;color:#fff;">
+            <div style="font-weight:600;font-size:1em;">📷 All Photos</div>
+            <div style="font-size:0.8em;opacity:0.9;">${totalLabel}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Album cards
+  Object.keys(albums).sort().forEach(name => {
+    const items = albums[name];
+    const cover = items[0];
+    const coverUrl = `${SUPABASE_URL}/storage/v1/object/public/${MEDIA_BUCKET}/${cover.file_path}`;
+    const coverIsVideo = cover.file_type === "video";
+    const count = items.length;
+    const countLabel = `${count} item${count === 1 ? "" : "s"}`;
+    const safeName = name.replace(/'/g, "\\'");
+
+    html += `
+      <div class="album-card" onclick="openAlbum('${safeName}')" style="cursor:pointer;border-radius:16px;overflow:hidden;background:#fff;box-shadow:0 4px 12px rgba(0,0,0,0.08);transition:all 0.2s;">
+        <div style="position:relative;aspect-ratio:1;background:#f0f0f0;overflow:hidden;">
+          ${coverIsVideo
+            ? `<video src="${coverUrl}" muted preload="metadata" style="width:100%;height:100%;object-fit:cover;"></video>`
+            : `<img src="${coverUrl}" style="width:100%;height:100%;object-fit:cover;">`}
+          <div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(to top,rgba(0,0,0,0.75),transparent);padding:35px 12px 12px;color:#fff;">
+            <div style="font-weight:600;font-size:1em;">📁 ${escapeHtml(name)}</div>
+            <div style="font-size:0.8em;opacity:0.9;">${countLabel}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  });
+
+  albumGrid.innerHTML = html;
+}
+
+function openAlbum(albumName) {
+  const albumView = document.getElementById("albumView");
+  const albumDetailView = document.getElementById("albumDetailView");
+  const mediaGallery = document.getElementById("mediaGallery");
+  const title = document.getElementById("currentAlbumTitle");
+  if (!albumView || !mediaGallery) return;
+
+  currentOpenAlbum = albumName;
+  albumView.style.display = "none";
+  albumDetailView.style.display = "block";
+
+  let items, displayName;
+  if (albumName === "__all__") {
+    items = allMediaCache;
+    displayName = "📷 All Photos";
+  } else {
+    items = allMediaCache.filter(m => (m.album || "General") === albumName);
+    displayName = `📁 ${albumName}`;
+  }
+
+  const count = items.length;
+  title.textContent = `${displayName} · ${count} item${count === 1 ? "" : "s"}`;
+
+  if (!items.length) {
+    mediaGallery.innerHTML = "<p style='grid-column:1/-1;text-align:center;padding:40px;color:#888;'>No media in this album.</p>";
+    return;
+  }
+
+  mediaGallery.innerHTML = items.map(m => {
     const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${MEDIA_BUCKET}/${m.file_path}`;
     const isVideo = m.file_type === "video";
     const sizeMB = (m.file_size / 1024 / 1024).toFixed(1);
-    const album = m.album || "General";
     return `<div class="media-card" style="border:1px solid #ddd;border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
       ${isVideo
         ? `<video src="${publicUrl}" controls preload="metadata" style="width:100%;height:200px;object-fit:cover;background:#000;"></video>`
         : `<img src="${publicUrl}" style="width:100%;height:200px;object-fit:cover;" loading="lazy" alt="Highlight">`}
       <div style="padding:10px;">
-        <div style="font-size:0.8em;color:#888;margin-bottom:8px;">
-          ${isVideo ? "🎥 Video" : "📷 Photo"} · ${sizeMB}MB
-          <span style="display:inline-block;margin-left:6px;padding:2px 8px;background:#e9d5ff;color:#7c3aed;border-radius:10px;font-weight:600;">📁 ${escapeHtml(album)}</span>
-        </div>
+        <div style="font-size:0.8em;color:#888;margin-bottom:8px;">${isVideo ? "🎥 Video" : "📷 Photo"} · ${sizeMB}MB</div>
         <button onclick="downloadViaAndroid('${publicUrl}', '${m.file_name}')" style="display:inline-block;margin-right:8px;padding:6px 12px;background:#7c3aed;color:white;text-decoration:none;border:none;border-radius:6px;font-size:0.85em;cursor:pointer;">⬇ Download</button>
         <button onclick="deleteMedia('${m.file_path}', ${m.id})" style="padding:6px 12px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;font-size:0.85em;">🗑 Delete</button>
       </div>
@@ -954,12 +1043,14 @@ function renderMediaGallery() {
   }).join("");
 }
 
+function showAlbumsView() {
+  renderAlbumView();
+}
+
+// Legacy compatibility
 function filterByAlbum(album) {
-  currentAlbumFilter = album;
-  document.querySelectorAll(".album-btn").forEach(btn => {
-    btn.classList.toggle("active", btn.dataset.album === album);
-  });
-  renderMediaGallery();
+  if (album === "all") openAlbum("__all__");
+  else openAlbum(album);
 }
 
 async function deleteMedia(filePath, id) {
