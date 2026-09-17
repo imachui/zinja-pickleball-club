@@ -8,7 +8,7 @@ const headers = {
 
 const POLL_MS = 30000;
 const MEDIA_BUCKET = "zinja-media";
-const MAX_FILE_SIZE = 100 * 1024 * 1024;
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
 const OPEN_PLAY_START_MIN = 17 * 60;
 const OPEN_PLAY_END_MIN = 24 * 60;
@@ -33,7 +33,7 @@ const EVENING_RATE = 150;
 const CLOSURE_DAY_START = 5;
 const CLOSURE_DAY_END = 6;
 const CLOSURE_START_HOUR = 17;
-const CLOSURE_END_HOUR = 18;
+const CLOSURE_END_HOUR = 17;
 const PHT_OFFSET_HOURS = 8;
 
 function getPHTNow() {
@@ -225,10 +225,10 @@ function checkClosureForBooking(dateStr, timeStr, durationHours) {
   const saturdayEnd = CLOSURE_END_HOUR * 60;
 
   if (day === CLOSURE_DAY_START && endMin > fridayStart) {
-    return { closed: true, message: "Our facility observes a weekly rest period every Friday from 5:00 PM until Saturday 6:00 PM. Please choose another date or time." };
+    return { closed: true, message: "Our facility observes a weekly rest period every Friday from 5:00 PM until Saturday 5:00 PM. Please choose another date or time." };
   }
   if (day === CLOSURE_DAY_END && startMin < saturdayEnd) {
-    return { closed: true, message: "Our facility observes a weekly rest period every Friday from 5:00 PM until Saturday 6:00 PM. Please choose another date or time." };
+    return { closed: true, message: "Our facility observes a weekly rest period every Friday from 5:00 PM until Saturday 5:00 PM. Please choose another date or time." };
   }
   return { closed: false };
 }
@@ -238,7 +238,7 @@ function checkClosureForOpenPlay(playDate) {
   const d = new Date(playDate + "T00:00:00");
   const day = d.getDay();
   if (day === CLOSURE_DAY_START || day === CLOSURE_DAY_END) {
-    return { closed: true, message: "Our facility observes a weekly rest period every Friday from 5:00 PM until Saturday 6:00 PM. Please choose another date." };
+    return { closed: true, message: "Our facility observes a weekly rest period every Friday from 5:00 PM until Saturday 5:00 PM. Please choose another date." };
   }
   return { closed: false };
 }
@@ -260,7 +260,7 @@ function updateLiveClosureStatus() {
   const timeStr = pht.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
 
   if (isClosed) {
-    banner.innerHTML = `<span style="display: inline-block; width: 10px; height: 10px; background: #fff; border-radius: 50%; margin-right: 8px;"></span><strong>🔴 CLOSED NOW</strong> — Weekly Rest Period (reopens Saturday 6:00 PM) · ${timeStr} PHT`;
+    banner.innerHTML = `<span style="display: inline-block; width: 10px; height: 10px; background: #fff; border-radius: 50%; margin-right: 8px;"></span><strong>🔴 CLOSED NOW</strong> — Weekly Rest Period (reopens Saturday 5:00 PM) · ${timeStr} PHT`;
     banner.style.background = "linear-gradient(135deg, #dc2626, #991b1b)";
   } else {
     banner.innerHTML = `<span style="display: inline-block; width: 10px; height: 10px; background: #fff; border-radius: 50%; margin-right: 8px;"></span><strong>🟢 OPEN NOW</strong> — Book your court or join Open Play! · ${timeStr} PHT`;
@@ -277,7 +277,7 @@ function announceClosureInChat() {
   const notice = document.createElement("div");
   notice.id = "closureChatNotice";
   notice.style.cssText = "margin-bottom: 12px; padding: 12px; background: #7f1d1d; border-radius: 8px; border-left: 4px solid #ef4444; color: #fff; font-size: 0.95em;";
-  notice.innerHTML = `<strong>📢 Facility Notice:</strong> Courts and Open Play are currently <strong>CLOSED</strong> for our scheduled rest period. We reopen on <strong>Saturday at 6:00 PM (PHT)</strong>. Thank you for understanding!`;
+  notice.innerHTML = `<strong>📢 Facility Notice:</strong> Courts and Open Play are currently <strong>CLOSED</strong> for our scheduled rest period. We reopen on <strong>Saturday at 5:00 PM (PHT)</strong>. Thank you for understanding!`;
   container.insertBefore(notice, container.firstChild);
 }
 
@@ -900,7 +900,7 @@ let allMediaCache = [];
 
 async function uploadMedia(file, album = "General") {
   if (file.size > MAX_FILE_SIZE) {
-    throw new Error(`File is too large (${(file.size/1024/1024).toFixed(1)}MB). Maximum is 100MB.`);
+    throw new Error(`File is too large (${(file.size/1024/1024).toFixed(1)}MB). Maximum is 50MB.`);
   }
   const ext = file.name.split(".").pop();
   const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
