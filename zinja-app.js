@@ -15,6 +15,7 @@ const OPEN_PLAY_END_MIN = 24 * 60;
 const OPEN_PLAY_START_TIME = "17:00";
 const PLAYERS_PER_COURT = 16;
 const TOTAL_COURTS = 2;
+const OPEN_PLAY_FEE = 50;
 
 // ====================
 // PRICING CONFIG
@@ -414,6 +415,10 @@ function setupAvailabilityCheck() {
   if (courtSelect) courtSelect.addEventListener("change", checkAvailability);
 }
 
+// ====================
+// LOAD BOOKINGS (WITH PRICE BADGE)
+// ====================
+
 async function loadBookings() {
   const container = document.getElementById("bookingsList");
   if (!container) return;
@@ -433,12 +438,24 @@ async function loadBookings() {
     container.innerHTML = Object.entries(grouped).map(([date, bookings]) => `
       <div class="date-group" style="margin-bottom:20px;">
         <h4 style="border-bottom:2px solid #7c3aed;padding-bottom:5px;color:#7c3aed;">📅 ${formatDate(date)}</h4>
-        ${bookings.map(b => `
-          <div class="booking-item" style="padding:8px 0;border-bottom:1px solid #eee;">
-            <strong>${escapeHtml(b.customer_name)}</strong>
-            <div style="font-size:0.9em;color:#666;">${formatTime(b.start_time)} - ${addHoursToTime(b.start_time, b.duration_hours)} · Court ${escapeHtml(b.court)} · ${escapeHtml(b.duration_hours)} hour(s)${b.price ? ` · <strong style="color:#7c3aed;">₱${Number(b.price).toLocaleString()}</strong>` : ""}</div>
-          </div>
-        `).join("")}
+        ${bookings.map(b => {
+          let displayPrice = b.price;
+          if (!displayPrice || displayPrice === 0) {
+            const calc = calculateBookingPrice(b.start_time, b.duration_hours);
+            displayPrice = calc.total;
+          }
+          return `
+            <div class="booking-item" style="padding:10px 0;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+              <div>
+                <strong>${escapeHtml(b.customer_name)}</strong>
+                <div style="font-size:0.9em;color:#666;">${formatTime(b.start_time)} - ${addHoursToTime(b.start_time, b.duration_hours)} · Court ${escapeHtml(b.court)} · ${escapeHtml(b.duration_hours)} hour(s)</div>
+              </div>
+              <div style="padding:6px 14px;background:linear-gradient(135deg,#7c3aed,#06b6d4);color:#fff;border-radius:20px;font-weight:700;font-size:0.95em;white-space:nowrap;">
+                ₱${Number(displayPrice).toLocaleString()}
+              </div>
+            </div>
+          `;
+        }).join("")}
       </div>
     `).join("");
   } catch (error) {
@@ -446,6 +463,10 @@ async function loadBookings() {
     container.innerHTML = "<p>Unable to load bookings right now.</p>";
   }
 }
+
+// ====================
+// LOAD OPEN PLAY (WITH PRICE BADGE)
+// ====================
 
 async function loadOpenPlay() {
   const container = document.getElementById("openPlayList");
@@ -463,17 +484,28 @@ async function loadOpenPlay() {
     const grouped = {};
     filtered.forEach(r => { if (!grouped[r.play_date]) grouped[r.play_date] = []; grouped[r.play_date].push(r); });
 
-    container.innerHTML = Object.entries(grouped).map(([date, players]) => `
+    container.innerHTML = Object.entries(grouped).map(([date, players]) => {
+      const totalFee = players.length * OPEN_PLAY_FEE;
+      return `
       <div class="date-group" style="margin-bottom:20px;">
-        <h4 style="border-bottom:2px solid #7c3aed;padding-bottom:5px;color:#7c3aed;">📅 ${formatDate(date)} · ${players.length} player(s)</h4>
+        <h4 style="border-bottom:2px solid #7c3aed;padding-bottom:5px;color:#7c3aed;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span>📅 ${formatDate(date)} · ${players.length} player(s)</span>
+          <span style="padding:4px 14px;background:linear-gradient(135deg,#7c3aed,#06b6d4);color:#fff;border-radius:20px;font-size:0.75em;font-weight:700;">Total: ₱${totalFee.toLocaleString()}</span>
+        </h4>
         ${players.map(p => `
-          <div class="open-play-item" style="padding:8px 0;border-bottom:1px solid #eee;">
-            <strong>${escapeHtml(p.player_name)}</strong>
-            <div style="font-size:0.9em;color:#666;">${escapeHtml(p.skill_level || "Not specified")}</div>
+          <div class="open-play-item" style="padding:10px 0;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+            <div>
+              <strong>${escapeHtml(p.player_name)}</strong>
+              <div style="font-size:0.9em;color:#666;">${escapeHtml(p.skill_level || "Not specified")}</div>
+            </div>
+            <div style="padding:6px 14px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border-radius:20px;font-weight:700;font-size:0.95em;white-space:nowrap;">
+              ₱${OPEN_PLAY_FEE}
+            </div>
           </div>
         `).join("")}
       </div>
-    `).join("");
+    `;
+    }).join("");
   } catch (error) {
     console.error("Open Play error:", error);
     container.innerHTML = "<p>Unable to load Open Play right now.</p>";
@@ -603,7 +635,7 @@ async function handleOpenPlaySubmit(event) {
 
     saveCancellation("open_play", { mobile, code: cancellationCode });
     const newCount = cap.currentCount + 1;
-    showResult(result, `✅ Thank you, ${name}! Open Play confirmed for ${formatDate(playDate)} (5PM-12AM). Cancellation code: ${cancellationCode}.\n\n📊 Slots: ${newCount}/${cap.maxSlots} taken.`, true);
+    showResult(result, `✅ Thank you, ${name}! Open Play confirmed for ${formatDate(playDate)} (5PM-12AM). Fee: ₱${OPEN_PLAY_FEE}. Cancellation code: ${cancellationCode}.\n\n📊 Slots: ${newCount}/${cap.maxSlots} taken.`, true);
 
     form.reset();
     const infoDiv = document.getElementById("openPlayInfo");
