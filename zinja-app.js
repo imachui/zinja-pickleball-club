@@ -16,6 +16,22 @@ const OPEN_PLAY_START_TIME = "17:00";
 const PLAYERS_PER_COURT = 16;
 const TOTAL_COURTS = 2;
 
+// ====================
+// WEEKLY CLOSURE (PHT: Friday 5PM - Saturday 6PM)
+// ====================
+
+const CLOSURE_DAY_START = 5;
+const CLOSURE_DAY_END = 6;
+const CLOSURE_START_HOUR = 17;
+const CLOSURE_END_HOUR = 18;
+const PHT_OFFSET_HOURS = 8;
+
+function getPHTNow() {
+  const now = new Date();
+  const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
+  return new Date(utcMs + (PHT_OFFSET_HOURS * 3600000));
+}
+
 function generateCancelCode() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "";
@@ -112,6 +128,72 @@ function getSavedCancellation(type) {
   } catch { return null; }
 }
 
+function checkClosureForBooking(dateStr, timeStr, durationHours) {
+  if (!dateStr || !timeStr) return { closed: false };
+  const d = new Date(dateStr + "T00:00:00");
+  const day = d.getDay();
+  const startMin = timeToMinutes(timeStr);
+  const endMin = startMin + Number(durationHours) * 60;
+  const fridayStart = CLOSURE_START_HOUR * 60;
+  const saturdayEnd = CLOSURE_END_HOUR * 60;
+
+  if (day === CLOSURE_DAY_START && endMin > fridayStart) {
+    return { closed: true, message: "Our facility observes a weekly rest period every Friday from 5:00 PM until Saturday 6:00 PM. Please choose another date or time." };
+  }
+  if (day === CLOSURE_DAY_END && startMin < saturdayEnd) {
+    return { closed: true, message: "Our facility observes a weekly rest period every Friday from 5:00 PM until Saturday 6:00 PM. Please choose another date or time." };
+  }
+  return { closed: false };
+}
+
+function checkClosureForOpenPlay(playDate) {
+  if (!playDate) return { closed: false };
+  const d = new Date(playDate + "T00:00:00");
+  const day = d.getDay();
+  if (day === CLOSURE_DAY_START || day === CLOSURE_DAY_END) {
+    return { closed: true, message: "Our facility observes a weekly rest period every Friday from 5:00 PM until Saturday 6:00 PM. Please choose another date." };
+  }
+  return { closed: false };
+}
+
+function getCurrentClosureStatus() {
+  const pht = getPHTNow();
+  const day = pht.getDay();
+  const hour = pht.getHours();
+  if (day === CLOSURE_DAY_START && hour >= CLOSURE_START_HOUR) return true;
+  if (day === CLOSURE_DAY_END && hour < CLOSURE_END_HOUR) return true;
+  return false;
+}
+
+function updateLiveClosureStatus() {
+  const banner = document.getElementById("liveStatus");
+  if (!banner) return;
+  const isClosed = getCurrentClosureStatus();
+  const pht = getPHTNow();
+  const timeStr = pht.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+
+  if (isClosed) {
+    banner.innerHTML = `<span style="display: inline-block; width: 10px; height: 10px; background: #fff; border-radius: 50%; margin-right: 8px;"></span><strong>🔴 CLOSED NOW</strong> — Weekly Rest Period (reopens Saturday 6:00 PM) · ${timeStr} PHT`;
+    banner.style.background = "linear-gradient(135deg, #dc2626, #991b1b)";
+  } else {
+    banner.innerHTML = `<span style="display: inline-block; width: 10px; height: 10px; background: #fff; border-radius: 50%; margin-right: 8px;"></span><strong>🟢 OPEN NOW</strong> — Book your court or join Open Play! · ${timeStr} PHT`;
+    banner.style.background = "linear-gradient(135deg, #059669, #047857)";
+  }
+}
+
+function announceClosureInChat() {
+  const container = document.getElementById("chatMessages");
+  if (!container) return;
+  const existing = document.getElementById("closureChatNotice");
+  if (existing) existing.remove();
+  if (!getCurrentClosureStatus()) return;
+  const notice = document.createElement("div");
+  notice.id = "closureChatNotice";
+  notice.style.cssText = "margin-bottom: 12px; padding: 12px; background: #7f1d1d; border-radius: 8px; border-left: 4px solid #ef4444; color: #fff; font-size: 0.95em;";
+  notice.innerHTML = `<strong>📢 Facility Notice:</strong> Courts and Open Play are currently <strong>CLOSED</strong> for our scheduled rest period. We reopen on <strong>Saturday at 6:00 PM (PHT)</strong>. Thank you for understanding!`;
+  container.insertBefore(notice, container.firstChild);
+}
+
 function downloadViaAndroid(url, fileName) {
   if (typeof AndroidDownloader !== "undefined" && AndroidDownloader.downloadFile) {
     try {
@@ -174,6 +256,12 @@ async function updateOpenPlayInfo() {
   if (!playDate) { infoDiv.innerHTML = ""; return; }
 
   try {
+    const closureCheck = checkClosureForOpenPlay(playDate);
+    if (closureCheck.closed) {
+      infoDiv.innerHTML = `<div style="background:#ffebee;padding:12px;border-radius:8px;border-left:4px solid #ef4444;"><strong>🚫 Closed on ${formatDate(playDate)}</strong><p style="margin:6px 0 0 0;font-size:0.9em;">${closureCheck.message}</p></div>`;
+      return;
+    }
+
     infoDiv.innerHTML = "<p>⏳ Checking available slots...</p>";
     const cap = await checkOpenPlayCapacity(playDate);
 
@@ -208,6 +296,12 @@ async function checkAvailability() {
   if (!bookingDate || !court) { availabilityDiv.innerHTML = ""; return; }
 
   try {
+    const closureCheck = checkClosureForBooking(bookingDate, "17:00", 12);
+    if (closureCheck.closed) {
+      availabilityDiv.innerHTML = `<div style="background:#ffebee;padding:10px;border-radius:8px;border-left:4px solid #ef4444;"><strong>🚫 Closed on ${formatDate(bookingDate)}</strong><p style="margin:6px 0 0 0;font-size:0.9em;">${closureCheck.message}</p></div>`;
+      return;
+    }
+
     const existing = await supabaseFetch(
       `/rest/v1/public_bookings?select=start_time,duration_hours,customer_name&booking_date=eq.${encodeURIComponent(bookingDate)}&court=eq.${encodeURIComponent(court)}`
     );
@@ -320,6 +414,13 @@ async function handleBookingSubmit(event) {
     showResult(result, "Please select a valid duration (1 to 10 hours).", false); return;
   }
 
+  const closureCheck = checkClosureForBooking(bookingDate, bookingTime, duration);
+  if (closureCheck.closed) {
+    showResult(result, `🚫 Facility Closed — ${closureCheck.message}`, false);
+    alert(`⚠️ FACILITY CLOSED\n\n${closureCheck.message}`);
+    return;
+  }
+
   try {
     showResult(result, "⏳ Checking court availability...", true);
     const existing = await supabaseFetch(`/rest/v1/public_bookings?select=booking_date,start_time,court,duration_hours,customer_name&booking_date=eq.${encodeURIComponent(bookingDate)}&court=eq.${encodeURIComponent(court)}`);
@@ -368,6 +469,13 @@ async function handleOpenPlaySubmit(event) {
 
   if (!name || !mobile || !playDate || !skillLevel) {
     showResult(result, "Please complete all Open Play fields.", false); return;
+  }
+
+  const closureCheck = checkClosureForOpenPlay(playDate);
+  if (closureCheck.closed) {
+    showResult(result, `🚫 Facility Closed — ${closureCheck.message}`, false);
+    alert(`⚠️ FACILITY CLOSED\n\n${closureCheck.message}`);
+    return;
   }
 
   try {
@@ -494,7 +602,8 @@ async function cancelOpenPlay() {
   } catch (error) { showResult(result, `Cancellation failed. ${error.message || "Please try again."}`, false); }
 }
 
-// END OF PART 1// ====================
+// END OF PART 1
+// ====================
 // CLUB CHAT (TEXT + EMOJI ONLY)
 // ====================
 
@@ -644,6 +753,7 @@ function setupChat() {
 
   setupChatName();
   setupChatEmojiPicker();
+  announceClosureInChat();
   loadChatMessages();
 
   setInterval(loadChatMessages, 5000);
@@ -760,6 +870,9 @@ document.addEventListener("DOMContentLoaded", () => {
   loadOpenPlay();
   setupMediaUpload();
   loadMedia();
+
+  updateLiveClosureStatus();
+  setInterval(updateLiveClosureStatus, 60000);
 
   setInterval(() => {
     loadBookings();
