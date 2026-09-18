@@ -6,63 +6,16 @@
   <title>ZINJA Pickleball Club</title>
   <link rel="stylesheet" href="style.css">
   <style>
-    .emoji-btn {
-      background: white;
-      border: 1px solid #eee;
-      border-radius: 6px;
-      padding: 8px;
-      font-size: 1.3em;
-      cursor: pointer;
-      transition: transform 0.15s;
-    }
-    .emoji-btn:hover {
-      transform: scale(1.3);
-      background: #f0f0f0;
-    }
-    .album-card {
-      transition: all 0.2s;
-    }
-    .album-card:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 8px 20px rgba(0,0,0,0.15) !important;
-    }
-    .admin-card {
-      background: #fff;
-      border: 1px solid #e5e7eb;
-      border-radius: 12px;
-      padding: 16px;
-      margin-bottom: 12px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-    }
-    .admin-card h4 {
-      margin: 0 0 8px 0;
-      color: #7c3aed;
-    }
-    .admin-card p {
-      margin: 4px 0;
-      font-size: 0.92em;
-      color: #444;
-    }
-    .admin-badge {
-      display: inline-block;
-      padding: 2px 10px;
-      border-radius: 20px;
-      font-size: 0.78em;
-      font-weight: 600;
-      background: #dcfce7;
-      color: #166534;
-    }
-    .admin-badge.cancelled {
-      background: #fee2e2;
-      color: #991b1b;
-    }
-    .status-dot {
-      display: inline-block;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      margin-right: 6px;
-    }
+    .emoji-btn { background: white; border: 1px solid #eee; border-radius: 6px; padding: 8px; font-size: 1.3em; cursor: pointer; transition: transform 0.15s; }
+    .emoji-btn:hover { transform: scale(1.3); background: #f0f0f0; }
+    .album-card { transition: all 0.2s; }
+    .album-card:hover { transform: translateY(-4px); box-shadow: 0 8px 20px rgba(0,0,0,0.15) !important; }
+    .admin-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .admin-card h4 { margin: 0 0 8px 0; color: #7c3aed; }
+    .admin-card p { margin: 4px 0; font-size: 0.92em; color: #444; }
+    .admin-badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 0.78em; font-weight: 600; background: #dcfce7; color: #166534; }
+    .admin-badge.cancelled { background: #fee2e2; color: #991b1b; }
+    .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
     .status-dot.green { background: #10b981; }
     .status-dot.red { background: #ef4444; }
     .status-dot.yellow { background: #f59e0b; }
@@ -84,14 +37,11 @@
     </nav>
   </header>
 
-  <!-- LIVE STATUS BANNER -->
-  <div id="liveStatus" 
-       style="background: linear-gradient(135deg, #059669, #047857); color: white; padding: 12px 20px; text-align: center; font-size: 0.95em; font-weight: 500; transition: background 0.3s;">
+  <div id="liveStatus" style="background: linear-gradient(135deg, #059669, #047857); color: white; padding: 12px 20px; text-align: center; font-size: 0.95em; font-weight: 500; transition: background 0.3s;">
     <span style="display: inline-block; width: 10px; height: 10px; background: #fff; border-radius: 50%; margin-right: 8px;"></span>
     <strong>Loading status...</strong>
   </div>
 
-  <!-- WEEKLY SCHEDULE NOTICE -->
   <div style="background: linear-gradient(135deg, #1e3a8a, #7c3aed); color: white; padding: 10px 20px; text-align: center; font-size: 0.88em;">
     📢 <strong>Weekly Schedule:</strong> Courts and Open Play are closed every <strong>Friday 5:00 PM to Saturday 5:00 PM</strong> (Philippine Time) for our scheduled rest period.
   </div>
@@ -114,29 +64,15 @@
     <div><b>₱50 Open Play</b><p>Join other players.</p></div>
   </section>
 
-  <!-- APP DOWNLOAD SECTION -->
   <section id="download" style="background: linear-gradient(135deg, #7c3aed 0%, #06b6d4 100%); padding: 60px 20px; text-align: center; color: white; position: relative; overflow: hidden;">
     <div style="max-width: 700px; margin: 0 auto; position: relative; z-index: 2;">
       <h2 style="color: white; font-size: 2em; margin-bottom: 10px;">📱 Get the ZINJA App</h2>
-      <p style="margin-bottom: 25px; font-size: 1.15em; opacity: 0.95;">
-        Book courts, join Open Play, and share highlights — lahat sa isang app!
-      </p>
-      
+      <p style="margin-bottom: 25px; font-size: 1.15em; opacity: 0.95;">Book courts, join Open Play, and share highlights — lahat sa isang app!</p>
       <div style="display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; align-items: center;">
-        <a href="ZINJA-Pickleball.apk" download 
-           style="display: inline-flex; align-items: center; gap: 10px; padding: 16px 35px; background: white; color: #7c3aed; text-decoration: none; border-radius: 50px; font-weight: bold; font-size: 1.05em; box-shadow: 0 6px 20px rgba(0,0,0,0.25); transition: transform 0.2s;">
-          ⬇ Download APK
-        </a>
-        
-        <div style="display: inline-flex; align-items: center; gap: 8px; padding: 16px 25px; background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.3); border-radius: 50px; font-size: 1.05em;">
-          🤖 Android 7.0+
-        </div>
+        <a href="ZINJA-Pickleball.apk" download style="display: inline-flex; align-items: center; gap: 10px; padding: 16px 35px; background: white; color: #7c3aed; text-decoration: none; border-radius: 50px; font-weight: bold; font-size: 1.05em; box-shadow: 0 6px 20px rgba(0,0,0,0.25); transition: transform 0.2s;">⬇ Download APK</a>
+        <div style="display: inline-flex; align-items: center; gap: 8px; padding: 16px 25px; background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.3); border-radius: 50px; font-size: 1.05em;">🤖 Android 7.0+</div>
       </div>
-      
-      <p style="margin-top: 25px; font-size: 0.9em; opacity: 0.85;">
-        Version 1.0 · Free · No ads
-      </p>
-
+      <p style="margin-top: 25px; font-size: 0.9em; opacity: 0.85;">Version 1.0 · Free · No ads</p>
       <div style="margin-top: 30px; padding: 15px; background: rgba(255,255,255,0.1); border-radius: 12px; text-align: left; font-size: 0.9em;">
         <p style="margin: 0 0 8px 0; font-weight: bold;">⚠️ How to install:</p>
         <ol style="margin: 0; padding-left: 20px; line-height: 1.6;">
@@ -149,23 +85,20 @@
     </div>
   </section>
 
-  <!-- BOOK A COURT SECTION -->
   <section id="booking">
     <h2>Book a Court</h2>
     <p>Choose your date, time and court.</p>
     <form id="bookingForm">
-      <input id="bookingName" placeholder="Full Name" required>
-      <input id="bookingPhone" placeholder="Mobile Number" required>
-      <input id="bookingDate" type="date" required>
-      <input id="bookingTime" type="time" required>
-      
-      <select id="bookingCourt" required>
+      <input id="name" placeholder="Full Name" required>
+      <input id="phone" placeholder="Mobile Number" required>
+      <input id="date" type="date" required>
+      <input id="time" type="time" required>
+      <select id="court" required>
         <option value="">Select Court</option>
         <option value="1">Court 1</option>
         <option value="2">Court 2</option>
       </select>
-      
-      <select id="bookingDuration" required>
+      <select id="duration" required>
         <option value="">Select Duration</option>
         <option value="1">1 hour</option>
         <option value="2">2 hours</option>
@@ -178,8 +111,6 @@
         <option value="9">9 hours</option>
         <option value="10">10 hours</option>
       </select>
-      
-      <!-- DYNAMIC PRICE DISPLAY -->
       <div id="priceDisplay" style="display: none; margin: 12px 0; padding: 14px 18px; background: linear-gradient(135deg, #7c3aed, #06b6d4); border-radius: 12px; color: #fff; box-shadow: 0 4px 12px rgba(124,58,237,0.3);">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
           <span style="font-size: 0.9em; opacity: 0.9;">📊 Rate per hour</span>
@@ -191,26 +122,14 @@
         </div>
         <div id="rateNote" style="font-size: 0.8em; opacity: 0.85; margin-top: 6px; text-align: right;"></div>
       </div>
-      
       <div id="availabilityInfo" style="margin: 10px 0;"></div>
-      
       <button class="btn" type="submit">Prepare Booking</button>
     </form>
     <div id="bookingResult"></div>
     <div id="bookingsList" style="margin-top: 20px;"></div>
-
-    <!-- CANCEL BOOKING -->
-    <div style="margin-top: 30px; padding: 20px; background: #fef2f2; border-radius: 12px; border: 1px solid #fecaca;">
-      <h3 style="color: #991b1b; margin-top: 0;">❌ Cancel My Court Booking</h3>
-      <p style="font-size: 0.9em; color: #666;">Enter your mobile number and the cancellation code you received.</p>
-      <input id="cancelPhone" placeholder="Mobile Number" style="width: 100%; padding: 10px; margin-bottom: 8px; border-radius: 8px; border: 1px solid #ddd;">
-      <input id="cancelCode" placeholder="Cancellation Code" style="width: 100%; padding: 10px; margin-bottom: 8px; border-radius: 8px; border: 1px solid #ddd;">
-      <button class="btn" type="button" onclick="cancelBooking()" style="background: linear-gradient(135deg, #ef4444, #dc2626);">Cancel Booking</button>
-      <div id="cancelResult" style="margin-top: 10px;"></div>
-    </div>
+    <!-- CANCEL BOOKING SECTION: DITO DATING NAKALAGAY YUNG HARDCODED, TINANGGAL KO NA PARA HINDI DUPLICATE -->
   </section>
 
-  <!-- OPEN PLAY SECTION -->
   <section id="openplay" class="dark">
     <h2>Join Open Play</h2>
     <p>Open Play is ₱50 per player. Sessions run <strong>5:00 PM to 12:00 AM</strong> daily.</p>
@@ -218,7 +137,6 @@
       <input id="player" placeholder="Full Name" required>
       <input id="playerPhone" placeholder="Mobile Number" required>
       <input id="playDate" type="date" required>
-      
       <select id="level" required>
         <option value="">Skill Level</option>
         <option value="Beginner">Beginner</option>
@@ -226,32 +144,22 @@
         <option value="Advanced">Advanced</option>
         <option value="Any level">Any level</option>
       </select>
-      
       <div id="openPlayInfo" style="margin: 10px 0;"></div>
-      
       <button class="btn" type="submit">Join Open Play</button>
     </form>
     <div id="playResult"></div>
     <div id="openPlayList" style="margin-top: 20px;"></div>
   </section>
 
-  <!-- CLUB CHAT SECTION -->
   <section id="chat" class="dark">
     <h2>💬 Club Chat</h2>
     <p>Chat with other ZINJA players! Text and emojis only. <strong>Chat resets daily at 3:00 AM.</strong></p>
-    
     <div style="max-width: 700px; margin: 0 auto;">
-      
-      <input id="chatName" placeholder="Your Name" maxlength="30" required
-             style="width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 8px; border: 1px solid #444; background: #1a1a2e; color: #fff;">
-      
-      <div id="chatMessages" 
-           style="height: 400px; overflow-y: auto; border: 1px solid #444; border-radius: 12px; padding: 15px; background: #0a0a1e; margin-bottom: 10px;">
+      <input id="chatName" placeholder="Your Name" maxlength="30" required style="width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 8px; border: 1px solid #444; background: #1a1a2e; color: #fff;">
+      <div id="chatMessages" style="height: 400px; overflow-y: auto; border: 1px solid #444; border-radius: 12px; padding: 15px; background: #0a0a1e; margin-bottom: 10px;">
         <p style="text-align: center; color: #888;">Loading chat...</p>
       </div>
-      
-      <div id="emojiPicker" 
-           style="display: none; background: #1a1a2e; border: 1px solid #444; border-radius: 8px; padding: 10px; margin-bottom: 10px; max-height: 200px; overflow-y: auto;">
+      <div id="emojiPicker" style="display: none; background: #1a1a2e; border: 1px solid #444; border-radius: 8px; padding: 10px; margin-bottom: 10px; max-height: 200px; overflow-y: auto;">
         <div style="display: grid; grid-template-columns: repeat(10, 1fr); gap: 5px;">
           <button class="emoji-btn" onclick="insertEmoji('🏓')">🏓</button>
           <button class="emoji-btn" onclick="insertEmoji('🥎')">🥎</button>
@@ -295,28 +203,17 @@
           <button class="emoji-btn" onclick="insertEmoji('🎊')">🎊</button>
         </div>
       </div>
-      
       <div style="display: flex; gap: 8px;">
-        <button id="emojiBtn" type="button" 
-                style="padding: 10px 15px; background: #1a1a2e; border: 1px solid #444; border-radius: 8px; cursor: pointer; font-size: 1.2em; color: #fff;">
-          😀
-        </button>
-        <input id="chatInput" placeholder="Type a message..." maxlength="500"
-               style="flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #444; background: #1a1a2e; color: #fff;"
-               onkeypress="if(event.key==='Enter') sendChatMessage()">
-        <button id="sendChatBtn" class="btn" type="button" onclick="sendChatMessage()">
-          Send
-        </button>
+        <button id="emojiBtn" type="button" style="padding: 10px 15px; background: #1a1a2e; border: 1px solid #444; border-radius: 8px; cursor: pointer; font-size: 1.2em; color: #fff;">😀</button>
+        <input id="chatInput" placeholder="Type a message..." maxlength="500" style="flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #444; background: #1a1a2e; color: #fff;" onkeypress="if(event.key==='Enter') sendChatMessage()">
+        <button id="sendChatBtn" class="btn" type="button" onclick="sendChatMessage()">Send</button>
       </div>
-      
     </div>
   </section>
 
-  <!-- CLUB HIGHLIGHTS (WITH 2-FOLDER VIEW) -->
   <section id="highlights">
     <h2>🏆 Club Highlights</h2>
     <p>Share your best Pickleball moments! (Photos max 50MB, Videos max 200MB)</p>
-    
     <div style="margin-bottom: 20px; padding: 16px; background: #f5f5f5; border-radius: 12px;">
       <label for="mediaAlbum" style="display: block; margin-bottom: 8px; font-weight: bold;">📁 Album:</label>
       <select id="mediaAlbum" style="display: block; margin-bottom: 12px; width: 100%; padding: 8px; border-radius: 8px; border: 1px solid #ddd;">
@@ -327,27 +224,18 @@
         <option value="Events">🎉 Events</option>
         <option value="Highlights">⭐ Highlights</option>
       </select>
-      
       <label for="mediaUpload" style="display: block; margin-bottom: 8px; font-weight: bold;">Choose file(s):</label>
       <input type="file" id="mediaUpload" accept="image/*,video/*" multiple style="display: block; margin-bottom: 6px; width: 100%; padding: 8px;">
       <p style="font-size: 0.85em; color: #666; margin: 4px 0 12px 0;">💡 Tip: Pwede kang pumili ng maraming photos nang sabay-sabay (Ctrl+Click o Shift+Click).</p>
       <button class="btn" id="uploadBtn" type="button">📤 Upload Media</button>
       <div id="uploadResult" style="margin-top: 10px;"></div>
     </div>
-
-    <!-- VIEW 1: ALBUM LIST -->
-    <div id="albumView">
-      <div id="albumGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px;"></div>
-    </div>
-
-    <!-- VIEW 2: FOLDERS INSIDE ALBUM (Pictures / Videos) -->
+    <div id="albumView"><div id="albumGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px;"></div></div>
     <div id="folderView" style="display: none;">
       <button onclick="showAlbumsView()" style="display: inline-flex; align-items: center; gap: 6px; margin-bottom: 16px; padding: 8px 18px; background: linear-gradient(135deg, #7c3aed, #06b6d4); color: #fff; border: none; border-radius: 20px; cursor: pointer; font-size: 0.9em; font-weight: 600; box-shadow: 0 2px 8px rgba(124,58,237,0.3);">← Back to Albums</button>
       <h3 id="currentAlbumTitle" style="margin-bottom: 16px; color: #7c3aed;"></h3>
       <div id="folderGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px;"></div>
     </div>
-
-    <!-- VIEW 3: MEDIA INSIDE FOLDER (Photos only / Videos only) -->
     <div id="mediaView" style="display: none;">
       <button onclick="backToFolders()" style="display: inline-flex; align-items: center; gap: 6px; margin-bottom: 16px; padding: 8px 18px; background: linear-gradient(135deg, #7c3aed, #06b6d4); color: #fff; border: none; border-radius: 20px; cursor: pointer; font-size: 0.9em; font-weight: 600; box-shadow: 0 2px 8px rgba(124,58,237,0.3);">← Back to Folders</button>
       <h3 id="currentFolderTitle" style="margin-bottom: 16px; color: #7c3aed;"></h3>
@@ -355,26 +243,20 @@
     </div>
   </section>
 
-  <!-- ADMIN PANEL -->
   <section id="admin" style="background: #f8fafc; padding: 40px 20px;">
     <h2>🔐 Admin Panel</h2>
     <p style="color: #666; font-size: 0.92em;">Enter the admin password to view all bookings and open play registrations.</p>
-    
     <div style="max-width: 500px; margin: 0 auto 20px auto; display: flex; gap: 8px;">
-      <input id="adminPassword" type="password" placeholder="Admin Password" 
-             style="flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #ddd;">
+      <input id="adminPassword" type="password" placeholder="Admin Password" style="flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #ddd;">
       <button class="btn" type="button" onclick="loadAdminData()" style="white-space: nowrap;">View Data</button>
     </div>
-    
     <div id="adminResult"></div>
-    
     <div id="adminData" style="display: none; max-width: 900px; margin: 0 auto;">
       <div style="display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap;">
         <button class="btn" type="button" onclick="switchAdminTab('bookings')" id="tabBookings" style="background: linear-gradient(135deg, #7c3aed, #6d28d9);">📋 Court Bookings</button>
         <button class="btn alt" type="button" onclick="switchAdminTab('openplay')" id="tabOpenPlay">🏓 Open Play</button>
         <button class="btn alt" type="button" onclick="switchAdminTab('cancelled')" id="tabCancelled">❌ Cancelled</button>
       </div>
-      
       <div id="adminContent"></div>
     </div>
   </section>
@@ -385,302 +267,12 @@
     <p>Court rental: ₱100/hour (6AM-5PM) • ₱150/hour (5PM-12AM) • Open Play: ₱50/player</p>
   </section>
 
-  <footer>
-    © <span id="year"></span> ZINJA Pickleball Club
-  </footer>
+  <footer>© <span id="year"></span> ZINJA Pickleball Club</footer>
 
+  <!-- ITO LANG ANG DAPAT NA SCRIPT, WALA NANG IBA -->
   <script src="zinja-app.js?v=11"></script>
   <script>
     document.getElementById('year').textContent = new Date().getFullYear();
-
-    // ==========================================
-    // SUPABASE CONFIG (CORRECTED)
-    // ==========================================
-    const SUPABASE_URL = "https://kbafnegagyiwztyfmxpr.supabase.co";
-    const SUPABASE_KEY = "sb_publishable_djA6ivm66-hfO3WLub527w_AbOa8rvc";
-    const headers = {
-      apikey: SUPABASE_KEY,
-      "Content-Type": "application/json"
-    };
-
-    // ==========================================
-    // ADMIN PASSWORD
-    // ==========================================
-    const ADMIN_PASSWORD = "zinja2026";
-
-    // ==========================================
-    // BOOK A COURT - FORM VALIDATION & SUBMIT
-    // ==========================================
-    document.getElementById('bookingForm').addEventListener('submit', async function(e) {
-      e.preventDefault();
-
-      const name = document.getElementById('bookingName').value.trim();
-      const phone = document.getElementById('bookingPhone').value.trim();
-      const date = document.getElementById('bookingDate').value;
-      const time = document.getElementById('bookingTime').value;
-      const court = document.getElementById('bookingCourt').value;
-      const duration = document.getElementById('bookingDuration').value;
-
-      // Debug: log values
-      console.log('Booking values:', { name, phone, date, time, court, duration });
-
-      if (!name || !phone || !date || !time || !court || !duration) {
-        document.getElementById('bookingResult').innerHTML =
-          '<p style="color: red; font-weight: bold;">⚠️ Please complete all booking fields.</p>';
-        return;
-      }
-
-      const bookingData = {
-        name: name,
-        phone: phone,
-        date: date,
-        time: time,
-        court: court,
-        duration: duration,
-        status: 'confirmed',
-        created_at: new Date().toISOString()
-      };
-
-      try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/bookings`, {
-          method: 'POST',
-          headers: headers,
-          body: JSON.stringify(bookingData)
-        });
-
-        if (!res.ok) {
-          const errText = await res.text();
-          console.error('Booking error:', errText);
-          throw new Error(errText);
-        }
-
-        const code = 'BK' + Math.random().toString(36).substring(2, 8).toUpperCase();
-
-        document.getElementById('bookingResult').innerHTML =
-          `<div style="padding: 16px; background: #dcfce7; border-radius: 12px; border: 1px solid #86efac; margin-top: 12px;">
-            <p style="color: #166534; font-weight: bold; margin: 0 0 6px 0;">✅ Court booking confirmed!</p>
-            <p style="margin: 4px 0;"><strong>Name:</strong> ${name}</p>
-            <p style="margin: 4px 0;"><strong>Date:</strong> ${date} at ${time}</p>
-            <p style="margin: 4px 0;"><strong>Court:</strong> ${court} • <strong>Duration:</strong> ${duration} hour(s)</p>
-            <p style="margin: 4px 0;"><strong>Cancellation Code:</strong> <span style="font-family: monospace; font-size: 1.15em; color: #7c3aed; font-weight: bold;">${code}</span></p>
-            <p style="font-size: 0.85em; color: #666; margin-top: 8px;">Please save this code. You will need it to cancel.</p>
-          </div>`;
-
-        this.reset();
-        document.getElementById('priceDisplay').style.display = 'none';
-
-      } catch (err) {
-        console.error('Booking failed:', err);
-        document.getElementById('bookingResult').innerHTML =
-          `<p style="color: red; font-weight: bold;">❌ Something went wrong: ${err.message}</p>`;
-      }
-    });
-
-    // ==========================================
-    // CANCEL BOOKING
-    // ==========================================
-    async function cancelBooking() {
-      const phone = document.getElementById('cancelPhone').value.trim();
-      const code = document.getElementById('cancelCode').value.trim();
-
-      if (!phone || !code) {
-        document.getElementById('cancelResult').innerHTML =
-          '<p style="color: red;">⚠️ Please enter your mobile number and cancellation code.</p>';
-        return;
-      }
-
-      try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/bookings?phone=eq.${phone}&cancellation_code=eq.${code}`, {
-          method: 'PATCH',
-          headers: headers,
-          body: JSON.stringify({ status: 'cancelled' })
-        });
-
-        if (!res.ok) {
-          const errText = await res.text();
-          throw new Error(errText);
-        }
-
-        document.getElementById('cancelResult').innerHTML =
-          '<p style="color: #166534; font-weight: bold;">✅ Booking cancelled successfully.</p>';
-        document.getElementById('cancelPhone').value = '';
-        document.getElementById('cancelCode').value = '';
-
-      } catch (err) {
-        document.getElementById('cancelResult').innerHTML =
-          `<p style="color: red;">❌ Cancellation failed: ${err.message}</p>`;
-      }
-    }
-
-    // ==========================================
-    // OPEN PLAY - FORM SUBMIT (WITH NAME)
-    // ==========================================
-    document.getElementById('playForm').addEventListener('submit', async function(e) {
-      e.preventDefault();
-
-      const name = document.getElementById('player').value.trim();
-      const phone = document.getElementById('playerPhone').value.trim();
-      const date = document.getElementById('playDate').value;
-      const level = document.getElementById('level').value;
-
-      if (!name || !phone || !date || !level) {
-        document.getElementById('playResult').innerHTML =
-          '<p style="color: red; font-weight: bold;">⚠️ Please complete all fields.</p>';
-        return;
-      }
-
-      const playData = {
-        name: name,
-        phone: phone,
-        date: date,
-        level: level,
-        created_at: new Date().toISOString()
-      };
-
-      try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/open_play`, {
-          method: 'POST',
-          headers: headers,
-          body: JSON.stringify(playData)
-        });
-
-        if (!res.ok) {
-          const errText = await res.text();
-          throw new Error(errText);
-        }
-
-        const code = 'OP' + Math.random().toString(36).substring(2, 8).toUpperCase();
-
-        document.getElementById('playResult').innerHTML =
-          `<div style="padding: 16px; background: #dcfce7; border-radius: 12px; border: 1px solid #86efac; margin-top: 12px;">
-            <p style="color: #166534; font-weight: bold; margin: 0 0 6px 0;">✅ Open Play registration confirmed!</p>
-            <p style="margin: 4px 0;"><strong>Name:</strong> ${name}</p>
-            <p style="margin: 4px 0;"><strong>Date:</strong> ${date} at 5:00 PM onwards</p>
-            <p style="margin: 4px 0;"><strong>Skill Level:</strong> ${level}</p>
-            <p style="margin: 4px 0;"><strong>Cancellation Code:</strong> <span style="font-family: monospace; font-size: 1.15em; color: #7c3aed; font-weight: bold;">${code}</span></p>
-            <p style="font-size: 0.85em; color: #666; margin-top: 8px;">Please save this code. You will need it to cancel.</p>
-          </div>`;
-
-        this.reset();
-
-      } catch (err) {
-        document.getElementById('playResult').innerHTML =
-          `<p style="color: red; font-weight: bold;">❌ Something went wrong: ${err.message}</p>`;
-      }
-    });
-
-    // ==========================================
-    // ADMIN PANEL
-    // ==========================================
-    let adminData = { bookings: [], openplay: [], cancelled: [] };
-    let currentAdminTab = 'bookings';
-
-    async function loadAdminData() {
-      const pw = document.getElementById('adminPassword').value;
-
-      if (pw !== ADMIN_PASSWORD) {
-        document.getElementById('adminResult').innerHTML =
-          '<p style="color: red; font-weight: bold;">❌ Invalid password.</p>';
-        return;
-      }
-
-      document.getElementById('adminResult').innerHTML = '';
-      document.getElementById('adminData').style.display = 'block';
-
-      try {
-        // Fetch bookings
-        const bkRes = await fetch(`${SUPABASE_URL}/rest/v1/bookings?order=created_at.desc`, { headers });
-        const bookings = bkRes.ok ? await bkRes.json() : [];
-
-        // Fetch open play
-        const opRes = await fetch(`${SUPABASE_URL}/rest/v1/open_play?order=created_at.desc`, { headers });
-        const openplay = opRes.ok ? await opRes.json() : [];
-
-        adminData.bookings = bookings.filter(b => b.status !== 'cancelled');
-        adminData.cancelled = bookings.filter(b => b.status === 'cancelled');
-        adminData.openplay = openplay;
-
-        renderAdminContent();
-
-      } catch (err) {
-        document.getElementById('adminResult').innerHTML =
-          `<p style="color: red;">❌ Failed to load data: ${err.message}</p>`;
-      }
-    }
-
-    function switchAdminTab(tab) {
-      currentAdminTab = tab;
-
-      document.getElementById('tabBookings').style.background =
-        tab === 'bookings' ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : '';
-      document.getElementById('tabBookings').className =
-        tab === 'bookings' ? 'btn' : 'btn alt';
-
-      document.getElementById('tabOpenPlay').style.background =
-        tab === 'openplay' ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : '';
-      document.getElementById('tabOpenPlay').className =
-        tab === 'openplay' ? 'btn' : 'btn alt';
-
-      document.getElementById('tabCancelled').style.background =
-        tab === 'cancelled' ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : '';
-      document.getElementById('tabCancelled').className =
-        tab === 'cancelled' ? 'btn' : 'btn alt';
-
-      renderAdminContent();
-    }
-
-    function renderAdminContent() {
-      const container = document.getElementById('adminContent');
-      let html = '';
-
-      if (currentAdminTab === 'bookings') {
-        if (adminData.bookings.length === 0) {
-          html = '<p style="color: #888;">No court bookings yet.</p>';
-        } else {
-          html = adminData.bookings.map(b => `
-            <div class="admin-card">
-              <h4>🏓 ${b.name || 'Unknown'}</h4>
-              <p>📱 ${b.phone || 'No phone'}</p>
-              <p>📅 ${b.date || 'No date'} at ${b.time || 'No time'}</p>
-              <p>🏟️ Court ${b.court || '?'} • ⏱️ ${b.duration || '?'} hour(s)</p>
-              <p><span class="admin-badge">${b.status || 'confirmed'}</span></p>
-              <p style="font-size: 0.8em; color: #999;">Booked: ${b.created_at ? new Date(b.created_at).toLocaleString() : 'Unknown'}</p>
-            </div>
-          `).join('');
-        }
-      } else if (currentAdminTab === 'openplay') {
-        if (adminData.openplay.length === 0) {
-          html = '<p style="color: #888;">No Open Play registrations yet.</p>';
-        } else {
-          html = adminData.openplay.map(o => `
-            <div class="admin-card">
-              <h4>🏓 ${o.name || 'Unknown'}</h4>
-              <p>📱 ${o.phone || 'No phone'}</p>
-              <p>📅 ${o.date || 'No date'}</p>
-              <p>🎯 Skill Level: ${o.level || 'Not specified'}</p>
-              <p style="font-size: 0.8em; color: #999;">Registered: ${o.created_at ? new Date(o.created_at).toLocaleString() : 'Unknown'}</p>
-            </div>
-          `).join('');
-        }
-      } else if (currentAdminTab === 'cancelled') {
-        if (adminData.cancelled.length === 0) {
-          html = '<p style="color: #888;">No cancelled bookings.</p>';
-        } else {
-          html = adminData.cancelled.map(b => `
-            <div class="admin-card" style="opacity: 0.7;">
-              <h4>❌ ${b.name || 'Unknown'}</h4>
-              <p>📱 ${b.phone || 'No phone'}</p>
-              <p>📅 ${b.date || 'No date'} at ${b.time || 'No time'}</p>
-              <p>🏟️ Court ${b.court || '?'} • ⏱️ ${b.duration || '?'} hour(s)</p>
-              <p><span class="admin-badge cancelled">cancelled</span></p>
-              <p style="font-size: 0.8em; color: #999;">Booked: ${b.created_at ? new Date(b.created_at).toLocaleString() : 'Unknown'}</p>
-            </div>
-          `).join('');
-        }
-      }
-
-      container.innerHTML = html;
-    }
   </script>
 
 </body>
