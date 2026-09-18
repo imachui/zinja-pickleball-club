@@ -8,13 +8,9 @@ const headers = {
 
 const POLL_MS = 30000;
 
-// Supabase Storage Configuration
-const STORAGE_BUCKET = "zinja-media";
-const STORAGE_PUBLIC_URL = `${SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET}`;
-const STORAGE_UPLOAD_URL = `${SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}`;
-
-const MAX_VIDEO_SIZE = 200 * 1024 * 1024; // 200 MB
-const MAX_IMAGE_SIZE = 50 * 1024 * 1024;  // 50 MB
+// Display cutoff (in days)
+const BOOKING_DISPLAY_DAYS = 30;   // Court bookings: 1 month
+const OPENPLAY_DISPLAY_DAYS = 7;   // Open Play: 7 days
 
 const OPEN_PLAY_START_MIN = 17 * 60;
 const OPEN_PLAY_END_MIN = 24 * 60;
@@ -174,7 +170,6 @@ function updatePriceDisplay() {
   const rateEl = document.getElementById("ratePerHour");
   const totalEl = document.getElementById("totalPrice");
   const noteEl = document.getElementById("rateNote");
-
   if (!priceDiv) return;
   if (!timeInput || !durationInput) { priceDiv.style.display = "none"; return; }
 
@@ -227,7 +222,6 @@ function checkClosureForOpenPlay(playDate) {
   const day = d.getDay();
   const openPlayStart = OPEN_PLAY_START_MIN;
   const closureEnd = CLOSURE_END_HOUR * 60;
-
   if (day === CLOSURE_DAY_START) {
     return { closed: true, message: "Our facility observes a weekly rest period every Friday from 5:00 PM until Saturday 5:00 PM. Please choose another date." };
   }
@@ -273,22 +267,6 @@ function announceClosureInChat() {
   notice.style.cssText = "margin-bottom: 12px; padding: 12px; background: #7f1d1d; border-radius: 8px; border-left: 4px solid #ef4444; color: #fff; font-size: 0.95em;";
   notice.innerHTML = `<strong>📢 Facility Notice:</strong> Courts and Open Play are currently <strong>CLOSED</strong> for our scheduled rest period. We reopen on <strong>Saturday at 5:00 PM (PHT)</strong>. Thank you for understanding!`;
   container.insertBefore(notice, container.firstChild);
-}
-
-function downloadViaAndroid(url, fileName) {
-  if (typeof AndroidDownloader !== "undefined" && AndroidDownloader.downloadFile) {
-    try {
-      AndroidDownloader.downloadFile(url, fileName);
-      return;
-    } catch (err) { console.error("Android download failed:", err); }
-  }
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = fileName;
-  a.target = "_blank";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
 }
 
 async function checkOpenPlayCapacity(playDate) {
@@ -381,16 +359,19 @@ function setupAvailabilityCheck() {
   if (courtSelect) courtSelect.addEventListener("change", checkAvailability);
 }
 
+// ====================
+// LOAD BOOKINGS (30-DAY CUTOFF)
+// ====================
 async function loadBookings() {
   const container = document.getElementById("bookingsList");
   if (!container) return;
   try {
     const rows = await supabaseFetch("/rest/v1/public_bookings?select=*&order=booking_date.asc,start_time.asc");
     const today = new Date(); today.setHours(0,0,0,0);
-    const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() - 30);
+    const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() - BOOKING_DISPLAY_DAYS);
     const cutoffStr = cutoff.toISOString().split("T")[0];
     const filtered = (rows || []).filter(r => r.booking_date && r.booking_date >= cutoffStr);
-    if (filtered.length === 0) { container.innerHTML = "<p>No court bookings yet.</p>"; return; }
+    if (filtered.length === 0) { container.innerHTML = "<p>No court bookings in the last 30 days.</p>"; return; }
     const grouped = {};
     filtered.forEach(r => { if (!grouped[r.booking_date]) grouped[r.booking_date] = []; grouped[r.booking_date].push(r); });
     container.innerHTML = Object.entries(grouped).map(([date, bookings]) => `
@@ -417,16 +398,19 @@ async function loadBookings() {
   } catch (error) { console.error("Bookings error:", error); container.innerHTML = "<p>Unable to load bookings right now.</p>"; }
 }
 
+// ====================
+// LOAD OPEN PLAY (7-DAY CUTOFF)
+// ====================
 async function loadOpenPlay() {
   const container = document.getElementById("openPlayList");
   if (!container) return;
   try {
     const rows = await supabaseFetch("/rest/v1/public_open_play?select=*&order=play_date.asc,play_time.asc");
     const today = new Date(); today.setHours(0,0,0,0);
-    const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() - 30);
+    const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() - OPENPLAY_DISPLAY_DAYS);
     const cutoffStr = cutoff.toISOString().split("T")[0];
     const filtered = (rows || []).filter(r => r.play_date && r.play_date >= cutoffStr);
-    if (filtered.length === 0) { container.innerHTML = "<p>No Open Play registrations yet.</p>"; return; }
+    if (filtered.length === 0) { container.innerHTML = "<p>No Open Play registrations in the last 7 days.</p>"; return; }
     const grouped = {};
     filtered.forEach(r => { if (!grouped[r.play_date]) grouped[r.play_date] = []; grouped[r.play_date].push(r); });
     container.innerHTML = Object.entries(grouped).map(([date, players]) => {
@@ -486,7 +470,7 @@ async function handleBookingSubmit(event) {
       const conflictStart = formatTime(conflictingBooking.start_time);
       const conflictEnd = addHoursToTime(conflictingBooking.start_time, conflictingBooking.duration_hours);
       const newEnd = addHoursToTime(bookingTime, duration);
-      showResult(result, `❌ BOOKING CONFLICT! Court ${court} on ${formatDate(bookingDate)} is already booked from ${conflictStart} to ${conflictEnd}. Your requested time (${formatTime(bookingTime)} to ${newEnd}) overlaps.`, false);
+      showResult(result, `❌ BOOKING CONFLICT! Court ${court} on ${formatDate(bookingDate)} is already booked from ${conflictStart} to ${conflictEnd}.`, false);
       alert(`⚠️ BOOKING CONFLICT!\n\nCourt ${court} on ${formatDate(bookingDate)}\n\nAlready reserved: ${conflictStart} - ${conflictEnd}\nYour requested: ${formatTime(bookingTime)} - ${newEnd}\n\nPlease choose a different time or court.`);
       return;
     }
@@ -650,13 +634,12 @@ async function cancelOpenPlay() {
     }
   } catch (error) { showResult(result, `Cancellation failed. ${error.message || "Please try again."}`, false); }
 }// ====================
-// CLUB CHAT (TEXT + EMOJI ONLY)
+// CLUB CHAT
 // ====================
 
 async function loadChatMessages() {
   const container = document.getElementById("chatMessages");
   if (!container) return;
-
   try {
     const rows = await supabaseFetch("/rest/v1/chat_messages?select=*&order=created_at.asc&limit=100");
     if (!rows || rows.length === 0) {
@@ -677,7 +660,7 @@ async function loadChatMessages() {
         </div>
       `;
     }).join("");
-    if (wasAtBottom) { container.scrollTop = container.scrollHeight; }
+    if (wasAtBottom) container.scrollTop = container.scrollHeight;
   } catch (error) {
     console.error("Chat load error:", error);
     container.innerHTML = "<p style='text-align:center;color:#ef4444;'>Unable to load chat. Please refresh.</p>";
@@ -754,328 +737,6 @@ function setupChat() {
   announceClosureInChat();
   loadChatMessages();
   setInterval(loadChatMessages, 5000);
-}
-
-// ====================
-// MEDIA: SUPABASE STORAGE
-// ====================
-
-let currentOpenAlbum = null;
-let currentOpenFolder = null;
-let allMediaCache = [];
-
-async function uploadToSupabase(file, album = "General") {
-  const isVideo = file.type.startsWith("video");
-  const maxSize = isVideo ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE;
-  const maxLabel = isVideo ? "200" : "50";
-
-  if (file.size > maxSize) {
-    throw new Error(`File is too large (${(file.size/1024/1024).toFixed(1)}MB). Maximum is ${maxLabel}MB.`);
-  }
-
-  const ext = file.name.split(".").pop();
-  const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
-  const filePath = `uploads/${fileName}`;
-
-  const resp = await fetch(`${STORAGE_UPLOAD_URL}/${filePath}`, {
-    method: "POST",
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      "Content-Type": file.type
-    },
-    body: file
-  });
-
-  if (!resp.ok) {
-    const err = await resp.text();
-    throw new Error("Upload failed: " + err);
-  }
-
-  await supabaseFetch("/rest/v1/media", {
-    method: "POST",
-    headers: { Prefer: "return=representation" },
-    body: JSON.stringify({
-      file_name: fileName,
-      file_path: filePath,
-      file_type: isVideo ? "video" : "image",
-      file_size: file.size,
-      album: album
-    })
-  });
-
-  return filePath;
-}
-
-async function deleteFromSupabase(filePath) {
-  const resp = await fetch(`${STORAGE_UPLOAD_URL}/${filePath}`, {
-    method: "DELETE",
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`
-    }
-  });
-  if (!resp.ok) { console.error("Supabase delete failed, continuing with DB delete..."); }
-}
-
-async function loadMedia() {
-  const albumGrid = document.getElementById("albumGrid");
-  if (!albumGrid) return;
-  try {
-    const rows = await supabaseFetch("/rest/v1/media?select=*&order=created_at.desc&limit=200");
-    allMediaCache = rows || [];
-    if (currentOpenFolder) {
-      openSubFolder(currentOpenAlbum, currentOpenFolder);
-    } else if (currentOpenAlbum) {
-      openAlbum(currentOpenAlbum);
-    } else {
-      renderAlbumView();
-    }
-  } catch (error) {
-    console.error("Media load error:", error);
-    albumGrid.innerHTML = "<p style='grid-column:1/-1;'>Unable to load media.</p>";
-  }
-}
-
-function renderAlbumView() {
-  const albumView = document.getElementById("albumView");
-  const folderView = document.getElementById("folderView");
-  const mediaView = document.getElementById("mediaView");
-  const albumGrid = document.getElementById("albumGrid");
-  if (!albumView || !albumGrid) return;
-
-  currentOpenAlbum = null;
-  currentOpenFolder = null;
-  albumView.style.display = "block";
-  if (folderView) folderView.style.display = "none";
-  if (mediaView) mediaView.style.display = "none";
-
-  if (!allMediaCache.length) {
-    albumGrid.innerHTML = "<p style='grid-column:1/-1;text-align:center;padding:40px;color:#888;'>No photos yet. Be the first to share! 📸</p>";
-    return;
-  }
-
-  const albums = {};
-  allMediaCache.forEach(m => {
-    const albumName = m.album || "General";
-    if (!albums[albumName]) albums[albumName] = [];
-    albums[albumName].push(m);
-  });
-
-  const totalCount = allMediaCache.length;
-  const totalLabel = `${totalCount} item${totalCount === 1 ? "" : "s"}`;
-  let html = "";
-
-  if (allMediaCache[0]) {
-    const cover = allMediaCache[0];
-    const coverUrl = `${STORAGE_PUBLIC_URL}/${cover.file_path}`;
-    const coverIsVideo = cover.file_type === "video";
-    html += `
-      <div class="album-card" onclick="openAlbum('__all__')" style="cursor:pointer;border-radius:16px;overflow:hidden;background:#fff;box-shadow:0 4px 12px rgba(0,0,0,0.08);transition:all 0.2s;">
-        <div style="position:relative;aspect-ratio:1;background:#f0f0f0;overflow:hidden;">
-          ${coverIsVideo
-            ? `<video src="${coverUrl}" muted preload="metadata" style="width:100%;height:100%;object-fit:cover;"></video>`
-            : `<img src="${coverUrl}" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover;">`}
-          <div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(to top,rgba(0,0,0,0.75),transparent);padding:35px 12px 12px;color:#fff;">
-            <div style="font-weight:600;font-size:1em;">📷 All Media</div>
-            <div style="font-size:0.8em;opacity:0.9;">${totalLabel}</div>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  Object.keys(albums).sort().forEach(name => {
-    const items = albums[name];
-    const cover = items[0];
-    const coverUrl = `${STORAGE_PUBLIC_URL}/${cover.file_path}`;
-    const coverIsVideo = cover.file_type === "video";
-    const count = items.length;
-    const countLabel = `${count} item${count === 1 ? "" : "s"}`;
-    const safeName = name.replace(/'/g, "\\'");
-    html += `
-      <div class="album-card" onclick="openAlbum('${safeName}')" style="cursor:pointer;border-radius:16px;overflow:hidden;background:#fff;box-shadow:0 4px 12px rgba(0,0,0,0.08);transition:all 0.2s;">
-        <div style="position:relative;aspect-ratio:1;background:#f0f0f0;overflow:hidden;">
-          ${coverIsVideo
-            ? `<video src="${coverUrl}" muted preload="metadata" style="width:100%;height:100%;object-fit:cover;"></video>`
-            : `<img src="${coverUrl}" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover;">`}
-          <div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(to top,rgba(0,0,0,0.75),transparent);padding:35px 12px 12px;color:#fff;">
-            <div style="font-weight:600;font-size:1em;">📁 ${escapeHtml(name)}</div>
-            <div style="font-size:0.8em;opacity:0.9;">${countLabel}</div>
-          </div>
-        </div>
-      </div>
-    `;
-  });
-
-  albumGrid.innerHTML = html;
-}
-
-function openAlbum(albumName) {
-  const albumView = document.getElementById("albumView");
-  const folderView = document.getElementById("folderView");
-  const mediaView = document.getElementById("mediaView");
-  const folderGrid = document.getElementById("folderGrid");
-  const title = document.getElementById("currentAlbumTitle");
-  if (!albumView || !folderGrid) return;
-
-  currentOpenAlbum = albumName;
-  currentOpenFolder = null;
-  albumView.style.display = "none";
-  folderView.style.display = "block";
-  mediaView.style.display = "none";
-
-  let items, displayName;
-  if (albumName === "__all__") {
-    items = allMediaCache;
-    displayName = "📷 All Media";
-  } else {
-    items = allMediaCache.filter(m => (m.album || "General") === albumName);
-    displayName = `📁 ${albumName}`;
-  }
-  title.textContent = displayName;
-
-  const photos = items.filter(m => m.file_type === "image");
-  const videos = items.filter(m => m.file_type === "video");
-  const safeName = albumName.replace(/'/g, "\\'");
-  const photoCover = photos[0];
-  const photoCoverUrl = photoCover ? `${STORAGE_PUBLIC_URL}/${photoCover.file_path}` : "";
-  const videoCover = videos[0];
-  const videoCoverUrl = videoCover ? `${STORAGE_PUBLIC_URL}/${videoCover.file_path}` : "";
-
-  folderGrid.innerHTML = `
-    <div class="album-card" onclick="openSubFolder('${safeName}', 'image')" style="cursor:pointer;border-radius:16px;overflow:hidden;background:#fff;box-shadow:0 4px 12px rgba(0,0,0,0.08);transition:all 0.2s;">
-      <div style="position:relative;aspect-ratio:1;background:#f0f0f0;overflow:hidden;">
-        ${photoCover
-          ? `<img src="${photoCoverUrl}" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover;">`
-          : `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:3em;color:#ddd;">📷</div>`}
-        <div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(to top,rgba(0,0,0,0.75),transparent);padding:35px 12px 12px;color:#fff;">
-          <div style="font-weight:600;font-size:1em;">📷 Pictures</div>
-          <div style="font-size:0.8em;opacity:0.9;">${photos.length} item${photos.length === 1 ? "" : "s"}</div>
-        </div>
-      </div>
-    </div>
-    <div class="album-card" onclick="openSubFolder('${safeName}', 'video')" style="cursor:pointer;border-radius:16px;overflow:hidden;background:#fff;box-shadow:0 4px 12px rgba(0,0,0,0.08);transition:all 0.2s;">
-      <div style="position:relative;aspect-ratio:1;background:#f0f0f0;overflow:hidden;">
-        ${videoCover
-          ? `<video src="${videoCoverUrl}" muted preload="metadata" style="width:100%;height:100%;object-fit:cover;"></video>`
-          : `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:3em;color:#ddd;">🎥</div>`}
-        <div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(to top,rgba(0,0,0,0.75),transparent);padding:35px 12px 12px;color:#fff;">
-          <div style="font-weight:600;font-size:1em;">🎥 Videos</div>
-          <div style="font-size:0.8em;opacity:0.9;">${videos.length} item${videos.length === 1 ? "" : "s"}</div>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function openSubFolder(albumName, type) {
-  const albumView = document.getElementById("albumView");
-  const folderView = document.getElementById("folderView");
-  const mediaView = document.getElementById("mediaView");
-  const mediaGallery = document.getElementById("mediaGallery");
-  const title = document.getElementById("currentFolderTitle");
-  if (!mediaView || !mediaGallery) return;
-
-  currentOpenAlbum = albumName;
-  currentOpenFolder = type;
-  albumView.style.display = "none";
-  folderView.style.display = "none";
-  mediaView.style.display = "block";
-
-  let items = allMediaCache;
-  if (albumName !== "__all__") {
-    items = items.filter(m => (m.album || "General") === albumName);
-  }
-  items = items.filter(m => m.file_type === type);
-
-  const folderIcon = type === "video" ? "🎥 Videos" : "📷 Pictures";
-  const albumLabel = albumName === "__all__" ? "All Media" : albumName;
-  title.textContent = `${albumLabel} → ${folderIcon} · ${items.length} item${items.length === 1 ? "" : "s"}`;
-
-  if (!items.length) {
-    mediaGallery.innerHTML = `<p style='grid-column:1/-1;text-align:center;padding:40px;color:#888;'>No ${type === "video" ? "videos" : "photos"} in this album.</p>`;
-    return;
-  }
-
-  mediaGallery.innerHTML = items.map(m => {
-    const publicUrl = `${STORAGE_PUBLIC_URL}/${m.file_path}`;
-    const isVideo = m.file_type === "video";
-    const sizeMB = (m.file_size / 1024 / 1024).toFixed(1);
-    return `<div class="media-card" style="border:1px solid #ddd;border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
-      ${isVideo
-        ? `<video src="${publicUrl}" controls preload="metadata" style="width:100%;height:200px;object-fit:cover;background:#000;"></video>`
-        : `<img src="${publicUrl}" style="width:100%;height:200px;object-fit:cover;" loading="lazy" decoding="async" alt="Highlight">`}
-      <div style="padding:10px;">
-        <div style="font-size:0.8em;color:#888;margin-bottom:8px;">${isVideo ? "🎥 Video" : "📷 Photo"} · ${sizeMB}MB</div>
-        <button onclick="downloadViaAndroid('${publicUrl}', '${m.file_name}')" style="display:inline-block;margin-right:8px;padding:6px 12px;background:#7c3aed;color:white;text-decoration:none;border:none;border-radius:6px;font-size:0.85em;cursor:pointer;">⬇ Download</button>
-        <button onclick="deleteMedia('${m.file_path}', ${m.id})" style="padding:6px 12px;background:#ef4444;color:white;border:none;border-radius:6px;cursor:pointer;font-size:0.85em;">🗑 Delete</button>
-      </div>
-    </div>`;
-  }).join("");
-}
-
-function showAlbumsView() { renderAlbumView(); }
-
-function backToFolders() {
-  if (currentOpenAlbum) { openAlbum(currentOpenAlbum); } else { renderAlbumView(); }
-}
-
-async function deleteMedia(filePath, id) {
-  if (!confirm("Are you sure you want to delete this?")) return;
-  try {
-    await deleteFromSupabase(filePath);
-    await supabaseFetch(`/rest/v1/media?id=eq.${id}`, { method: "DELETE" });
-    await loadMedia();
-  } catch (error) {
-    alert("Failed to delete: " + error.message);
-  }
-}
-
-function setupMediaUpload() {
-  const uploadBtn = document.getElementById("uploadBtn");
-  const fileInput = document.getElementById("mediaUpload");
-  const result = document.getElementById("uploadResult");
-  if (!uploadBtn || !fileInput) return;
-
-  uploadBtn.addEventListener("click", async () => {
-    const files = Array.from(fileInput.files);
-    if (!files.length) { showResult(result, "Please select at least one file.", false); return; }
-    const album = document.getElementById("mediaAlbum")?.value || "General";
-    let successCount = 0;
-    let failCount = 0;
-
-    try {
-      uploadBtn.disabled = true;
-      showResult(result, `⏳ Uploading ${files.length} file(s) to "${album}" album...`, true);
-
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        try {
-          showResult(result, `⏳ Uploading ${i + 1}/${files.length}: ${file.name} (${(file.size/1024/1024).toFixed(1)}MB)`, true);
-          await uploadToSupabase(file, album);
-          successCount++;
-        } catch (err) {
-          console.error(`Failed to upload ${file.name}:`, err);
-          failCount++;
-        }
-      }
-
-      if (failCount === 0) {
-        showResult(result, `✅ Upload successful! ${successCount} file(s) uploaded to "${album}". 🎉`, true);
-      } else {
-        showResult(result, `⚠️ ${successCount} uploaded, ${failCount} failed.`, false);
-      }
-
-      fileInput.value = "";
-      await loadMedia();
-    } catch (error) {
-      console.error("Upload error:", error);
-      showResult(result, `Upload failed: ${error.message}`, false);
-    } finally {
-      uploadBtn.disabled = false;
-    }
-  });
 }
 
 // ====================
@@ -1188,8 +849,6 @@ document.addEventListener("DOMContentLoaded", () => {
   setupChat();
   loadBookings();
   loadOpenPlay();
-  setupMediaUpload();
-  loadMedia();
 
   updateLiveClosureStatus();
   setInterval(updateLiveClosureStatus, 60000);
