@@ -64,7 +64,7 @@
       <a class="btn alt" href="#openplay">Join Open Play</a>
       <a class="btn" href="#download" style="background: linear-gradient(135deg, #10b981, #059669);">📱 Get Android App</a>
     </div>
-    <img class="hero-logo" src="logo.png" alt="ZINJA Hero Logo">
+    <img class="hero-logo" src="logo.png" alt="ZINJA Hero Logo" loading="lazy" decoding="async">
   </section>
 
   <section class="cards">
@@ -259,9 +259,10 @@
     </div>
   </section>
 
+  <!-- CLUB HIGHLIGHTS (WITH 2-FOLDER VIEW) -->
   <section id="highlights">
     <h2>🏆 Club Highlights</h2>
-    <p>Share your best Pickleball moments! (Photos & 1080p 60fps videos, max 50MB)</p>
+    <p>Share your best Pickleball moments! (Photos max 50MB, Videos max 200MB)</p>
     
     <div style="margin-bottom: 20px; padding: 16px; background: #f5f5f5; border-radius: 12px;">
       <label for="mediaAlbum" style="display: block; margin-bottom: 8px; font-weight: bold;">📁 Album:</label>
@@ -280,16 +281,23 @@
       <button class="btn" id="uploadBtn" type="button">📤 Upload Media</button>
       <div id="uploadResult" style="margin-top: 10px;"></div>
     </div>
-    
-    <!-- GALLERY - ALBUM VIEW (iPhone-style) -->
+
+    <!-- VIEW 1: ALBUM LIST -->
     <div id="albumView">
       <div id="albumGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px;"></div>
     </div>
 
-    <!-- GALLERY - ALBUM DETAIL VIEW -->
-    <div id="albumDetailView" style="display: none;">
+    <!-- VIEW 2: FOLDERS INSIDE ALBUM (Pictures / Videos) -->
+    <div id="folderView" style="display: none;">
       <button onclick="showAlbumsView()" style="display: inline-flex; align-items: center; gap: 6px; margin-bottom: 16px; padding: 8px 18px; background: linear-gradient(135deg, #7c3aed, #06b6d4); color: #fff; border: none; border-radius: 20px; cursor: pointer; font-size: 0.9em; font-weight: 600; box-shadow: 0 2px 8px rgba(124,58,237,0.3);">← Back to Albums</button>
-      <h3 id="currentAlbumTitle" style="margin-bottom: 12px; color: #7c3aed;"></h3>
+      <h3 id="currentAlbumTitle" style="margin-bottom: 16px; color: #7c3aed;"></h3>
+      <div id="folderGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px;"></div>
+    </div>
+
+    <!-- VIEW 3: MEDIA INSIDE FOLDER (Photos only / Videos only) -->
+    <div id="mediaView" style="display: none;">
+      <button onclick="backToFolders()" style="display: inline-flex; align-items: center; gap: 6px; margin-bottom: 16px; padding: 8px 18px; background: linear-gradient(135deg, #7c3aed, #06b6d4); color: #fff; border: none; border-radius: 20px; cursor: pointer; font-size: 0.9em; font-weight: 600; box-shadow: 0 2px 8px rgba(124,58,237,0.3);">← Back to Folders</button>
+      <h3 id="currentFolderTitle" style="margin-bottom: 16px; color: #7c3aed;"></h3>
       <div id="mediaGallery" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px;"></div>
     </div>
   </section>
@@ -304,7 +312,7 @@
     © <span id="year"></span> ZINJA Pickleball Club
   </footer>
 
-  <script src="zinja-app.js?v=7"></script>
+  <script src="zinja-app.js?v=11"></script>
   <script>
     document.getElementById('year').textContent = new Date().getFullYear();
   </script>
