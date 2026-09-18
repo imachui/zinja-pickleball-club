@@ -237,9 +237,22 @@ function checkClosureForOpenPlay(playDate) {
   if (!playDate) return { closed: false };
   const d = new Date(playDate + "T00:00:00");
   const day = d.getDay();
-  if (day === CLOSURE_DAY_START || day === CLOSURE_DAY_END) {
+  
+  // Open Play starts at 5:00 PM (OPEN_PLAY_START_MIN = 1020)
+  // Closure ends at 5:00 PM (CLOSURE_END_HOUR * 60 = 1020)
+  const openPlayStart = OPEN_PLAY_START_MIN;
+  const closureEnd = CLOSURE_END_HOUR * 60;
+  
+  // Friday: Open Play at 5PM = closure start, so BLOCKED
+  if (day === CLOSURE_DAY_START) {
     return { closed: true, message: "Our facility observes a weekly rest period every Friday from 5:00 PM until Saturday 5:00 PM. Please choose another date." };
   }
+  
+  // Saturday: Open Play at 5PM onwards is ALLOWED (since closure ends at 5PM)
+  if (day === CLOSURE_DAY_END && openPlayStart < closureEnd) {
+    return { closed: true, message: "Our facility observes a weekly rest period every Friday from 5:00 PM until Saturday 5:00 PM. Please choose another date." };
+  }
+  
   return { closed: false };
 }
 
