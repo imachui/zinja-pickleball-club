@@ -42,6 +42,13 @@ const CLOSURE_START_HOUR = 17;
 const CLOSURE_END_HOUR = 17;
 const PHT_OFFSET_HOURS = 8;
 
+// ====================
+// ADMIN CONFIG
+// ====================
+const ADMIN_PASSWORD = "zinja2026";
+let adminData = { bookings: [], openplay: [], cancelled: [] };
+let currentAdminTab = 'bookings';
+
 function getPHTNow() {
   const now = new Date();
   const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
@@ -428,7 +435,7 @@ function setupAvailabilityCheck() {
 }
 
 // ====================
-// LOAD BOOKINGS (WITH PRICE BADGE)
+// LOAD BOOKINGS
 // ====================
 
 async function loadBookings() {
@@ -477,7 +484,7 @@ async function loadBookings() {
 }
 
 // ====================
-// LOAD OPEN PLAY (WITH PRICE BADGE)
+// LOAD OPEN PLAY
 // ====================
 
 async function loadOpenPlay() {
@@ -744,10 +751,7 @@ async function cancelOpenPlay() {
       showResult(result, "No matching Open Play registration was found.", false);
     }
   } catch (error) { showResult(result, `Cancellation failed. ${error.message || "Please try again."}`, false); }
-}
-
-// END OF PART 1
-// ====================
+}// ====================
 // CLUB CHAT (TEXT + EMOJI ONLY)
 // ====================
 
@@ -1281,6 +1285,106 @@ function setupMediaUpload() {
       uploadBtn.disabled = false;
     }
   });
+}
+
+// ====================
+// ADMIN PANEL LOGIC
+// ====================
+
+async function loadAdminData() {
+  const pw = document.getElementById('adminPassword')?.value;
+  const resultDiv = document.getElementById('adminResult');
+  const dataDiv = document.getElementById('adminData');
+
+  if (pw !== ADMIN_PASSWORD) {
+    if (resultDiv) resultDiv.innerHTML = '<p style="color: red; font-weight: bold;">❌ Invalid password.</p>';
+    return;
+  }
+
+  if (resultDiv) resultDiv.innerHTML = '';
+  if (dataDiv) dataDiv.style.display = 'block';
+
+  try {
+    const bkRes = await supabaseFetch('/rest/v1/bookings?order=created_at.desc');
+    const bookings = bkRes || [];
+
+    const opRes = await supabaseFetch('/rest/v1/open_play?order=created_at.desc');
+    const openplay = opRes || [];
+
+    adminData.bookings = bookings.filter(b => b.status !== 'cancelled');
+    adminData.cancelled = bookings.filter(b => b.status === 'cancelled');
+    adminData.openplay = openplay;
+
+    renderAdminContent();
+  } catch (err) {
+    if (resultDiv) resultDiv.innerHTML = `<p style="color: red;">❌ Failed to load data: ${err.message}</p>`;
+  }
+}
+
+function switchAdminTab(tab) {
+  currentAdminTab = tab;
+  
+  const tabs = ['bookings', 'openplay', 'cancelled'];
+  tabs.forEach(t => {
+    const btn = document.getElementById(`tab${t.charAt(0).toUpperCase() + t.slice(1)}`);
+    if (btn) {
+      btn.className = t === tab ? 'btn' : 'btn alt';
+      btn.style.background = t === tab ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : '';
+    }
+  });
+
+  renderAdminContent();
+}
+
+function renderAdminContent() {
+  const container = document.getElementById('adminContent');
+  if (!container) return;
+  let html = '';
+
+  if (currentAdminTab === 'bookings') {
+    if (adminData.bookings.length === 0) {
+      html = '<p style="color: #888;">No court bookings yet.</p>';
+    } else {
+      html = adminData.bookings.map(b => `
+        <div class="admin-card">
+          <h4>🏓 ${escapeHtml(b.customer_name || 'Unknown')}</h4>
+          <p>📱 ${escapeHtml(b.mobile || 'No phone')}</p>
+          <p>📅 ${escapeHtml(b.booking_date || 'No date')} at ${escapeHtml(b.start_time || 'No time')}</p>
+          <p>🏟️ Court ${escapeHtml(b.court || '?')} • ⏱️ ${escapeHtml(b.duration_hours || '?')} hour(s)</p>
+          <p>💰 ₱${Number(b.price || 0).toLocaleString()}</p>
+          <p><span class="admin-badge">${escapeHtml(b.status || 'confirmed')}</span></p>
+        </div>
+      `).join('');
+    }
+  } else if (currentAdminTab === 'openplay') {
+    if (adminData.openplay.length === 0) {
+      html = '<p style="color: #888;">No Open Play registrations yet.</p>';
+    } else {
+      html = adminData.openplay.map(o => `
+        <div class="admin-card">
+          <h4>🏓 ${escapeHtml(o.player_name || 'Unknown')}</h4>
+          <p>📱 ${escapeHtml(o.mobile || 'No phone')}</p>
+          <p>📅 ${escapeHtml(o.play_date || 'No date')}</p>
+          <p>🎯 Skill Level: ${escapeHtml(o.skill_level || 'Not specified')}</p>
+        </div>
+      `).join('');
+    }
+  } else if (currentAdminTab === 'cancelled') {
+    if (adminData.cancelled.length === 0) {
+      html = '<p style="color: #888;">No cancelled bookings.</p>';
+    } else {
+      html = adminData.cancelled.map(b => `
+        <div class="admin-card" style="opacity: 0.7;">
+          <h4>❌ ${escapeHtml(b.customer_name || 'Unknown')}</h4>
+          <p>📱 ${escapeHtml(b.mobile || 'No phone')}</p>
+          <p>📅 ${escapeHtml(b.booking_date || 'No date')} at ${escapeHtml(b.start_time || 'No time')}</p>
+          <p><span class="admin-badge cancelled">cancelled</span></p>
+        </div>
+      `).join('');
+    }
+  }
+
+  container.innerHTML = html;
 }
 
 // ====================
