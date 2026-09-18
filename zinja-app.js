@@ -8,7 +8,13 @@ const headers = {
 
 const POLL_MS = 30000;
 const MEDIA_BUCKET = "zinja-media";
-const MAX_FILE_SIZE = 50 * 1024 * 1024;
+
+// R2 Configuration
+const R2_PUBLIC_URL = "https://pub-6257cb2fbdc54a9fe47ca1f60ccbf9d.r2.dev";
+const R2_EDGE_FUNCTION = `${SUPABASE_URL}/functions/v1/r2-media-handler`;
+
+const MAX_VIDEO_SIZE = 200 * 1024 * 1024; // 200 MB
+const MAX_IMAGE_SIZE = 50 * 1024 * 1024;  // 50 MB
 
 const OPEN_PLAY_START_MIN = 17 * 60;
 const OPEN_PLAY_END_MIN = 24 * 60;
@@ -237,22 +243,15 @@ function checkClosureForOpenPlay(playDate) {
   if (!playDate) return { closed: false };
   const d = new Date(playDate + "T00:00:00");
   const day = d.getDay();
-  
-  // Open Play starts at 5:00 PM (OPEN_PLAY_START_MIN = 1020)
-  // Closure ends at 5:00 PM (CLOSURE_END_HOUR * 60 = 1020)
   const openPlayStart = OPEN_PLAY_START_MIN;
   const closureEnd = CLOSURE_END_HOUR * 60;
-  
-  // Friday: Open Play at 5PM = closure start, so BLOCKED
+
   if (day === CLOSURE_DAY_START) {
     return { closed: true, message: "Our facility observes a weekly rest period every Friday from 5:00 PM until Saturday 5:00 PM. Please choose another date." };
   }
-  
-  // Saturday: Open Play at 5PM onwards is ALLOWED (since closure ends at 5PM)
   if (day === CLOSURE_DAY_END && openPlayStart < closureEnd) {
     return { closed: true, message: "Our facility observes a weekly rest period every Friday from 5:00 PM until Saturday 5:00 PM. Please choose another date." };
   }
-  
   return { closed: false };
 }
 
@@ -905,43 +904,69 @@ function setupChat() {
 }
 
 // ====================
-// MEDIA UPLOAD & GALLERY (IPHONE-STYLE ALBUM)
+// MEDIA: R2 UPLOAD via EDGE FUNCTION
 // ====================
 
 let currentOpenAlbum = null;
+let currentOpenFolder = null; // "image" or "video"
 let allMediaCache = [];
 
-async function uploadMedia(file, album = "General") {
-  if (file.size > MAX_FILE_SIZE) {
-    throw new Error(`File is too large (${(file.size/1024/1024).toFixed(1)}MB). Maximum is 50MB.`);
+async function uploadToR2(file, album = "General") {
+  const isVideo = file.type.startsWith("video");
+  const maxSize = isVideo ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE;
+  const maxLabel = isVideo ? "200" : "50";
+
+  if (file.size > maxSize) {
+    throw new Error(`File is too large (${(file.size/1024/1024).toFixed(1)}MB). Maximum is ${maxLabel}MB.`);
   }
+
   const ext = file.name.split(".").pop();
   const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
   const filePath = `uploads/${fileName}`;
 
-  const response = await fetch(`${SUPABASE_URL}/storage/v1/object/${MEDIA_BUCKET}/${filePath}`, {
+  // Step 1: Get presigned upload URL from Edge Function
+  const presignedResp = await fetch(R2_EDGE_FUNCTION, {
     method: "POST",
     headers: {
+      "Content-Type": "application/json",
       apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      "Content-Type": file.type,
-      "x-upsert": "false"
+      Authorization: `Bearer ${SUPABASE_KEY}`
     },
+    body: JSON.stringify({
+      action: "getUploadUrl",
+      filePath: filePath,
+      fileType: file.type
+    })
+  });
+
+  if (!presignedResp.ok) {
+    const err = await presignedResp.text();
+    throw new Error("Failed to get upload URL: " + err);
+  }
+
+  const { uploadUrl } = await presignedResp.json();
+  if (!uploadUrl) throw new Error("No upload URL received");
+
+  // Step 2: Upload directly to R2
+  const uploadResp = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: { "Content-Type": file.type },
     body: file
   });
 
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(err);
+  if (!uploadResp.ok) {
+    const err = await uploadResp.text();
+    throw new Error("Upload to R2 failed: " + err);
   }
 
+  // Step 3: Save metadata to Supabase
   await supabaseFetch("/rest/v1/media", {
     method: "POST",
     headers: { Prefer: "return=representation" },
     body: JSON.stringify({
       file_name: fileName,
       file_path: filePath,
-      file_type: file.type.startsWith("video") ? "video" : "image",
+      file_type: isVideo ? "video" : "image",
       file_size: file.size,
       album: album
     })
@@ -950,6 +975,29 @@ async function uploadMedia(file, album = "General") {
   return filePath;
 }
 
+async function deleteFromR2(filePath) {
+  const resp = await fetch(R2_EDGE_FUNCTION, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`
+    },
+    body: JSON.stringify({
+      action: "delete",
+      filePath: filePath
+    })
+  });
+
+  if (!resp.ok) {
+    console.error("R2 delete failed, continuing with DB delete...");
+  }
+}
+
+// ====================
+// MEDIA: LOAD & RENDER
+// ====================
+
 async function loadMedia() {
   const albumGrid = document.getElementById("albumGrid");
   if (!albumGrid) return;
@@ -957,7 +1005,9 @@ async function loadMedia() {
   try {
     const rows = await supabaseFetch("/rest/v1/media?select=*&order=created_at.desc&limit=200");
     allMediaCache = rows || [];
-    if (currentOpenAlbum) {
+    if (currentOpenFolder) {
+      openSubFolder(currentOpenAlbum, currentOpenFolder);
+    } else if (currentOpenAlbum) {
       openAlbum(currentOpenAlbum);
     } else {
       renderAlbumView();
@@ -970,13 +1020,16 @@ async function loadMedia() {
 
 function renderAlbumView() {
   const albumView = document.getElementById("albumView");
-  const albumDetailView = document.getElementById("albumDetailView");
+  const folderView = document.getElementById("folderView");
+  const mediaView = document.getElementById("mediaView");
   const albumGrid = document.getElementById("albumGrid");
   if (!albumView || !albumGrid) return;
 
   currentOpenAlbum = null;
+  currentOpenFolder = null;
   albumView.style.display = "block";
-  if (albumDetailView) albumDetailView.style.display = "none";
+  if (folderView) folderView.style.display = "none";
+  if (mediaView) mediaView.style.display = "none";
 
   if (!allMediaCache.length) {
     albumGrid.innerHTML = "<p style='grid-column:1/-1;text-align:center;padding:40px;color:#888;'>No photos yet. Be the first to share! 📸</p>";
@@ -995,19 +1048,19 @@ function renderAlbumView() {
 
   let html = "";
 
-  // All Photos card (cover = most recent)
+  // All Media card
   if (allMediaCache[0]) {
     const cover = allMediaCache[0];
-    const coverUrl = `${SUPABASE_URL}/storage/v1/object/public/${MEDIA_BUCKET}/${cover.file_path}`;
+    const coverUrl = `${R2_PUBLIC_URL}/${cover.file_path}`;
     const coverIsVideo = cover.file_type === "video";
     html += `
       <div class="album-card" onclick="openAlbum('__all__')" style="cursor:pointer;border-radius:16px;overflow:hidden;background:#fff;box-shadow:0 4px 12px rgba(0,0,0,0.08);transition:all 0.2s;">
         <div style="position:relative;aspect-ratio:1;background:#f0f0f0;overflow:hidden;">
           ${coverIsVideo
             ? `<video src="${coverUrl}" muted preload="metadata" style="width:100%;height:100%;object-fit:cover;"></video>`
-            : `<img src="${coverUrl}" style="width:100%;height:100%;object-fit:cover;">`}
+            : `<img src="${coverUrl}" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover;">`}
           <div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(to top,rgba(0,0,0,0.75),transparent);padding:35px 12px 12px;color:#fff;">
-            <div style="font-weight:600;font-size:1em;">📷 All Photos</div>
+            <div style="font-weight:600;font-size:1em;">📷 All Media</div>
             <div style="font-size:0.8em;opacity:0.9;">${totalLabel}</div>
           </div>
         </div>
@@ -1019,7 +1072,7 @@ function renderAlbumView() {
   Object.keys(albums).sort().forEach(name => {
     const items = albums[name];
     const cover = items[0];
-    const coverUrl = `${SUPABASE_URL}/storage/v1/object/public/${MEDIA_BUCKET}/${cover.file_path}`;
+    const coverUrl = `${R2_PUBLIC_URL}/${cover.file_path}`;
     const coverIsVideo = cover.file_type === "video";
     const count = items.length;
     const countLabel = `${count} item${count === 1 ? "" : "s"}`;
@@ -1030,7 +1083,7 @@ function renderAlbumView() {
         <div style="position:relative;aspect-ratio:1;background:#f0f0f0;overflow:hidden;">
           ${coverIsVideo
             ? `<video src="${coverUrl}" muted preload="metadata" style="width:100%;height:100%;object-fit:cover;"></video>`
-            : `<img src="${coverUrl}" style="width:100%;height:100%;object-fit:cover;">`}
+            : `<img src="${coverUrl}" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover;">`}
           <div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(to top,rgba(0,0,0,0.75),transparent);padding:35px 12px 12px;color:#fff;">
             <div style="font-weight:600;font-size:1em;">📁 ${escapeHtml(name)}</div>
             <div style="font-size:0.8em;opacity:0.9;">${countLabel}</div>
@@ -1043,42 +1096,108 @@ function renderAlbumView() {
   albumGrid.innerHTML = html;
 }
 
+// VIEW 2: Show 2 folders (Pictures + Videos)
 function openAlbum(albumName) {
   const albumView = document.getElementById("albumView");
-  const albumDetailView = document.getElementById("albumDetailView");
-  const mediaGallery = document.getElementById("mediaGallery");
+  const folderView = document.getElementById("folderView");
+  const mediaView = document.getElementById("mediaView");
+  const folderGrid = document.getElementById("folderGrid");
   const title = document.getElementById("currentAlbumTitle");
-  if (!albumView || !mediaGallery) return;
+  if (!albumView || !folderGrid) return;
 
   currentOpenAlbum = albumName;
+  currentOpenFolder = null;
   albumView.style.display = "none";
-  albumDetailView.style.display = "block";
+  folderView.style.display = "block";
+  mediaView.style.display = "none";
 
   let items, displayName;
   if (albumName === "__all__") {
     items = allMediaCache;
-    displayName = "📷 All Photos";
+    displayName = "📷 All Media";
   } else {
     items = allMediaCache.filter(m => (m.album || "General") === albumName);
     displayName = `📁 ${albumName}`;
   }
 
-  const count = items.length;
-  title.textContent = `${displayName} · ${count} item${count === 1 ? "" : "s"}`;
+  title.textContent = displayName;
+
+  const photos = items.filter(m => m.file_type === "image");
+  const videos = items.filter(m => m.file_type === "video");
+
+  const safeName = albumName.replace(/'/g, "\\'");
+
+  const photoCover = photos[0];
+  const photoCoverUrl = photoCover ? `${R2_PUBLIC_URL}/${photoCover.file_path}` : "";
+
+  const videoCover = videos[0];
+  const videoCoverUrl = videoCover ? `${R2_PUBLIC_URL}/${videoCover.file_path}` : "";
+
+  folderGrid.innerHTML = `
+    <div class="album-card" onclick="openSubFolder('${safeName}', 'image')" style="cursor:pointer;border-radius:16px;overflow:hidden;background:#fff;box-shadow:0 4px 12px rgba(0,0,0,0.08);transition:all 0.2s;">
+      <div style="position:relative;aspect-ratio:1;background:#f0f0f0;overflow:hidden;">
+        ${photoCover
+          ? `<img src="${photoCoverUrl}" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover;">`
+          : `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:3em;color:#ddd;">📷</div>`}
+        <div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(to top,rgba(0,0,0,0.75),transparent);padding:35px 12px 12px;color:#fff;">
+          <div style="font-weight:600;font-size:1em;">📷 Pictures</div>
+          <div style="font-size:0.8em;opacity:0.9;">${photos.length} item${photos.length === 1 ? "" : "s"}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="album-card" onclick="openSubFolder('${safeName}', 'video')" style="cursor:pointer;border-radius:16px;overflow:hidden;background:#fff;box-shadow:0 4px 12px rgba(0,0,0,0.08);transition:all 0.2s;">
+      <div style="position:relative;aspect-ratio:1;background:#f0f0f0;overflow:hidden;">
+        ${videoCover
+          ? `<video src="${videoCoverUrl}" muted preload="metadata" style="width:100%;height:100%;object-fit:cover;"></video>`
+          : `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:3em;color:#ddd;">🎥</div>`}
+        <div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(to top,rgba(0,0,0,0.75),transparent);padding:35px 12px 12px;color:#fff;">
+          <div style="font-weight:600;font-size:1em;">🎥 Videos</div>
+          <div style="font-size:0.8em;opacity:0.9;">${videos.length} item${videos.length === 1 ? "" : "s"}</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// VIEW 3: Show media inside folder (photos only OR videos only)
+function openSubFolder(albumName, type) {
+  const albumView = document.getElementById("albumView");
+  const folderView = document.getElementById("folderView");
+  const mediaView = document.getElementById("mediaView");
+  const mediaGallery = document.getElementById("mediaGallery");
+  const title = document.getElementById("currentFolderTitle");
+  if (!mediaView || !mediaGallery) return;
+
+  currentOpenAlbum = albumName;
+  currentOpenFolder = type;
+  albumView.style.display = "none";
+  folderView.style.display = "none";
+  mediaView.style.display = "block";
+
+  let items = allMediaCache;
+  if (albumName !== "__all__") {
+    items = items.filter(m => (m.album || "General") === albumName);
+  }
+  items = items.filter(m => m.file_type === type);
+
+  const folderIcon = type === "video" ? "🎥 Videos" : "📷 Pictures";
+  const albumLabel = albumName === "__all__" ? "All Media" : albumName;
+  title.textContent = `${albumLabel} → ${folderIcon} · ${items.length} item${items.length === 1 ? "" : "s"}`;
 
   if (!items.length) {
-    mediaGallery.innerHTML = "<p style='grid-column:1/-1;text-align:center;padding:40px;color:#888;'>No media in this album.</p>";
+    mediaGallery.innerHTML = `<p style='grid-column:1/-1;text-align:center;padding:40px;color:#888;'>No ${type === "video" ? "videos" : "photos"} in this album.</p>`;
     return;
   }
 
   mediaGallery.innerHTML = items.map(m => {
-    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${MEDIA_BUCKET}/${m.file_path}`;
+    const publicUrl = `${R2_PUBLIC_URL}/${m.file_path}`;
     const isVideo = m.file_type === "video";
     const sizeMB = (m.file_size / 1024 / 1024).toFixed(1);
     return `<div class="media-card" style="border:1px solid #ddd;border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
       ${isVideo
         ? `<video src="${publicUrl}" controls preload="metadata" style="width:100%;height:200px;object-fit:cover;background:#000;"></video>`
-        : `<img src="${publicUrl}" style="width:100%;height:200px;object-fit:cover;" loading="lazy" alt="Highlight">`}
+        : `<img src="${publicUrl}" style="width:100%;height:200px;object-fit:cover;" loading="lazy" decoding="async" alt="Highlight">`}
       <div style="padding:10px;">
         <div style="font-size:0.8em;color:#888;margin-bottom:8px;">${isVideo ? "🎥 Video" : "📷 Photo"} · ${sizeMB}MB</div>
         <button onclick="downloadViaAndroid('${publicUrl}', '${m.file_name}')" style="display:inline-block;margin-right:8px;padding:6px 12px;background:#7c3aed;color:white;text-decoration:none;border:none;border-radius:6px;font-size:0.85em;cursor:pointer;">⬇ Download</button>
@@ -1092,22 +1211,21 @@ function showAlbumsView() {
   renderAlbumView();
 }
 
-// Legacy compatibility
-function filterByAlbum(album) {
-  if (album === "all") openAlbum("__all__");
-  else openAlbum(album);
+function backToFolders() {
+  if (currentOpenAlbum) {
+    openAlbum(currentOpenAlbum);
+  } else {
+    renderAlbumView();
+  }
 }
 
 async function deleteMedia(filePath, id) {
   if (!confirm("Are you sure you want to delete this?")) return;
   try {
-    await fetch(`${SUPABASE_URL}/storage/v1/object/${MEDIA_BUCKET}/${filePath}`, {
-      method: "DELETE",
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`
-      }
-    });
+    // Delete from R2 via Edge Function
+    await deleteFromR2(filePath);
+
+    // Delete metadata from Supabase
     await supabaseFetch(`/rest/v1/media?id=eq.${id}`, { method: "DELETE" });
     await loadMedia();
   } catch (error) {
@@ -1140,7 +1258,7 @@ function setupMediaUpload() {
         const file = files[i];
         try {
           showResult(result, `⏳ Uploading ${i + 1}/${files.length}: ${file.name} (${(file.size/1024/1024).toFixed(1)}MB)`, true);
-          await uploadMedia(file, album);
+          await uploadToR2(file, album);
           successCount++;
         } catch (err) {
           console.error(`Failed to upload ${file.name}:`, err);
