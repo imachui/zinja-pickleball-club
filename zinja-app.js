@@ -8,9 +8,8 @@ const headers = {
 
 const POLL_MS = 30000;
 
-// Display cutoff (in days)
-const BOOKING_DISPLAY_DAYS = 30;   // Court bookings: 1 month
-const OPENPLAY_DISPLAY_DAYS = 7;   // Open Play: 7 days
+const BOOKING_DISPLAY_DAYS = 30;
+const OPENPLAY_DISPLAY_DAYS = 7;
 
 const OPEN_PLAY_START_MIN = 17 * 60;
 const OPEN_PLAY_END_MIN = 24 * 60;
@@ -359,9 +358,6 @@ function setupAvailabilityCheck() {
   if (courtSelect) courtSelect.addEventListener("change", checkAvailability);
 }
 
-// ====================
-// LOAD BOOKINGS (30-DAY CUTOFF)
-// ====================
 async function loadBookings() {
   const container = document.getElementById("bookingsList");
   if (!container) return;
@@ -398,9 +394,6 @@ async function loadBookings() {
   } catch (error) { console.error("Bookings error:", error); container.innerHTML = "<p>Unable to load bookings right now.</p>"; }
 }
 
-// ====================
-// LOAD OPEN PLAY (7-DAY CUTOFF)
-// ====================
 async function loadOpenPlay() {
   const container = document.getElementById("openPlayList");
   if (!container) return;
@@ -769,14 +762,26 @@ async function loadAdminData() {
   }
 }
 
+// ===== ITO ANG BAGONG switchAdminTab NA MAY TAMANG KULAY =====
 function switchAdminTab(tab) {
   currentAdminTab = tab;
   const tabs = ['bookings', 'openplay', 'cancelled'];
   tabs.forEach(t => {
     const btn = document.getElementById(`tab${t.charAt(0).toUpperCase() + t.slice(1)}`);
     if (btn) {
-      btn.className = t === tab ? 'btn' : 'btn alt';
-      btn.style.background = t === tab ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : '';
+      if (t === tab) {
+        // Active tab - purple gradient with white text
+        btn.style.background = 'linear-gradient(135deg, #7c3aed, #6d28d9)';
+        btn.style.color = '#ffffff';
+        btn.style.border = '2px solid #6d28d9';
+        btn.style.boxShadow = '0 2px 8px rgba(124,58,237,0.3)';
+      } else {
+        // Inactive tab - white with dark text
+        btn.style.background = '#ffffff';
+        btn.style.color = '#333333';
+        btn.style.border = '2px solid #dddddd';
+        btn.style.boxShadow = 'none';
+      }
     }
   });
   renderAdminContent();
