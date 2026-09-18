@@ -7,11 +7,11 @@ const headers = {
 };
 
 const POLL_MS = 30000;
-const MEDIA_BUCKET = "zinja-media";
 
-// R2 Configuration
-const R2_PUBLIC_URL = "https://pub-6257cb2fbdc54a9fe47ca1f60ccbf9d.r2.dev";
-const R2_EDGE_FUNCTION = `${SUPABASE_URL}/functions/v1/r2-media-handler`;
+// Supabase Storage Configuration
+const STORAGE_BUCKET = "zinja-media";
+const STORAGE_PUBLIC_URL = `${SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET}`;
+const STORAGE_UPLOAD_URL = `${SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}`;
 
 const MAX_VIDEO_SIZE = 200 * 1024 * 1024; // 200 MB
 const MAX_IMAGE_SIZE = 50 * 1024 * 1024;  // 50 MB
@@ -23,18 +23,10 @@ const PLAYERS_PER_COURT = 16;
 const TOTAL_COURTS = 2;
 const OPEN_PLAY_FEE = 50;
 
-// ====================
-// PRICING CONFIG
-// ====================
-
 const MORNING_START_MIN = 6 * 60;
 const MORNING_END_MIN = 17 * 60;
 const MORNING_RATE = 100;
 const EVENING_RATE = 150;
-
-// ====================
-// WEEKLY CLOSURE
-// ====================
 
 const CLOSURE_DAY_START = 5;
 const CLOSURE_DAY_END = 6;
@@ -42,9 +34,6 @@ const CLOSURE_START_HOUR = 17;
 const CLOSURE_END_HOUR = 17;
 const PHT_OFFSET_HOURS = 8;
 
-// ====================
-// ADMIN CONFIG
-// ====================
 const ADMIN_PASSWORD = "zinja2026";
 let adminData = { bookings: [], openplay: [], cancelled: [] };
 let currentAdminTab = 'bookings';
@@ -151,10 +140,6 @@ function getSavedCancellation(type) {
   } catch { return null; }
 }
 
-// ====================
-// PRICING FUNCTIONS
-// ====================
-
 function calculateBookingPrice(startTime, durationHours) {
   if (!startTime || !durationHours) return { total: 0, rate: 0, breakdown: "" };
   const startMin = timeToMinutes(startTime);
@@ -191,11 +176,7 @@ function updatePriceDisplay() {
   const noteEl = document.getElementById("rateNote");
 
   if (!priceDiv) return;
-
-  if (!timeInput || !durationInput) {
-    priceDiv.style.display = "none";
-    return;
-  }
+  if (!timeInput || !durationInput) { priceDiv.style.display = "none"; return; }
 
   const calc = calculateBookingPrice(timeInput, durationInput);
   priceDiv.style.display = "block";
@@ -205,9 +186,7 @@ function updatePriceDisplay() {
   if (calc.breakdown) {
     noteEl.textContent = `Mixed rate: ${calc.breakdown}`;
   } else {
-    noteEl.textContent = calc.rate === MORNING_RATE
-      ? "☀️ Day rate (6AM-5PM)"
-      : "🌙 Evening rate (5PM-12AM)";
+    noteEl.textContent = calc.rate === MORNING_RATE ? "☀️ Day rate (6AM-5PM)" : "🌙 Evening rate (5PM-12AM)";
   }
 }
 
@@ -223,10 +202,6 @@ function setupPriceDisplay() {
     durationInput.addEventListener("input", updatePriceDisplay);
   }
 }
-
-// ====================
-// CLOSURE FUNCTIONS
-// ====================
 
 function checkClosureForBooking(dateStr, timeStr, durationHours) {
   if (!dateStr || !timeStr) return { closed: false };
@@ -305,11 +280,8 @@ function downloadViaAndroid(url, fileName) {
     try {
       AndroidDownloader.downloadFile(url, fileName);
       return;
-    } catch (err) {
-      console.error("Android download failed:", err);
-    }
+    } catch (err) { console.error("Android download failed:", err); }
   }
-
   const a = document.createElement("a");
   a.href = url;
   a.download = fileName;
@@ -321,11 +293,7 @@ function downloadViaAndroid(url, fileName) {
 
 async function checkOpenPlayCapacity(playDate) {
   if (!playDate) return null;
-
-  const bookings = await supabaseFetch(
-    `/rest/v1/public_bookings?select=court,start_time,duration_hours&booking_date=eq.${encodeURIComponent(playDate)}`
-  );
-
+  const bookings = await supabaseFetch(`/rest/v1/public_bookings?select=court,start_time,duration_hours&booking_date=eq.${encodeURIComponent(playDate)}`);
   const occupiedCourts = new Set();
   (bookings || []).forEach(b => {
     const bStart = timeToMinutes(b.start_time);
@@ -334,19 +302,13 @@ async function checkOpenPlayCapacity(playDate) {
       occupiedCourts.add(Number(b.court));
     }
   });
-
   const availableCourts = [];
   for (let c = 1; c <= TOTAL_COURTS; c++) {
     if (!occupiedCourts.has(c)) availableCourts.push(c);
   }
-
   const maxSlots = availableCourts.length * PLAYERS_PER_COURT;
-
-  const registrations = await supabaseFetch(
-    `/rest/v1/public_open_play?select=id&play_date=eq.${encodeURIComponent(playDate)}`
-  );
+  const registrations = await supabaseFetch(`/rest/v1/public_open_play?select=id&play_date=eq.${encodeURIComponent(playDate)}`);
   const currentCount = (registrations || []).length;
-
   return {
     availableCourts, maxSlots, currentCount,
     spotsLeft: maxSlots - currentCount,
@@ -367,26 +329,17 @@ async function updateOpenPlayInfo() {
       infoDiv.innerHTML = `<div style="background:#ffebee;padding:12px;border-radius:8px;border-left:4px solid #ef4444;"><strong>🚫 Closed on ${formatDate(playDate)}</strong><p style="margin:6px 0 0 0;font-size:0.9em;">${closureCheck.message}</p></div>`;
       return;
     }
-
     infoDiv.innerHTML = "<p>⏳ Checking available slots...</p>";
     const cap = await checkOpenPlayCapacity(playDate);
-
     if (cap.noCourts) {
       infoDiv.innerHTML = `<div style="background:#ffebee;padding:12px;border-radius:8px;border-left:4px solid #ef4444;"><strong>❌ Open Play unavailable on ${formatDate(playDate)}</strong><p style="margin:6px 0 0 0;font-size:0.9em;">Both courts are booked during Open Play hours (5PM-12AM).</p></div>`;
       return;
     }
-
     const statusColor = cap.isFull ? "#ef4444" : (cap.spotsLeft < 5 ? "#ff9800" : "#4caf50");
     const statusBg = cap.isFull ? "#ffebee" : (cap.spotsLeft < 5 ? "#fff3e0" : "#e8f5e9");
-    const courtLabel = cap.availableCourts.length === 2
-      ? "🏓 2 Courts (both available)"
-      : `🏓 1 Court (Court ${cap.availableCourts[0]})`;
-
+    const courtLabel = cap.availableCourts.length === 2 ? "🏓 2 Courts (both available)" : `🏓 1 Court (Court ${cap.availableCourts[0]})`;
     infoDiv.innerHTML = `<div style="background:${statusBg};padding:12px;border-radius:8px;border-left:4px solid ${statusColor};"><strong>Open Play on ${formatDate(playDate)} (5PM - 12AM)</strong><p style="margin:6px 0;font-size:0.95em;">${courtLabel}</p><p style="margin:6px 0;font-size:0.95em;"><strong>${cap.currentCount}/${cap.maxSlots}</strong> slots taken ${cap.isFull ? "— <strong>FULL</strong>" : `— <strong>${cap.spotsLeft}</strong> slots left`}</p></div>`;
-  } catch (error) {
-    console.error("Open play info error:", error);
-    infoDiv.innerHTML = "";
-  }
+  } catch (error) { console.error("Open play info error:", error); infoDiv.innerHTML = ""; }
 }
 
 function setupOpenPlayInfo() {
@@ -407,22 +360,16 @@ async function checkAvailability() {
       availabilityDiv.innerHTML = `<div style="background:#ffebee;padding:10px;border-radius:8px;border-left:4px solid #ef4444;"><strong>🚫 Closed on ${formatDate(bookingDate)}</strong><p style="margin:6px 0 0 0;font-size:0.9em;">${closureCheck.message}</p></div>`;
       return;
     }
-
-    const existing = await supabaseFetch(
-      `/rest/v1/public_bookings?select=start_time,duration_hours,customer_name&booking_date=eq.${encodeURIComponent(bookingDate)}&court=eq.${encodeURIComponent(court)}`
-    );
-
+    const existing = await supabaseFetch(`/rest/v1/public_bookings?select=start_time,duration_hours,customer_name&booking_date=eq.${encodeURIComponent(bookingDate)}&court=eq.${encodeURIComponent(court)}`);
     if (!existing || existing.length === 0) {
       availabilityDiv.innerHTML = `<p style="color:#1b5e20;background:#e8f5e9;padding:10px;border-radius:8px;border-left:4px solid #4caf50;">✅ Court ${court} is fully available on ${formatDate(bookingDate)}!</p>`;
       return;
     }
-
     const bookedSlots = existing.map(b => {
       const start = formatTime(b.start_time);
       const end = addHoursToTime(b.start_time, b.duration_hours);
       return `<li><strong>${start} - ${end}</strong></li>`;
     }).join("");
-
     availabilityDiv.innerHTML = `<div style="background:#fff3e0;padding:10px;border-radius:8px;border-left:4px solid #ff9800;"><strong>⚠️ Court ${court} is partially booked on ${formatDate(bookingDate)}:</strong><ul style="margin:8px 0 0 20px;padding:0;">${bookedSlots}</ul><small style="color:#666;">Please avoid these times when booking.</small></div>`;
   } catch (error) { console.error("Availability check error:", error); }
 }
@@ -434,26 +381,18 @@ function setupAvailabilityCheck() {
   if (courtSelect) courtSelect.addEventListener("change", checkAvailability);
 }
 
-// ====================
-// LOAD BOOKINGS
-// ====================
-
 async function loadBookings() {
   const container = document.getElementById("bookingsList");
   if (!container) return;
-
   try {
     const rows = await supabaseFetch("/rest/v1/public_bookings?select=*&order=booking_date.asc,start_time.asc");
     const today = new Date(); today.setHours(0,0,0,0);
     const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() - 30);
     const cutoffStr = cutoff.toISOString().split("T")[0];
     const filtered = (rows || []).filter(r => r.booking_date && r.booking_date >= cutoffStr);
-
     if (filtered.length === 0) { container.innerHTML = "<p>No court bookings yet.</p>"; return; }
-
     const grouped = {};
     filtered.forEach(r => { if (!grouped[r.booking_date]) grouped[r.booking_date] = []; grouped[r.booking_date].push(r); });
-
     container.innerHTML = Object.entries(grouped).map(([date, bookings]) => `
       <div class="date-group" style="margin-bottom:20px;">
         <h4 style="border-bottom:2px solid #7c3aed;padding-bottom:5px;color:#7c3aed;">📅 ${formatDate(date)}</h4>
@@ -469,40 +408,27 @@ async function loadBookings() {
                 <strong>${escapeHtml(b.customer_name)}</strong>
                 <div style="font-size:0.9em;color:#666;">${formatTime(b.start_time)} - ${addHoursToTime(b.start_time, b.duration_hours)} · Court ${escapeHtml(b.court)} · ${escapeHtml(b.duration_hours)} hour(s)</div>
               </div>
-              <div style="padding:6px 14px;background:linear-gradient(135deg,#7c3aed,#06b6d4);color:#fff;border-radius:20px;font-weight:700;font-size:0.95em;white-space:nowrap;">
-                ₱${Number(displayPrice).toLocaleString()}
-              </div>
+              <div style="padding:6px 14px;background:linear-gradient(135deg,#7c3aed,#06b6d4);color:#fff;border-radius:20px;font-weight:700;font-size:0.95em;white-space:nowrap;">₱${Number(displayPrice).toLocaleString()}</div>
             </div>
           `;
         }).join("")}
       </div>
     `).join("");
-  } catch (error) {
-    console.error("Bookings error:", error);
-    container.innerHTML = "<p>Unable to load bookings right now.</p>";
-  }
+  } catch (error) { console.error("Bookings error:", error); container.innerHTML = "<p>Unable to load bookings right now.</p>"; }
 }
-
-// ====================
-// LOAD OPEN PLAY
-// ====================
 
 async function loadOpenPlay() {
   const container = document.getElementById("openPlayList");
   if (!container) return;
-
   try {
     const rows = await supabaseFetch("/rest/v1/public_open_play?select=*&order=play_date.asc,play_time.asc");
     const today = new Date(); today.setHours(0,0,0,0);
     const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() - 30);
     const cutoffStr = cutoff.toISOString().split("T")[0];
     const filtered = (rows || []).filter(r => r.play_date && r.play_date >= cutoffStr);
-
     if (filtered.length === 0) { container.innerHTML = "<p>No Open Play registrations yet.</p>"; return; }
-
     const grouped = {};
     filtered.forEach(r => { if (!grouped[r.play_date]) grouped[r.play_date] = []; grouped[r.play_date].push(r); });
-
     container.innerHTML = Object.entries(grouped).map(([date, players]) => {
       const totalFee = players.length * OPEN_PLAY_FEE;
       return `
@@ -517,25 +443,19 @@ async function loadOpenPlay() {
               <strong>${escapeHtml(p.player_name)}</strong>
               <div style="font-size:0.9em;color:#666;">${escapeHtml(p.skill_level || "Not specified")}</div>
             </div>
-            <div style="padding:6px 14px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border-radius:20px;font-weight:700;font-size:0.95em;white-space:nowrap;">
-              ₱${OPEN_PLAY_FEE}
-            </div>
+            <div style="padding:6px 14px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border-radius:20px;font-weight:700;font-size:0.95em;white-space:nowrap;">₱${OPEN_PLAY_FEE}</div>
           </div>
         `).join("")}
       </div>
     `;
     }).join("");
-  } catch (error) {
-    console.error("Open Play error:", error);
-    container.innerHTML = "<p>Unable to load Open Play right now.</p>";
-  }
+  } catch (error) { console.error("Open Play error:", error); container.innerHTML = "<p>Unable to load Open Play right now.</p>"; }
 }
 
 async function handleBookingSubmit(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const result = document.getElementById("bookingResult");
-
   const name = document.getElementById("name")?.value.trim();
   const mobile = document.getElementById("phone")?.value.trim();
   const bookingDate = document.getElementById("date")?.value;
@@ -561,9 +481,7 @@ async function handleBookingSubmit(event) {
   try {
     showResult(result, "⏳ Checking court availability...", true);
     const existing = await supabaseFetch(`/rest/v1/public_bookings?select=booking_date,start_time,court,duration_hours,customer_name&booking_date=eq.${encodeURIComponent(bookingDate)}&court=eq.${encodeURIComponent(court)}`);
-
     const conflictingBooking = (existing || []).find(booking => bookingOverlaps(bookingTime, duration, booking.start_time, booking.duration_hours));
-
     if (conflictingBooking) {
       const conflictStart = formatTime(conflictingBooking.start_time);
       const conflictEnd = addHoursToTime(conflictingBooking.start_time, conflictingBooking.duration_hours);
@@ -572,30 +490,20 @@ async function handleBookingSubmit(event) {
       alert(`⚠️ BOOKING CONFLICT!\n\nCourt ${court} on ${formatDate(bookingDate)}\n\nAlready reserved: ${conflictStart} - ${conflictEnd}\nYour requested: ${formatTime(bookingTime)} - ${newEnd}\n\nPlease choose a different time or court.`);
       return;
     }
-
     const priceCalc = calculateBookingPrice(bookingTime, duration);
     const cancellationCode = generateCancelCode();
-
     await supabaseFetch("/rest/v1/bookings", {
       method: "POST",
       headers: { Prefer: "return=representation" },
       body: JSON.stringify({
-        customer_name: name,
-        mobile,
-        booking_date: bookingDate,
-        start_time: bookingTime,
-        court,
-        duration_hours: duration,
-        cancellation_code: cancellationCode,
-        price: priceCalc.total,
-        hourly_rate: priceCalc.rate
+        customer_name: name, mobile, booking_date: bookingDate, start_time: bookingTime,
+        court, duration_hours: duration, cancellation_code: cancellationCode,
+        price: priceCalc.total, hourly_rate: priceCalc.rate
       })
     });
-
     saveCancellation("booking", { mobile, code: cancellationCode });
     const endTime = addHoursToTime(bookingTime, duration);
     showResult(result, `✅ Thank you, ${name}! Booking confirmed for Court ${court}, ${formatDate(bookingDate)} from ${formatTime(bookingTime)} to ${endTime}. 💰 Total: ₱${priceCalc.total.toLocaleString()}. Cancellation code: ${cancellationCode}.`, true);
-
     form.reset();
     const priceDiv = document.getElementById("priceDisplay");
     if (priceDiv) priceDiv.style.display = "none";
@@ -612,7 +520,6 @@ async function handleOpenPlaySubmit(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const result = document.getElementById("playResult");
-
   const name = document.getElementById("player")?.value.trim();
   const mobile = document.getElementById("playerPhone")?.value.trim();
   const playDate = document.getElementById("playDate")?.value;
@@ -632,30 +539,25 @@ async function handleOpenPlaySubmit(event) {
   try {
     showResult(result, "⏳ Checking Open Play availability...", true);
     const cap = await checkOpenPlayCapacity(playDate);
-
     if (cap.noCourts) {
       showResult(result, `❌ Open Play is CANCELLED on ${formatDate(playDate)}. Both courts are booked.`, false);
       alert(`⚠️ OPEN PLAY UNAVAILABLE\n\n${formatDate(playDate)}\n\nBoth courts are booked during Open Play hours (5PM-12AM).`);
       return;
     }
-
     if (cap.isFull) {
       showResult(result, `❌ Open Play is FULL on ${formatDate(playDate)}. ${cap.currentCount}/${cap.maxSlots} slots taken.`, false);
       alert(`⚠️ OPEN PLAY FULL\n\n${formatDate(playDate)}\n\n${cap.currentCount}/${cap.maxSlots} slots taken.`);
       return;
     }
-
     const cancellationCode = generateCancelCode();
     await supabaseFetch("/rest/v1/open_play", {
       method: "POST",
       headers: { Prefer: "return=representation" },
       body: JSON.stringify({ player_name: name, mobile, play_date: playDate, play_time: OPEN_PLAY_START_TIME, skill_level: skillLevel, cancellation_code: cancellationCode })
     });
-
     saveCancellation("open_play", { mobile, code: cancellationCode });
     const newCount = cap.currentCount + 1;
     showResult(result, `✅ Thank you, ${name}! Open Play confirmed for ${formatDate(playDate)} (5PM-12AM). Fee: ₱${OPEN_PLAY_FEE}. Cancellation code: ${cancellationCode}.\n\n📊 Slots: ${newCount}/${cap.maxSlots} taken.`, true);
-
     form.reset();
     const infoDiv = document.getElementById("openPlayInfo");
     if (infoDiv) infoDiv.innerHTML = "";
@@ -717,9 +619,7 @@ async function cancelBooking() {
   const mobile = document.getElementById("cancelBookingMobile")?.value.trim();
   const code = document.getElementById("cancelBookingCode")?.value.trim().toUpperCase();
   const result = document.getElementById("cancelBookingResult");
-
   if (!mobile || !code) { showResult(result, "Please enter your mobile number and cancellation code.", false); return; }
-
   try {
     showResult(result, "Cancelling booking...", true);
     const data = await supabaseFetch("/rest/v1/rpc/cancel_booking", { method: "POST", body: JSON.stringify({ p_mobile: mobile, p_code: code }) });
@@ -737,9 +637,7 @@ async function cancelOpenPlay() {
   const mobile = document.getElementById("cancelOpenPlayMobile")?.value.trim();
   const code = document.getElementById("cancelOpenPlayCode")?.value.trim().toUpperCase();
   const result = document.getElementById("cancelOpenPlayResult");
-
   if (!mobile || !code) { showResult(result, "Please enter your mobile number and cancellation code.", false); return; }
-
   try {
     showResult(result, "Cancelling registration...", true);
     const data = await supabaseFetch("/rest/v1/rpc/cancel_open_play", { method: "POST", body: JSON.stringify({ p_mobile: mobile, p_code: code }) });
@@ -760,23 +658,15 @@ async function loadChatMessages() {
   if (!container) return;
 
   try {
-    const rows = await supabaseFetch(
-      "/rest/v1/chat_messages?select=*&order=created_at.asc&limit=100"
-    );
-
+    const rows = await supabaseFetch("/rest/v1/chat_messages?select=*&order=created_at.asc&limit=100");
     if (!rows || rows.length === 0) {
       container.innerHTML = "<p style='text-align:center;color:#aaa;'>No messages yet today. Be the first to say hi! 👋</p>";
       return;
     }
-
     const currentScroll = container.scrollTop + container.clientHeight;
     const wasAtBottom = currentScroll >= container.scrollHeight - 50;
-
     container.innerHTML = rows.map(msg => {
-      const time = new Date(msg.created_at).toLocaleTimeString("en-US", {
-        hour: "numeric", minute: "2-digit"
-      });
-
+      const time = new Date(msg.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
       return `
         <div style="margin-bottom: 12px; padding: 10px; background: #2a2a4a; border-radius: 8px; border-left: 3px solid #7c3aed;">
           <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
@@ -787,10 +677,7 @@ async function loadChatMessages() {
         </div>
       `;
     }).join("");
-
-    if (wasAtBottom) {
-      container.scrollTop = container.scrollHeight;
-    }
+    if (wasAtBottom) { container.scrollTop = container.scrollHeight; }
   } catch (error) {
     console.error("Chat load error:", error);
     container.innerHTML = "<p style='text-align:center;color:#ef4444;'>Unable to load chat. Please refresh.</p>";
@@ -800,64 +687,32 @@ async function loadChatMessages() {
 async function sendChatMessage() {
   const nameInput = document.getElementById("chatName");
   const messageInput = document.getElementById("chatInput");
-
   const name = nameInput?.value.trim();
   const message = messageInput?.value.trim();
 
-  if (!name) {
-    alert("Please enter your name first.");
-    nameInput?.focus();
-    return;
-  }
+  if (!name) { alert("Please enter your name first."); nameInput?.focus(); return; }
+  if (!message) { alert("Please type a message."); return; }
+  if (message.length > 500) { alert("Message is too long. Maximum is 500 characters."); return; }
 
-  if (!message) {
-    alert("Please type a message.");
-    return;
-  }
-
-  if (message.length > 500) {
-    alert("Message is too long. Maximum is 500 characters.");
-    return;
-  }
-
-  try {
-    localStorage.setItem("zinja_chat_name", name);
-  } catch {}
+  try { localStorage.setItem("zinja_chat_name", name); } catch {}
 
   try {
     const sendBtn = document.getElementById("sendChatBtn");
-    if (sendBtn) {
-      sendBtn.disabled = true;
-      sendBtn.textContent = "...";
-    }
-
+    if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = "..."; }
     await supabaseFetch("/rest/v1/chat_messages", {
       method: "POST",
       headers: { Prefer: "return=representation" },
-      body: JSON.stringify({
-        player_name: name,
-        message: message
-      })
+      body: JSON.stringify({ player_name: name, message: message })
     });
-
     messageInput.value = "";
     messageInput.focus();
-
     await loadChatMessages();
-
-    if (sendBtn) {
-      sendBtn.disabled = false;
-      sendBtn.textContent = "Send";
-    }
+    if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = "Send"; }
   } catch (error) {
     console.error("Send chat error:", error);
     alert("Failed to send message: " + error.message);
-
     const sendBtn = document.getElementById("sendChatBtn");
-    if (sendBtn) {
-      sendBtn.disabled = false;
-      sendBtn.textContent = "Send";
-    }
+    if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = "Send"; }
   }
 }
 
@@ -871,13 +726,10 @@ function insertEmoji(emoji) {
 function setupChatEmojiPicker() {
   const emojiBtn = document.getElementById("emojiBtn");
   const emojiPicker = document.getElementById("emojiPicker");
-
   if (!emojiBtn || !emojiPicker) return;
-
   emojiBtn.addEventListener("click", () => {
     emojiPicker.style.display = emojiPicker.style.display === "none" ? "block" : "none";
   });
-
   document.addEventListener("click", (e) => {
     if (!emojiPicker.contains(e.target) && !emojiBtn.contains(e.target)) {
       emojiPicker.style.display = "none";
@@ -888,7 +740,6 @@ function setupChatEmojiPicker() {
 function setupChatName() {
   const nameInput = document.getElementById("chatName");
   if (!nameInput) return;
-
   try {
     const savedName = localStorage.getItem("zinja_chat_name");
     if (savedName) nameInput.value = savedName;
@@ -898,24 +749,22 @@ function setupChatName() {
 function setupChat() {
   const chatSection = document.getElementById("chat");
   if (!chatSection) return;
-
   setupChatName();
   setupChatEmojiPicker();
   announceClosureInChat();
   loadChatMessages();
-
   setInterval(loadChatMessages, 5000);
 }
 
 // ====================
-// MEDIA: R2 UPLOAD via EDGE FUNCTION
+// MEDIA: SUPABASE STORAGE
 // ====================
 
 let currentOpenAlbum = null;
-let currentOpenFolder = null; // "image" or "video"
+let currentOpenFolder = null;
 let allMediaCache = [];
 
-async function uploadToR2(file, album = "General") {
+async function uploadToSupabase(file, album = "General") {
   const isVideo = file.type.startsWith("video");
   const maxSize = isVideo ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE;
   const maxLabel = isVideo ? "200" : "50";
@@ -928,42 +777,21 @@ async function uploadToR2(file, album = "General") {
   const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
   const filePath = `uploads/${fileName}`;
 
-  // Step 1: Get presigned upload URL from Edge Function
-  const presignedResp = await fetch(R2_EDGE_FUNCTION, {
+  const resp = await fetch(`${STORAGE_UPLOAD_URL}/${filePath}`, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
       apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": file.type
     },
-    body: JSON.stringify({
-      action: "getUploadUrl",
-      filePath: filePath,
-      fileType: file.type
-    })
-  });
-
-  if (!presignedResp.ok) {
-    const err = await presignedResp.text();
-    throw new Error("Failed to get upload URL: " + err);
-  }
-
-  const { uploadUrl } = await presignedResp.json();
-  if (!uploadUrl) throw new Error("No upload URL received");
-
-  // Step 2: Upload directly to R2
-  const uploadResp = await fetch(uploadUrl, {
-    method: "PUT",
-    headers: { "Content-Type": file.type },
     body: file
   });
 
-  if (!uploadResp.ok) {
-    const err = await uploadResp.text();
-    throw new Error("Upload to R2 failed: " + err);
+  if (!resp.ok) {
+    const err = await resp.text();
+    throw new Error("Upload failed: " + err);
   }
 
-  // Step 3: Save metadata to Supabase
   await supabaseFetch("/rest/v1/media", {
     method: "POST",
     headers: { Prefer: "return=representation" },
@@ -979,33 +807,20 @@ async function uploadToR2(file, album = "General") {
   return filePath;
 }
 
-async function deleteFromR2(filePath) {
-  const resp = await fetch(R2_EDGE_FUNCTION, {
-    method: "POST",
+async function deleteFromSupabase(filePath) {
+  const resp = await fetch(`${STORAGE_UPLOAD_URL}/${filePath}`, {
+    method: "DELETE",
     headers: {
-      "Content-Type": "application/json",
       apikey: SUPABASE_KEY,
       Authorization: `Bearer ${SUPABASE_KEY}`
-    },
-    body: JSON.stringify({
-      action: "delete",
-      filePath: filePath
-    })
+    }
   });
-
-  if (!resp.ok) {
-    console.error("R2 delete failed, continuing with DB delete...");
-  }
+  if (!resp.ok) { console.error("Supabase delete failed, continuing with DB delete..."); }
 }
-
-// ====================
-// MEDIA: LOAD & RENDER
-// ====================
 
 async function loadMedia() {
   const albumGrid = document.getElementById("albumGrid");
   if (!albumGrid) return;
-
   try {
     const rows = await supabaseFetch("/rest/v1/media?select=*&order=created_at.desc&limit=200");
     allMediaCache = rows || [];
@@ -1049,13 +864,11 @@ function renderAlbumView() {
 
   const totalCount = allMediaCache.length;
   const totalLabel = `${totalCount} item${totalCount === 1 ? "" : "s"}`;
-
   let html = "";
 
-  // All Media card
   if (allMediaCache[0]) {
     const cover = allMediaCache[0];
-    const coverUrl = `${R2_PUBLIC_URL}/${cover.file_path}`;
+    const coverUrl = `${STORAGE_PUBLIC_URL}/${cover.file_path}`;
     const coverIsVideo = cover.file_type === "video";
     html += `
       <div class="album-card" onclick="openAlbum('__all__')" style="cursor:pointer;border-radius:16px;overflow:hidden;background:#fff;box-shadow:0 4px 12px rgba(0,0,0,0.08);transition:all 0.2s;">
@@ -1072,16 +885,14 @@ function renderAlbumView() {
     `;
   }
 
-  // Album cards
   Object.keys(albums).sort().forEach(name => {
     const items = albums[name];
     const cover = items[0];
-    const coverUrl = `${R2_PUBLIC_URL}/${cover.file_path}`;
+    const coverUrl = `${STORAGE_PUBLIC_URL}/${cover.file_path}`;
     const coverIsVideo = cover.file_type === "video";
     const count = items.length;
     const countLabel = `${count} item${count === 1 ? "" : "s"}`;
     const safeName = name.replace(/'/g, "\\'");
-
     html += `
       <div class="album-card" onclick="openAlbum('${safeName}')" style="cursor:pointer;border-radius:16px;overflow:hidden;background:#fff;box-shadow:0 4px 12px rgba(0,0,0,0.08);transition:all 0.2s;">
         <div style="position:relative;aspect-ratio:1;background:#f0f0f0;overflow:hidden;">
@@ -1100,7 +911,6 @@ function renderAlbumView() {
   albumGrid.innerHTML = html;
 }
 
-// VIEW 2: Show 2 folders (Pictures + Videos)
 function openAlbum(albumName) {
   const albumView = document.getElementById("albumView");
   const folderView = document.getElementById("folderView");
@@ -1123,19 +933,15 @@ function openAlbum(albumName) {
     items = allMediaCache.filter(m => (m.album || "General") === albumName);
     displayName = `📁 ${albumName}`;
   }
-
   title.textContent = displayName;
 
   const photos = items.filter(m => m.file_type === "image");
   const videos = items.filter(m => m.file_type === "video");
-
   const safeName = albumName.replace(/'/g, "\\'");
-
   const photoCover = photos[0];
-  const photoCoverUrl = photoCover ? `${R2_PUBLIC_URL}/${photoCover.file_path}` : "";
-
+  const photoCoverUrl = photoCover ? `${STORAGE_PUBLIC_URL}/${photoCover.file_path}` : "";
   const videoCover = videos[0];
-  const videoCoverUrl = videoCover ? `${R2_PUBLIC_URL}/${videoCover.file_path}` : "";
+  const videoCoverUrl = videoCover ? `${STORAGE_PUBLIC_URL}/${videoCover.file_path}` : "";
 
   folderGrid.innerHTML = `
     <div class="album-card" onclick="openSubFolder('${safeName}', 'image')" style="cursor:pointer;border-radius:16px;overflow:hidden;background:#fff;box-shadow:0 4px 12px rgba(0,0,0,0.08);transition:all 0.2s;">
@@ -1149,7 +955,6 @@ function openAlbum(albumName) {
         </div>
       </div>
     </div>
-
     <div class="album-card" onclick="openSubFolder('${safeName}', 'video')" style="cursor:pointer;border-radius:16px;overflow:hidden;background:#fff;box-shadow:0 4px 12px rgba(0,0,0,0.08);transition:all 0.2s;">
       <div style="position:relative;aspect-ratio:1;background:#f0f0f0;overflow:hidden;">
         ${videoCover
@@ -1164,7 +969,6 @@ function openAlbum(albumName) {
   `;
 }
 
-// VIEW 3: Show media inside folder (photos only OR videos only)
 function openSubFolder(albumName, type) {
   const albumView = document.getElementById("albumView");
   const folderView = document.getElementById("folderView");
@@ -1195,7 +999,7 @@ function openSubFolder(albumName, type) {
   }
 
   mediaGallery.innerHTML = items.map(m => {
-    const publicUrl = `${R2_PUBLIC_URL}/${m.file_path}`;
+    const publicUrl = `${STORAGE_PUBLIC_URL}/${m.file_path}`;
     const isVideo = m.file_type === "video";
     const sizeMB = (m.file_size / 1024 / 1024).toFixed(1);
     return `<div class="media-card" style="border:1px solid #ddd;border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
@@ -1211,25 +1015,16 @@ function openSubFolder(albumName, type) {
   }).join("");
 }
 
-function showAlbumsView() {
-  renderAlbumView();
-}
+function showAlbumsView() { renderAlbumView(); }
 
 function backToFolders() {
-  if (currentOpenAlbum) {
-    openAlbum(currentOpenAlbum);
-  } else {
-    renderAlbumView();
-  }
+  if (currentOpenAlbum) { openAlbum(currentOpenAlbum); } else { renderAlbumView(); }
 }
 
 async function deleteMedia(filePath, id) {
   if (!confirm("Are you sure you want to delete this?")) return;
   try {
-    // Delete from R2 via Edge Function
-    await deleteFromR2(filePath);
-
-    // Delete metadata from Supabase
+    await deleteFromSupabase(filePath);
     await supabaseFetch(`/rest/v1/media?id=eq.${id}`, { method: "DELETE" });
     await loadMedia();
   } catch (error) {
@@ -1245,11 +1040,7 @@ function setupMediaUpload() {
 
   uploadBtn.addEventListener("click", async () => {
     const files = Array.from(fileInput.files);
-    if (!files.length) {
-      showResult(result, "Please select at least one file.", false);
-      return;
-    }
-
+    if (!files.length) { showResult(result, "Please select at least one file.", false); return; }
     const album = document.getElementById("mediaAlbum")?.value || "General";
     let successCount = 0;
     let failCount = 0;
@@ -1262,7 +1053,7 @@ function setupMediaUpload() {
         const file = files[i];
         try {
           showResult(result, `⏳ Uploading ${i + 1}/${files.length}: ${file.name} (${(file.size/1024/1024).toFixed(1)}MB)`, true);
-          await uploadToR2(file, album);
+          await uploadToSupabase(file, album);
           successCount++;
         } catch (err) {
           console.error(`Failed to upload ${file.name}:`, err);
@@ -1288,7 +1079,7 @@ function setupMediaUpload() {
 }
 
 // ====================
-// ADMIN PANEL LOGIC
+// ADMIN PANEL
 // ====================
 
 async function loadAdminData() {
@@ -1300,21 +1091,17 @@ async function loadAdminData() {
     if (resultDiv) resultDiv.innerHTML = '<p style="color: red; font-weight: bold;">❌ Invalid password.</p>';
     return;
   }
-
   if (resultDiv) resultDiv.innerHTML = '';
   if (dataDiv) dataDiv.style.display = 'block';
 
   try {
     const bkRes = await supabaseFetch('/rest/v1/bookings?order=created_at.desc');
     const bookings = bkRes || [];
-
     const opRes = await supabaseFetch('/rest/v1/open_play?order=created_at.desc');
     const openplay = opRes || [];
-
     adminData.bookings = bookings.filter(b => b.status !== 'cancelled');
     adminData.cancelled = bookings.filter(b => b.status === 'cancelled');
     adminData.openplay = openplay;
-
     renderAdminContent();
   } catch (err) {
     if (resultDiv) resultDiv.innerHTML = `<p style="color: red;">❌ Failed to load data: ${err.message}</p>`;
@@ -1323,7 +1110,6 @@ async function loadAdminData() {
 
 function switchAdminTab(tab) {
   currentAdminTab = tab;
-  
   const tabs = ['bookings', 'openplay', 'cancelled'];
   tabs.forEach(t => {
     const btn = document.getElementById(`tab${t.charAt(0).toUpperCase() + t.slice(1)}`);
@@ -1332,7 +1118,6 @@ function switchAdminTab(tab) {
       btn.style.background = t === tab ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : '';
     }
   });
-
   renderAdminContent();
 }
 
@@ -1383,7 +1168,6 @@ function renderAdminContent() {
       `).join('');
     }
   }
-
   container.innerHTML = html;
 }
 
@@ -1394,7 +1178,6 @@ function renderAdminContent() {
 document.addEventListener("DOMContentLoaded", () => {
   const bookingForm = document.getElementById("bookingForm");
   const playForm = document.getElementById("playForm");
-
   if (bookingForm) bookingForm.addEventListener("submit", handleBookingSubmit);
   if (playForm) playForm.addEventListener("submit", handleOpenPlaySubmit);
 
