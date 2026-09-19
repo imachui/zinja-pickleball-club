@@ -7,9 +7,9 @@ const headers = {
 };
 
 // BANDWIDTH-OPTIMIZED INTERVALS
-const CHAT_POLL_MS = 60000;     // 60 seconds
-const DATA_POLL_MS = 300000;    // 5 minutes
-const STATUS_POLL_MS = 300000;  // 5 minutes
+const CHAT_POLL_MS = 60000;
+const DATA_POLL_MS = 300000;
+const STATUS_POLL_MS = 300000;
 
 const BOOKING_DISPLAY_DAYS = 30;
 const OPENPLAY_DISPLAY_DAYS = 7;
@@ -271,16 +271,16 @@ function announceClosureInChat() {
   container.insertBefore(notice, container.firstChild);
 }
 
-// ====================
-// CHANGED: public_bookings → bookings with status filter
-// CHANGED: public_open_play → open_play
-// ====================
+// Helper: filter out cancelled bookings in JavaScript
+function isActiveBooking(b) {
+  return !b.status || String(b.status).toLowerCase() !== 'cancelled';
+}
 
 async function checkOpenPlayCapacity(playDate) {
   if (!playDate) return null;
-  const bookings = await supabaseFetch(`/rest/v1/bookings?select=court,start_time,duration_hours&booking_date=eq.${encodeURIComponent(playDate)}&status=neq.cancelled`);
+  const bookings = await supabaseFetch(`/rest/v1/bookings?select=court,start_time,duration_hours,status&booking_date=eq.${encodeURIComponent(playDate)}`);
   const occupiedCourts = new Set();
-  (bookings || []).forEach(b => {
+  (bookings || []).filter(isActiveBooking).forEach(b => {
     const bStart = timeToMinutes(b.start_time);
     const bEnd = bStart + Number(b.duration_hours) * 60;
     if (bStart < OPEN_PLAY_END_MIN && OPEN_PLAY_START_MIN < bEnd) {
@@ -345,12 +345,13 @@ async function checkAvailability() {
       availabilityDiv.innerHTML = `<div style="background:#ffebee;padding:10px;border-radius:8px;border-left:4px solid #ef4444;"><strong>🚫 Closed on ${formatDate(bookingDate)}</strong><p style="margin:6px 0 0 0;font-size:0.9em;">${closureCheck.message}</p></div>`;
       return;
     }
-    const existing = await supabaseFetch(`/rest/v1/bookings?select=start_time,duration_hours&booking_date=eq.${encodeURIComponent(bookingDate)}&court=eq.${encodeURIComponent(court)}&status=neq.cancelled`);
-    if (!existing || existing.length === 0) {
+    const existing = await supabaseFetch(`/rest/v1/bookings?select=start_time,duration_hours,status&booking_date=eq.${encodeURIComponent(bookingDate)}&court=eq.${encodeURIComponent(court)}`);
+    const active = (existing || []).filter(isActiveBooking);
+    if (active.length === 0) {
       availabilityDiv.innerHTML = `<p style="color:#1b5e20;background:#e8f5e9;padding:10px;border-radius:8px;border-left:4px solid #4caf50;">✅ Court ${court} is fully available on ${formatDate(bookingDate)}!</p>`;
       return;
     }
-    const bookedSlots = existing.map(b => {
+    const bookedSlots = active.map(b => {
       const start = formatTime(b.start_time);
       const end = addHoursToTime(b.start_time, b.duration_hours);
       return `<li><strong>${start} - ${end}</strong></li>`;
@@ -367,17 +368,17 @@ function setupAvailabilityCheck() {
 }
 
 // ====================
-// LOAD BOOKINGS (FIXED — bookings table)
+// LOAD BOOKINGS (with JS-based status filter)
 // ====================
 async function loadBookings() {
   const container = document.getElementById("bookingsList");
   if (!container) return;
   try {
-    const rows = await supabaseFetch("/rest/v1/bookings?select=customer_name,booking_date,start_time,court,duration_hours,price&status=neq.cancelled&order=booking_date.asc,start_time.asc");
+    const rows = await supabaseFetch("/rest/v1/bookings?select=customer_name,booking_date,start_time,court,duration_hours,price,status&order=booking_date.asc,start_time.asc");
     const today = new Date(); today.setHours(0,0,0,0);
     const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() - BOOKING_DISPLAY_DAYS);
     const cutoffStr = cutoff.toISOString().split("T")[0];
-    const filtered = (rows || []).filter(r => r.booking_date && r.booking_date >= cutoffStr);
+    const filtered = (rows || []).filter(r => r.booking_date && r.booking_date >= cutoffStr && isActiveBooking(r));
     if (filtered.length === 0) { container.innerHTML = "<p>No court bookings in the last 30 days.</p>"; return; }
     const grouped = {};
     filtered.forEach(r => { if (!grouped[r.booking_date]) grouped[r.booking_date] = []; grouped[r.booking_date].push(r); });
@@ -406,7 +407,7 @@ async function loadBookings() {
 }
 
 // ====================
-// LOAD OPEN PLAY (FIXED — open_play table)
+// LOAD OPEN PLAY
 // ====================
 async function loadOpenPlay() {
   const container = document.getElementById("openPlayList");
@@ -471,8 +472,8 @@ async function handleBookingSubmit(event) {
 
   try {
     showResult(result, "⏳ Checking court availability...", true);
-    const existing = await supabaseFetch(`/rest/v1/bookings?select=start_time,duration_hours&booking_date=eq.${encodeURIComponent(bookingDate)}&court=eq.${encodeURIComponent(court)}&status=neq.cancelled`);
-    const conflictingBooking = (existing || []).find(booking => bookingOverlaps(bookingTime, duration, booking.start_time, booking.duration_hours));
+    const existing = await supabaseFetch(`/rest/v1/bookings?select=start_time,duration_hours,status&booking_date=eq.${encodeURIComponent(bookingDate)}&court=eq.${encodeURIComponent(court)}`);
+    const conflictingBooking = (existing || []).filter(isActiveBooking).find(booking => bookingOverlaps(bookingTime, duration, booking.start_time, booking.duration_hours));
     if (conflictingBooking) {
       const conflictStart = formatTime(conflictingBooking.start_time);
       const conflictEnd = addHoursToTime(conflictingBooking.start_time, conflictingBooking.duration_hours);
@@ -489,7 +490,7 @@ async function handleBookingSubmit(event) {
       body: JSON.stringify({
         customer_name: name, mobile, booking_date: bookingDate, start_time: bookingTime,
         court, duration_hours: duration, cancellation_code: cancellationCode,
-        price: priceCalc.total, hourly_rate: priceCalc.rate
+        price: priceCalc.total, hourly_rate: priceCalc.rate, status: 'confirmed'
       })
     });
     saveCancellation("booking", { mobile, code: cancellationCode });
@@ -768,8 +769,8 @@ async function loadAdminData() {
     const bookings = bkRes || [];
     const opRes = await supabaseFetch('/rest/v1/open_play?select=player_name,mobile,play_date,skill_level&order=created_at.desc');
     const openplay = opRes || [];
-    adminData.bookings = bookings.filter(b => b.status !== 'cancelled');
-    adminData.cancelled = bookings.filter(b => b.status === 'cancelled');
+    adminData.bookings = bookings.filter(isActiveBooking);
+    adminData.cancelled = bookings.filter(b => b.status && String(b.status).toLowerCase() === 'cancelled');
     adminData.openplay = openplay;
     renderAdminContent();
   } catch (err) {
@@ -869,7 +870,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   updateLiveClosureStatus();
 
-  // Manual Refresh Buttons
   const refreshBookingsBtn = document.getElementById("refreshBookingsBtn");
   if (refreshBookingsBtn) {
     refreshBookingsBtn.addEventListener("click", async () => {
@@ -892,7 +892,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // SMART POLLING
   let lastChatLoad = 0;
   let lastDataLoad = 0;
   let lastStatusUpdate = 0;
