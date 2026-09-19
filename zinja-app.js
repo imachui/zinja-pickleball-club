@@ -6,7 +6,10 @@ const headers = {
   "Content-Type": "application/json"
 };
 
-const POLL_MS = 30000;
+// BANDWIDTH-OPTIMIZED INTERVALS
+const CHAT_POLL_MS = 30000;     // 30 seconds (was 5s)
+const DATA_POLL_MS = 120000;    // 2 minutes (was 30s)
+const STATUS_POLL_MS = 120000;  // 2 minutes
 
 const BOOKING_DISPLAY_DAYS = 30;
 const OPENPLAY_DISPLAY_DAYS = 7;
@@ -337,7 +340,7 @@ async function checkAvailability() {
       availabilityDiv.innerHTML = `<div style="background:#ffebee;padding:10px;border-radius:8px;border-left:4px solid #ef4444;"><strong>🚫 Closed on ${formatDate(bookingDate)}</strong><p style="margin:6px 0 0 0;font-size:0.9em;">${closureCheck.message}</p></div>`;
       return;
     }
-    const existing = await supabaseFetch(`/rest/v1/public_bookings?select=start_time,duration_hours,customer_name&booking_date=eq.${encodeURIComponent(bookingDate)}&court=eq.${encodeURIComponent(court)}`);
+    const existing = await supabaseFetch(`/rest/v1/public_bookings?select=start_time,duration_hours&booking_date=eq.${encodeURIComponent(bookingDate)}&court=eq.${encodeURIComponent(court)}`);
     if (!existing || existing.length === 0) {
       availabilityDiv.innerHTML = `<p style="color:#1b5e20;background:#e8f5e9;padding:10px;border-radius:8px;border-left:4px solid #4caf50;">✅ Court ${court} is fully available on ${formatDate(bookingDate)}!</p>`;
       return;
@@ -358,11 +361,14 @@ function setupAvailabilityCheck() {
   if (courtSelect) courtSelect.addEventListener("change", checkAvailability);
 }
 
+// ====================
+// LOAD BOOKINGS (OPTIMIZED — 6 columns lang)
+// ====================
 async function loadBookings() {
   const container = document.getElementById("bookingsList");
   if (!container) return;
   try {
-    const rows = await supabaseFetch("/rest/v1/public_bookings?select=*&order=booking_date.asc,start_time.asc");
+    const rows = await supabaseFetch("/rest/v1/public_bookings?select=customer_name,booking_date,start_time,court,duration_hours,price&order=booking_date.asc,start_time.asc");
     const today = new Date(); today.setHours(0,0,0,0);
     const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() - BOOKING_DISPLAY_DAYS);
     const cutoffStr = cutoff.toISOString().split("T")[0];
@@ -394,11 +400,14 @@ async function loadBookings() {
   } catch (error) { console.error("Bookings error:", error); container.innerHTML = "<p>Unable to load bookings right now.</p>"; }
 }
 
+// ====================
+// LOAD OPEN PLAY (OPTIMIZED — 3 columns lang)
+// ====================
 async function loadOpenPlay() {
   const container = document.getElementById("openPlayList");
   if (!container) return;
   try {
-    const rows = await supabaseFetch("/rest/v1/public_open_play?select=*&order=play_date.asc,play_time.asc");
+    const rows = await supabaseFetch("/rest/v1/public_open_play?select=player_name,play_date,skill_level&order=play_date.asc");
     const today = new Date(); today.setHours(0,0,0,0);
     const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() - OPENPLAY_DISPLAY_DAYS);
     const cutoffStr = cutoff.toISOString().split("T")[0];
@@ -457,7 +466,7 @@ async function handleBookingSubmit(event) {
 
   try {
     showResult(result, "⏳ Checking court availability...", true);
-    const existing = await supabaseFetch(`/rest/v1/public_bookings?select=booking_date,start_time,court,duration_hours,customer_name&booking_date=eq.${encodeURIComponent(bookingDate)}&court=eq.${encodeURIComponent(court)}`);
+    const existing = await supabaseFetch(`/rest/v1/public_bookings?select=start_time,duration_hours&booking_date=eq.${encodeURIComponent(bookingDate)}&court=eq.${encodeURIComponent(court)}`);
     const conflictingBooking = (existing || []).find(booking => bookingOverlaps(bookingTime, duration, booking.start_time, booking.duration_hours));
     if (conflictingBooking) {
       const conflictStart = formatTime(conflictingBooking.start_time);
@@ -627,14 +636,17 @@ async function cancelOpenPlay() {
     }
   } catch (error) { showResult(result, `Cancellation failed. ${error.message || "Please try again."}`, false); }
 }// ====================
-// CLUB CHAT
+// CLUB CHAT (OPTIMIZED — 3 columns lang, 30s interval)
 // ====================
 
 async function loadChatMessages() {
   const container = document.getElementById("chatMessages");
   if (!container) return;
+  // Skip kung hindi visible ang page (bandwidth saver)
+  if (document.visibilityState !== 'visible') return;
+
   try {
-    const rows = await supabaseFetch("/rest/v1/chat_messages?select=*&order=created_at.asc&limit=100");
+    const rows = await supabaseFetch("/rest/v1/chat_messages?select=player_name,message,created_at&order=created_at.asc&limit=50");
     if (!rows || rows.length === 0) {
       container.innerHTML = "<p style='text-align:center;color:#aaa;'>No messages yet today. Be the first to say hi! 👋</p>";
       return;
@@ -729,7 +741,6 @@ function setupChat() {
   setupChatEmojiPicker();
   announceClosureInChat();
   loadChatMessages();
-  setInterval(loadChatMessages, 5000);
 }
 
 // ====================
@@ -749,9 +760,9 @@ async function loadAdminData() {
   if (dataDiv) dataDiv.style.display = 'block';
 
   try {
-    const bkRes = await supabaseFetch('/rest/v1/bookings?order=created_at.desc');
+    const bkRes = await supabaseFetch('/rest/v1/bookings?select=customer_name,mobile,booking_date,start_time,court,duration_hours,price,status,created_at&order=created_at.desc');
     const bookings = bkRes || [];
-    const opRes = await supabaseFetch('/rest/v1/open_play?order=created_at.desc');
+    const opRes = await supabaseFetch('/rest/v1/open_play?select=player_name,mobile,play_date,skill_level&order=created_at.desc');
     const openplay = opRes || [];
     adminData.bookings = bookings.filter(b => b.status !== 'cancelled');
     adminData.cancelled = bookings.filter(b => b.status === 'cancelled');
@@ -762,7 +773,6 @@ async function loadAdminData() {
   }
 }
 
-// ===== ITO ANG BAGONG switchAdminTab NA MAY TAMANG KULAY =====
 function switchAdminTab(tab) {
   currentAdminTab = tab;
   const tabs = ['bookings', 'openplay', 'cancelled'];
@@ -770,13 +780,11 @@ function switchAdminTab(tab) {
     const btn = document.getElementById(`tab${t.charAt(0).toUpperCase() + t.slice(1)}`);
     if (btn) {
       if (t === tab) {
-        // Active tab - purple gradient with white text
         btn.style.background = 'linear-gradient(135deg, #7c3aed, #6d28d9)';
         btn.style.color = '#ffffff';
         btn.style.border = '2px solid #6d28d9';
         btn.style.boxShadow = '0 2px 8px rgba(124,58,237,0.3)';
       } else {
-        // Inactive tab - white with dark text
         btn.style.background = '#ffffff';
         btn.style.color = '#333333';
         btn.style.border = '2px solid #dddddd';
@@ -838,7 +846,7 @@ function renderAdminContent() {
 }
 
 // ====================
-// START
+// START (OPTIMIZED — Visibility-aware, RAF-based)
 // ====================
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -856,10 +864,39 @@ document.addEventListener("DOMContentLoaded", () => {
   loadOpenPlay();
 
   updateLiveClosureStatus();
-  setInterval(updateLiveClosureStatus, 60000);
 
-  setInterval(() => {
-    loadBookings();
-    loadOpenPlay();
-  }, POLL_MS);
+  // SMART POLLING: Hindi mag-fetch kung naka-hidden ang tab
+  let lastChatLoad = 0;
+  let lastDataLoad = 0;
+  let lastStatusUpdate = 0;
+
+  function smartLoop(timestamp) {
+    if (document.visibilityState === 'visible') {
+      if (timestamp - lastChatLoad >= CHAT_POLL_MS) {
+        lastChatLoad = timestamp;
+        loadChatMessages();
+      }
+      if (timestamp - lastDataLoad >= DATA_POLL_MS) {
+        lastDataLoad = timestamp;
+        loadBookings();
+        loadOpenPlay();
+      }
+      if (timestamp - lastStatusUpdate >= STATUS_POLL_MS) {
+        lastStatusUpdate = timestamp;
+        updateLiveClosureStatus();
+      }
+    }
+    requestAnimationFrame(smartLoop);
+  }
+  requestAnimationFrame(smartLoop);
+
+  // Re-fetch agad kapag binalik ng user ang tab
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === 'visible') {
+      loadChatMessages();
+      loadBookings();
+      loadOpenPlay();
+      updateLiveClosureStatus();
+    }
+  });
 });
