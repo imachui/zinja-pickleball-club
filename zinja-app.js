@@ -20,10 +20,13 @@ const PLAYERS_PER_COURT = 16;
 const TOTAL_COURTS = 2;
 const OPEN_PLAY_FEE = 50;
 
+// ===== AUTO-GENERATE SETTINGS =====
 const MATCH_DURATION_MIN = 15;
 const MATCH_TARGET_SCORE = 11;
-const GAMES_PER_PLAYER = 3;
-const FEW_PLAYERS_THRESHOLD = 8; // < 8 = mixed, >= 8 = skill-based
+const GAMES_PER_PLAYER = 3;         // Minimum games per player
+const FEW_PLAYERS_THRESHOLD = 8;    // < 8 = mixed, >= 8 = skill-based
+const SESSION_START_TIME = "18:00"; // 6 PM
+const SESSION_END_TIME = "23:45";   // 11:45 PM (last match ends 12:00 AM)
 
 const MORNING_START_MIN = 6 * 60;
 const MORNING_END_MIN = 16 * 60;
@@ -665,7 +668,7 @@ async function cancelOpenPlay() {
 }
 
 // ====================
-// AUTO MATCH SYSTEM (SKILL-BASED + FEW PLAYERS MODE)
+// AUTO MATCH SYSTEM (6PM - 12AM AUTO GENERATE)
 // ====================
 
 function seededShuffle(array, seed) {
@@ -698,21 +701,6 @@ function groupPlayersBySkill(players) {
   return { advanced, intermediate, beginner, flexible };
 }
 
-function pushMatchesForPool(pool, tierName, tierColor, allMatches) {
-  for (let round = 0; round < GAMES_PER_PLAYER; round++) {
-    const shuffled = seededShuffle(pool, `${tierName}-round-${round}`);
-    for (let i = 0; i + 4 <= shuffled.length; i += 4) {
-      allMatches.push({
-        tier: tierName,
-        tierColor: tierColor,
-        round: round + 1,
-        teamA: [shuffled[i], shuffled[i+1]],
-        teamB: [shuffled[i+2], shuffled[i+3]]
-      });
-    }
-  }
-}
-
 function generateAutoSchedule(players, startTime, availableCourts) {
   if (!players || players.length < 4 || !availableCourts || availableCourts.length === 0) return [];
 
@@ -720,54 +708,82 @@ function generateAutoSchedule(players, startTime, availableCourts) {
   const totalPlayers = players.length;
   const allMatches = [];
 
-  // ===== FEW PLAYERS MODE: mixed matching (walang skill grouping) =====
+  // Build pools
+  const pools = [];
   if (totalPlayers < FEW_PLAYERS_THRESHOLD) {
-    pushMatchesForPool(players, 'Mixed', '#7c3aed', allMatches);
+    pools.push({ name: 'Mixed', color: '#7c3aed', players: players });
   } else {
-    // ===== MANY PLAYERS MODE: skill-based grouping =====
     const groups = groupPlayersBySkill(players);
-
-    // Tiers with >= 4 players get their own matches
-    if (groups.advanced.length >= 4) {
-      pushMatchesForPool(groups.advanced, 'Advanced', '#dc2626', allMatches);
-    }
-    if (groups.intermediate.length >= 4) {
-      pushMatchesForPool(groups.intermediate, 'Intermediate', '#f59e0b', allMatches);
-    }
-    if (groups.beginner.length >= 4) {
-      pushMatchesForPool(groups.beginner, 'Beginner', '#10b981', allMatches);
-    }
-
-    // Small tiers + "Any level" go to Mixed pool
+    if (groups.advanced.length >= 4) pools.push({ name: 'Advanced', color: '#dc2626', players: groups.advanced });
+    if (groups.intermediate.length >= 4) pools.push({ name: 'Intermediate', color: '#f59e0b', players: groups.intermediate });
+    if (groups.beginner.length >= 4) pools.push({ name: 'Beginner', color: '#10b981', players: groups.beginner });
+    
     const mixedPool = [];
     if (groups.advanced.length > 0 && groups.advanced.length < 4) mixedPool.push(...groups.advanced);
     if (groups.intermediate.length > 0 && groups.intermediate.length < 4) mixedPool.push(...groups.intermediate);
     if (groups.beginner.length > 0 && groups.beginner.length < 4) mixedPool.push(...groups.beginner);
     mixedPool.push(...groups.flexible);
+    if (mixedPool.length >= 4) pools.push({ name: 'Mixed', color: '#7c3aed', players: mixedPool });
+  }
 
-    if (mixedPool.length >= 4) {
-      pushMatchesForPool(mixedPool, 'Mixed', '#7c3aed', allMatches);
-    }
+  if (pools.length === 0) return [];
+
+  // Calculate max rounds based on session time
+  // Session: 6PM (1080 min) to 11:45 PM (1425 min) — last match ends 12AM
+  const sessionStartMin = timeToMinutes(SESSION_START_TIME);
+  const sessionEndMin = timeToMinutes(SESSION_END_TIME);
+  const sessionMinutes = sessionEndMin - sessionStartMin; // ~405 min
+  const maxWaves = Math.floor(sessionMinutes / MATCH_DURATION_MIN);
+  
+  // Calculate matches per round across all pools
+  const matchesPerRound = pools.reduce((sum, p) => sum + Math.floor(p.players.length / 4), 0);
+  if (matchesPerRound === 0) return [];
+  
+  const wavesPerRound = Math.ceil(matchesPerRound / numCourts);
+  const maxRoundsByTime = Math.floor(maxWaves / wavesPerRound);
+  
+  // Total rounds = time-based max (auto hanggang 12AM)
+  const totalRounds = Math.max(GAMES_PER_PLAYER, maxRoundsByTime);
+
+  // Generate all matches
+  for (let round = 0; round < totalRounds; round++) {
+    pools.forEach(p => {
+      const shuffled = seededShuffle(p.players, `${p.name}-round-${round}`);
+      for (let i = 0; i + 4 <= shuffled.length; i += 4) {
+        allMatches.push({
+          tier: p.name,
+          tierColor: p.color,
+          round: round + 1,
+          teamA: [shuffled[i], shuffled[i+1]],
+          teamB: [shuffled[i+2], shuffled[i+3]]
+        });
+      }
+    });
   }
 
   if (allMatches.length === 0) return [];
 
-  // Group by round para sequential ang oras (Round 1 first, then 2, then 3)
+  // Group by round
   const roundsMap = {};
   allMatches.forEach(m => {
     if (!roundsMap[m.round]) roundsMap[m.round] = [];
     roundsMap[m.round].push(m);
   });
 
+  // Schedule sequentially by round, parallel by court
   const schedule = [];
   let currentTime = startTime;
   const sortedRounds = Object.keys(roundsMap).map(Number).sort((a, b) => a - b);
 
   sortedRounds.forEach(roundNum => {
     const roundMatches = roundsMap[roundNum];
-    // Waves: numCourts matches run in parallel
     for (let i = 0; i < roundMatches.length; i += numCourts) {
       const wave = roundMatches.slice(i, i + numCourts);
+      
+      // Stop if beyond 11:45 PM (so last match ends exactly at 12:00 AM)
+      const currentMinutes = timeToMinutes(currentTime);
+      if (currentMinutes >= sessionEndMin) return;
+      
       wave.forEach((match, idx) => {
         match.court = availableCourts[idx];
         match.startTime = currentTime;
@@ -798,7 +814,10 @@ function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts) {
   const courtsLabel = numCourts === 2 ? "🏓 2 Courts (parallel)" : `🏓 1 Court (Court ${availableCourts[0]})`;
   const modeLabel = playerCount < FEW_PLAYERS_THRESHOLD ? "🎲 Mixed Mode (few players)" : "🎯 Skill-Based Mode";
 
-  // Tier summary
+  const lastMatch = schedule[schedule.length - 1];
+  const sessionEnd = lastMatch ? formatTime12(lastMatch.endTime) : "N/A";
+  const gamesPerPlayer = Math.round(schedule.length * 4 / playerCount);
+
   const tierCounts = {};
   schedule.forEach(m => { tierCounts[m.tier] = (tierCounts[m.tier] || 0) + 1; });
   const tierSummary = Object.entries(tierCounts).map(([t, c]) => `${t}: ${c}`).join(' · ');
@@ -808,7 +827,8 @@ function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts) {
       <p style="font-size: 1.1em; margin: 4px 0;">📅 <strong>${formatDate(dateStr)}</strong></p>
       <p style="font-size: 0.95em; margin: 4px 0; opacity: 0.9;">👥 ${playerCount} players · ${courtsLabel}</p>
       <p style="font-size: 0.95em; margin: 4px 0; opacity: 0.9;">🏓 ${schedule.length} matches · ⏱️ Estimated session: <strong>${sessionLength}</strong></p>
-      <p style="font-size: 0.8em; margin: 4px 0; opacity: 0.7;">(15 min/match to 11 points)</p>
+      <p style="font-size: 0.95em; margin: 4px 0; opacity: 0.9;">🕐 Start: <strong>${formatTime12(SESSION_START_TIME)}</strong> · End: <strong>${sessionEnd}</strong></p>
+      <p style="font-size: 0.85em; margin: 4px 0; opacity: 0.75;">~${gamesPerPlayer} games per player · 15 min/match to 11 points</p>
       <p style="font-size: 0.85em; margin: 8px 0 0 0; opacity: 0.85;">${modeLabel} — ${tierSummary}</p>
     </div>
   `;
@@ -850,7 +870,7 @@ function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts) {
     `;
   });
 
-  html += `<p style="text-align: center; font-size: 0.85em; opacity: 0.7; margin-top: 24px;">💡 ${playerCount < FEW_PLAYERS_THRESHOLD ? 'Mixed mode — lahat magkakasama.' : 'Skill-based matching — Advanced vs Advanced, Beginner vs Beginner.'} Admin can re-shuffle from the Admin Panel.</p>`;
+  html += `<p style="text-align: center; font-size: 0.85em; opacity: 0.7; margin-top: 24px;">💡 ${playerCount < FEW_PLAYERS_THRESHOLD ? 'Mixed mode — lahat magkakasama.' : 'Skill-based matching — Advanced vs Advanced, Beginner vs Beginner.'} Auto-generated 6PM-12AM. Admin can re-shuffle.</p>`;
   container.innerHTML = html;
 }
 
@@ -877,7 +897,7 @@ async function loadAutoMatchups(dateStr) {
     let seed = localStorage.getItem(seedKey);
     if (!seed) { seed = "default-seed"; localStorage.setItem(seedKey, seed); }
     const shuffled = seededShuffle(players, seed);
-    const schedule = generateAutoSchedule(shuffled, OPEN_PLAY_START_TIME, availableCourts);
+    const schedule = generateAutoSchedule(shuffled, SESSION_START_TIME, availableCourts);
     renderAutoSchedule(schedule, dateStr, shuffled.length, availableCourts);
   } catch (error) {
     console.error("Matchups error:", error);
@@ -915,12 +935,14 @@ async function renderAdminMatchups(dateStr) {
     const seedKey = `zinja_matchup_seed_${dateStr}`;
     let seed = localStorage.getItem(seedKey) || "default-seed";
     const shuffled = seededShuffle(players, seed);
-    const schedule = generateAutoSchedule(shuffled, OPEN_PLAY_START_TIME, availableCourts);
+    const schedule = generateAutoSchedule(shuffled, SESSION_START_TIME, availableCourts);
     const numCourts = availableCourts.length;
     const totalMinutes = Math.ceil(schedule.length / numCourts) * MATCH_DURATION_MIN;
     const courtsLabel = numCourts === 2 ? "Courts 1 & 2" : `Court ${availableCourts[0]}`;
     const modeLabel = players.length < FEW_PLAYERS_THRESHOLD ? "Mixed Mode" : "Skill-Based Mode";
-    container.innerHTML = `<p style="color:#10b981; font-weight:600;">✅ ${courtsLabel} · ${shuffled.length} players · ${schedule.length} matches · ~${(totalMinutes/60).toFixed(1)}h total · ${modeLabel}</p>`;
+    const lastMatch = schedule[schedule.length - 1];
+    const endTime = lastMatch ? formatTime12(lastMatch.endTime) : "N/A";
+    container.innerHTML = `<p style="color:#10b981; font-weight:600;">✅ ${courtsLabel} · ${shuffled.length} players · ${schedule.length} matches · Ends ${endTime} · ${modeLabel}</p>`;
   } catch (error) {
     container.innerHTML = `<p style="color:red;">❌ ${error.message}</p>`;
   }
@@ -946,9 +968,7 @@ async function deleteOpenPlay(id) {
     alert("✅ Player removed.");
     await loadAdminData();
   } catch (error) { alert("❌ Delete failed: " + error.message); }
-}
-
-// ====================
+}// ====================
 // CLUB CHAT
 // ====================
 
@@ -1139,7 +1159,7 @@ function renderAdminContent() {
     html = `
       <div style="background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px;">
         <h3 style="color: #7c3aed; margin-top: 0;">🎲 Matchups Manager</h3>
-        <p style="color: #666; font-size: 0.9em;">Auto-generated schedule — each match to 11 points (~15 min). Auto-detects available courts & player count.</p>
+        <p style="color: #666; font-size: 0.9em;">Auto-generated schedule from 6PM to 12AM — matches to 11 points (~15 min). Auto-detects available courts & player count.</p>
         <p style="color: #888; font-size: 0.85em; font-style: italic;">Few players (<8) = Mixed Mode · Many players (≥8) = Skill-Based Mode</p>
         <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
           <input id="adminMatchDate" type="date" value="${today}" style="flex: 1; min-width: 200px; padding: 12px; border-radius: 8px; border: 1px solid #ddd;">
