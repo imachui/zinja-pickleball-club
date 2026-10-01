@@ -23,10 +23,10 @@ const OPEN_PLAY_FEE = 50;
 // ===== AUTO-GENERATE SETTINGS =====
 const MATCH_DURATION_MIN = 15;
 const MATCH_TARGET_SCORE = 11;
-const GAMES_PER_PLAYER = 3;         // Minimum games per player
-const FEW_PLAYERS_THRESHOLD = 8;    // < 8 = mixed, >= 8 = skill-based
-const SESSION_START_TIME = "18:00"; // 6 PM
-const SESSION_END_TIME = "23:45";   // 11:45 PM (last match ends 12:00 AM)
+const GAMES_PER_PLAYER = 3;
+const FEW_PLAYERS_THRESHOLD = 8;
+const SESSION_START_TIME = "18:00";
+const SESSION_END_TIME = "24:00";
 
 const MORNING_START_MIN = 6 * 60;
 const MORNING_END_MIN = 16 * 60;
@@ -668,7 +668,7 @@ async function cancelOpenPlay() {
 }
 
 // ====================
-// AUTO MATCH SYSTEM (6PM - 12AM AUTO GENERATE)
+// AUTO MATCH SYSTEM (TIME-CAPPED: 6PM-12AM)
 // ====================
 
 function seededShuffle(array, seed) {
@@ -706,9 +706,8 @@ function generateAutoSchedule(players, startTime, availableCourts) {
 
   const numCourts = availableCourts.length;
   const totalPlayers = players.length;
-  const allMatches = [];
 
-  // Build pools
+  // ===== BUILD POOLS =====
   const pools = [];
   if (totalPlayers < FEW_PLAYERS_THRESHOLD) {
     pools.push({ name: 'Mixed', color: '#7c3aed', players: players });
@@ -717,7 +716,7 @@ function generateAutoSchedule(players, startTime, availableCourts) {
     if (groups.advanced.length >= 4) pools.push({ name: 'Advanced', color: '#dc2626', players: groups.advanced });
     if (groups.intermediate.length >= 4) pools.push({ name: 'Intermediate', color: '#f59e0b', players: groups.intermediate });
     if (groups.beginner.length >= 4) pools.push({ name: 'Beginner', color: '#10b981', players: groups.beginner });
-    
+
     const mixedPool = [];
     if (groups.advanced.length > 0 && groups.advanced.length < 4) mixedPool.push(...groups.advanced);
     if (groups.intermediate.length > 0 && groups.intermediate.length < 4) mixedPool.push(...groups.intermediate);
@@ -728,28 +727,25 @@ function generateAutoSchedule(players, startTime, availableCourts) {
 
   if (pools.length === 0) return [];
 
-  // Calculate max rounds based on session time
-  // Session: 6PM (1080 min) to 11:45 PM (1425 min) — last match ends 12AM
-  const sessionStartMin = timeToMinutes(SESSION_START_TIME);
-  const sessionEndMin = timeToMinutes(SESSION_END_TIME);
-  const sessionMinutes = sessionEndMin - sessionStartMin; // ~405 min
-  const maxWaves = Math.floor(sessionMinutes / MATCH_DURATION_MIN);
-  
-  // Calculate matches per round across all pools
-  const matchesPerRound = pools.reduce((sum, p) => sum + Math.floor(p.players.length / 4), 0);
-  if (matchesPerRound === 0) return [];
-  
-  const wavesPerRound = Math.ceil(matchesPerRound / numCourts);
-  const maxRoundsByTime = Math.floor(maxWaves / wavesPerRound);
-  
-  // Total rounds = time-based max (auto hanggang 12AM)
-  const totalRounds = Math.max(GAMES_PER_PLAYER, maxRoundsByTime);
+  // ===== TIME CAP CALCULATION =====
+  const sessionStartMin = timeToMinutes(SESSION_START_TIME); // 1080 = 6 PM
+  const sessionEndMin = 24 * 60; // 1440 = 12 AM
+  const sessionMinutes = sessionEndMin - sessionStartMin; // 360 min
+  const maxWaves = Math.floor(sessionMinutes / MATCH_DURATION_MIN); // 24 waves max
+  const maxTotalMatches = maxWaves * numCourts; // 48 matches (2 courts) or 24 matches (1 court)
 
-  // Generate all matches
-  for (let round = 0; round < totalRounds; round++) {
+  // ===== GENERATE ROUNDS UNTIL CAP IS REACHED =====
+  const allMatches = [];
+  let round = 0;
+  let matchCount = 0;
+
+  while (matchCount < maxTotalMatches) {
+    let matchesThisRound = 0;
     pools.forEach(p => {
+      if (matchCount + matchesThisRound >= maxTotalMatches) return;
       const shuffled = seededShuffle(p.players, `${p.name}-round-${round}`);
       for (let i = 0; i + 4 <= shuffled.length; i += 4) {
+        if (matchCount + matchesThisRound >= maxTotalMatches) break;
         allMatches.push({
           tier: p.name,
           tierColor: p.color,
@@ -757,33 +753,36 @@ function generateAutoSchedule(players, startTime, availableCourts) {
           teamA: [shuffled[i], shuffled[i+1]],
           teamB: [shuffled[i+2], shuffled[i+3]]
         });
+        matchesThisRound++;
       }
     });
+    if (matchesThisRound === 0) break;
+    matchCount += matchesThisRound;
+    round++;
+    if (round > 100) break; // Safety limit
   }
 
   if (allMatches.length === 0) return [];
 
-  // Group by round
+  // ===== GROUP BY ROUND =====
   const roundsMap = {};
   allMatches.forEach(m => {
     if (!roundsMap[m.round]) roundsMap[m.round] = [];
     roundsMap[m.round].push(m);
   });
 
-  // Schedule sequentially by round, parallel by court
+  // ===== SCHEDULE =====
   const schedule = [];
   let currentTime = startTime;
   const sortedRounds = Object.keys(roundsMap).map(Number).sort((a, b) => a - b);
 
-  sortedRounds.forEach(roundNum => {
+  for (const roundNum of sortedRounds) {
     const roundMatches = roundsMap[roundNum];
     for (let i = 0; i < roundMatches.length; i += numCourts) {
-      const wave = roundMatches.slice(i, i + numCourts);
-      
-      // Stop if beyond 11:45 PM (so last match ends exactly at 12:00 AM)
       const currentMinutes = timeToMinutes(currentTime);
-      if (currentMinutes >= sessionEndMin) return;
-      
+      if (currentMinutes + MATCH_DURATION_MIN > sessionEndMin) break;
+
+      const wave = roundMatches.slice(i, i + numCourts);
       wave.forEach((match, idx) => {
         match.court = availableCourts[idx];
         match.startTime = currentTime;
@@ -792,7 +791,8 @@ function generateAutoSchedule(players, startTime, availableCourts) {
       });
       currentTime = addMinutesToTime(currentTime, MATCH_DURATION_MIN);
     }
-  });
+    if (timeToMinutes(currentTime) + MATCH_DURATION_MIN > sessionEndMin) break;
+  }
 
   return schedule;
 }
@@ -816,7 +816,10 @@ function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts) {
 
   const lastMatch = schedule[schedule.length - 1];
   const sessionEnd = lastMatch ? formatTime12(lastMatch.endTime) : "N/A";
-  const gamesPerPlayer = Math.round(schedule.length * 4 / playerCount);
+
+  // Each player plays ~(total matches × 4) / playerCount / numCourts parallel factor
+  const totalPlayerSlots = schedule.length * 4;
+  const gamesPerPlayer = Math.round(totalPlayerSlots / playerCount);
 
   const tierCounts = {};
   schedule.forEach(m => { tierCounts[m.tier] = (tierCounts[m.tier] || 0) + 1; });
@@ -937,7 +940,6 @@ async function renderAdminMatchups(dateStr) {
     const shuffled = seededShuffle(players, seed);
     const schedule = generateAutoSchedule(shuffled, SESSION_START_TIME, availableCourts);
     const numCourts = availableCourts.length;
-    const totalMinutes = Math.ceil(schedule.length / numCourts) * MATCH_DURATION_MIN;
     const courtsLabel = numCourts === 2 ? "Courts 1 & 2" : `Court ${availableCourts[0]}`;
     const modeLabel = players.length < FEW_PLAYERS_THRESHOLD ? "Mixed Mode" : "Skill-Based Mode";
     const lastMatch = schedule[schedule.length - 1];
