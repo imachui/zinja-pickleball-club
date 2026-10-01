@@ -13,17 +13,15 @@ const STATUS_POLL_MS = 300000;
 const BOOKING_DISPLAY_DAYS = 30;
 const OPENPLAY_DISPLAY_DAYS = 7;
 
-// OPEN PLAY: 6PM - 12AM (CHANGED from 5PM)
-const OPEN_PLAY_START_MIN = 18 * 60;  // 6 PM
-const OPEN_PLAY_END_MIN = 24 * 60;     // 12 AM
+const OPEN_PLAY_START_MIN = 18 * 60;
+const OPEN_PLAY_END_MIN = 24 * 60;
 const OPEN_PLAY_START_TIME = "18:00";
 const PLAYERS_PER_COURT = 16;
 const TOTAL_COURTS = 2;
 const OPEN_PLAY_FEE = 50;
 
-// PRICING: Day rate 6AM-4PM (CHANGED from 5PM)
-const MORNING_START_MIN = 6 * 60;   // 6 AM
-const MORNING_END_MIN = 16 * 60;    // 4 PM (CHANGED from 17 = 5PM)
+const MORNING_START_MIN = 6 * 60;
+const MORNING_END_MIN = 16 * 60;
 const MORNING_RATE = 100;
 const EVENING_RATE = 150;
 
@@ -148,8 +146,6 @@ function calculateBookingPrice(startTime, durationHours) {
 
   for (let i = 0; i < Number(durationHours); i++) {
     const hourStart = startMin + (i * 60);
-    // MORNING: 6AM - 4PM = ₱100
-    // EVENING: 4PM - 12AM = ₱150
     if (hourStart >= MORNING_START_MIN && hourStart < MORNING_END_MIN) {
       total += MORNING_RATE;
       morningHours++;
@@ -635,11 +631,10 @@ async function cancelOpenPlay() {
 }
 
 // ====================
-// MATCHUPS SYSTEM (NEW)
+// MATCHUPS SYSTEM (IMPROVED - ALL PLAYERS INCLUDED)
 // ====================
 
 function seededShuffle(array, seed) {
-  // Deterministic shuffle based on seed
   const arr = [...array];
   let s = 0;
   for (let i = 0; i < String(seed).length; i++) s += String(seed).charCodeAt(i);
@@ -654,115 +649,236 @@ function seededShuffle(array, seed) {
   return arr;
 }
 
-async function generateMatchups() {
+function buildMatchups(players) {
+  // Build matchups: split into courts, then into matches with all players
+  const matchups = [];
+  let idx = 0;
+  let courtNum = 1;
+
+  while (idx < players.length && courtNum <= TOTAL_COURTS) {
+    const courtPlayers = players.slice(idx, idx + PLAYERS_PER_COURT);
+    idx += PLAYERS_PER_COURT;
+
+    let mIdx = 0;
+    let matchNum = 1;
+    while (mIdx < courtPlayers.length) {
+      const remaining = courtPlayers.length - mIdx;
+      let teamA, teamB, reserve = false;
+
+      if (remaining >= 4) {
+        teamA = courtPlayers.slice(mIdx, mIdx + 2);
+        teamB = courtPlayers.slice(mIdx + 2, mIdx + 4);
+        mIdx += 4;
+      } else if (remaining === 3) {
+        // 2v1
+        teamA = courtPlayers.slice(mIdx, mIdx + 2);
+        teamB = courtPlayers.slice(mIdx + 2, mIdx + 3);
+        mIdx += 3;
+      } else if (remaining === 2) {
+        // 1v1
+        teamA = [courtPlayers[mIdx]];
+        teamB = [courtPlayers[mIdx + 1]];
+        mIdx += 2;
+      } else {
+        // 1 player remaining - reserve
+        teamA = [courtPlayers[mIdx]];
+        teamB = [];
+        mIdx += 1;
+        reserve = true;
+      }
+
+      matchups.push({
+        court: courtNum,
+        matchNumber: matchNum,
+        teamA,
+        teamB,
+        reserve
+      });
+      matchNum++;
+    }
+    courtNum++;
+  }
+
+  return matchups;
+}
+
+function renderMatchups(matchups, dateStr, playerCount) {
   const container = document.getElementById("matchupsContainer");
-  const dateInput = document.getElementById("matchDate");
-  const date = dateInput?.value;
   if (!container) return;
-  if (!date) { container.innerHTML = '<p style="text-align:center;color:#f59e0b;">⚠️ Please select a date first.</p>'; return; }
 
-  container.innerHTML = '<p style="text-align:center;">⏳ Loading players...</p>';
+  if (matchups.length === 0) {
+    container.innerHTML = `<p style="text-align:center;color:#f59e0b;">⚠️ No matchups for ${formatDate(dateStr)}.</p>`;
+    return;
+  }
 
+  let html = `
+    <div style="text-align: center; margin-bottom: 20px;">
+      <p style="font-size: 1.1em; margin: 8px 0;">📅 <strong>${formatDate(dateStr)}</strong> · ${playerCount} players · ${matchups.length} matches</p>
+    </div>
+  `;
+
+  let matchCounter = 0;
+  let currentCourt = null;
+  matchups.forEach(m => {
+    if (m.court !== currentCourt) {
+      html += `<h3 style="color: #a78bfa; margin-top: 24px; margin-bottom: 12px;">🏓 Court ${m.court}</h3>`;
+      currentCourt = m.court;
+    }
+    matchCounter++;
+    const isNow = matchCounter === 1;
+    const isNext = matchCounter === 2;
+    let cls = "matchup-card";
+    let badge = `⏳ MATCH #${matchCounter}`;
+    if (m.reserve) { cls += " reserve"; badge = `💤 RESERVE`; }
+    else if (isNow) { cls += " now-playing"; badge = "🟢 NOW PLAYING"; }
+    else if (isNext) { cls += " up-next"; badge = "🟡 UP NEXT"; }
+
+    if (m.reserve) {
+      html += `
+        <div class="${cls}">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <span style="font-size: 0.85em; font-weight: 700;">${badge}</span>
+            <span style="font-size: 0.75em; opacity: 0.7;">Court ${m.court}</span>
+          </div>
+          <div class="team-block">
+            <strong style="color: #6b7280;">Waiting:</strong>
+            <span>${escapeHtml(m.teamA[0].player_name)}</span>
+          </div>
+        </div>
+      `;
+    } else {
+      const teamALabel = m.teamA.length === 2 ? "Team A:" : "Team A (1):";
+      const teamBLabel = m.teamB.length === 2 ? "Team B:" : "Team B (1):";
+      html += `
+        <div class="${cls}">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <span style="font-size: 0.85em; font-weight: 700;">${badge}</span>
+            <span style="font-size: 0.75em; opacity: 0.7;">Match ${m.matchNumber} · Court ${m.court}</span>
+          </div>
+          <div class="team-block">
+            <strong style="color: #10b981;">${teamALabel}</strong>
+            ${m.teamA.map(p => `<span>${escapeHtml(p.player_name)}</span>`).join('<span style="opacity:0.5;">&</span>')}
+          </div>
+          <div class="vs-badge">— VS —</div>
+          <div class="team-block">
+            <strong style="color: #f59e0b;">${teamBLabel}</strong>
+            ${m.teamB.map(p => `<span>${escapeHtml(p.player_name)}</span>`).join('<span style="opacity:0.5;">&</span>')}
+          </div>
+        </div>
+      `;
+    }
+  });
+
+  html += `<p style="text-align: center; font-size: 0.85em; opacity: 0.7; margin-top: 24px;">💡 Matchups ay random. I-click ng admin ang "Re-Shuffle" para mag-iba.</p>`;
+  container.innerHTML = html;
+}
+
+// Public view: load matchups for a date (read-only)
+async function loadMatchupsForDate(dateStr) {
+  const container = document.getElementById("matchupsContainer");
+  if (!container || !dateStr) return;
+  container.innerHTML = '<p style="text-align:center;">⏳ Loading matchups...</p>';
   try {
-    const players = await supabaseFetch(`/rest/v1/open_play?select=player_name,skill_level&play_date=eq.${encodeURIComponent(date)}`);
+    const players = await supabaseFetch(`/rest/v1/open_play?select=player_name,skill_level&play_date=eq.${encodeURIComponent(dateStr)}`);
     if (!players || players.length === 0) {
-      container.innerHTML = `<p style="text-align:center;color:#f59e0b;">⚠️ No Open Play registrations for ${formatDate(date)}.</p>`;
+      container.innerHTML = `<p style="text-align:center;color:#f59e0b;">⚠️ Walang Open Play registrations sa ${formatDate(dateStr)}.</p>`;
       return;
     }
-
-    // Get or create a shuffle seed for this date (saved in localStorage)
-    const seedKey = `zinja_matchup_seed_${date}`;
+    const seedKey = `zinja_matchup_seed_${dateStr}`;
     let seed = localStorage.getItem(seedKey);
     if (!seed) {
       seed = Math.random().toString(36).substring(2, 10);
       localStorage.setItem(seedKey, seed);
     }
-
-    // Shuffle players deterministically
     const shuffled = seededShuffle(players, seed);
-
-    // Build matchups: split into 2 courts, 16 players each
-    const playersPerCourt = PLAYERS_PER_COURT; // 16
-    const playersPerMatch = 4; // 2v2 doubles
-    const matchesPerCourt = Math.floor(playersPerCourt / playersPerMatch); // 4
-
-    const courts = {};
-    for (let c = 1; c <= TOTAL_COURTS; c++) courts[c] = [];
-
-    let idx = 0;
-    for (let c = 1; c <= TOTAL_COURTS; c++) {
-      const courtPlayers = shuffled.slice(idx, idx + playersPerCourt);
-      idx += playersPerCourt;
-      for (let m = 0; m < matchesPerCourt; m++) {
-        const matchPlayers = courtPlayers.slice(m * playersPerMatch, (m + 1) * playersPerMatch);
-        if (matchPlayers.length < playersPerMatch) break;
-        courts[c].push({
-          matchNumber: m + 1,
-          teamA: [matchPlayers[0], matchPlayers[1]],
-          teamB: [matchPlayers[2], matchPlayers[3]]
-        });
-      }
-    }
-
-    // Render matchups
-    let html = `
-      <div style="text-align: center; margin-bottom: 20px;">
-        <p style="font-size: 1.1em; margin: 8px 0;">📅 <strong>${formatDate(date)}</strong> · ${shuffled.length} players</p>
-        <button type="button" onclick="rerollMatchups()" style="padding: 8px 20px; background: #ef4444; color: #fff; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 0.9em;">🔀 Re-Shuffle Matchups</button>
-      </div>
-    `;
-
-    let matchCounter = 0;
-    for (let c = 1; c <= TOTAL_COURTS; c++) {
-      const matches = courts[c];
-      if (matches.length === 0) continue;
-      html += `<h3 style="color: #a78bfa; margin-top: 24px; margin-bottom: 12px;">🏓 Court ${c}</h3>`;
-      matches.forEach(m => {
-        matchCounter++;
-        const isNow = matchCounter === 1;
-        const isNext = matchCounter === 2;
-        const cls = isNow ? "matchup-card now-playing" : (isNext ? "matchup-card up-next" : "matchup-card");
-        const badge = isNow ? '🟢 NOW PLAYING' : (isNext ? '🟡 UP NEXT' : `⏳ MATCH #${matchCounter}`);
-        html += `
-          <div class="${cls}">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-              <span style="font-size: 0.85em; font-weight: 700; opacity: 0.9;">${badge}</span>
-              <span style="font-size: 0.75em; opacity: 0.7;">Match ${m.matchNumber} · Court ${c}</span>
-            </div>
-            <div class="team-block">
-              <strong style="color: #10b981;">Team A:</strong>
-              <span>${escapeHtml(m.teamA[0].player_name)}</span>
-              <span style="opacity: 0.5;">&</span>
-              <span>${escapeHtml(m.teamA[1].player_name)}</span>
-            </div>
-            <div class="vs-badge">— VS —</div>
-            <div class="team-block">
-              <strong style="color: #f59e0b;">Team B:</strong>
-              <span>${escapeHtml(m.teamB[0].player_name)}</span>
-              <span style="opacity: 0.5;">&</span>
-              <span>${escapeHtml(m.teamB[1].player_name)}</span>
-            </div>
-          </div>
-        `;
-      });
-    }
-
-    html += `<p style="text-align: center; font-size: 0.85em; opacity: 0.7; margin-top: 24px;">💡 Tip: I-click ang "Re-Shuffle" para mag-iba ang random teams.</p>`;
-
-    container.innerHTML = html;
+    const matchups = buildMatchups(shuffled);
+    renderMatchups(matchups, dateStr, shuffled.length);
   } catch (error) {
     console.error("Matchups error:", error);
-    container.innerHTML = `<p style="text-align:center;color:#ef4444;">❌ Unable to load matchups: ${error.message}</p>`;
+    container.innerHTML = `<p style="text-align:center;color:#ef4444;">❌ ${error.message}</p>`;
   }
 }
 
-function rerollMatchups() {
-  const dateInput = document.getElementById("matchDate");
-  const date = dateInput?.value;
-  if (!date) return;
-  // Clear the seed para mag-generate ng bago
-  localStorage.removeItem(`zinja_matchup_seed_${date}`);
-  generateMatchups();
+// Admin: generate matchups (with password check)
+async function adminGenerateMatchups() {
+  const pw = prompt("Enter admin password to generate matchups:");
+  if (pw !== ADMIN_PASSWORD) { alert("❌ Invalid password"); return; }
+  const dateInput = document.getElementById("adminMatchDate");
+  const dateStr = dateInput?.value;
+  if (!dateStr) { alert("Please select a date first."); return; }
+  // Clear seed to force regenerate
+  localStorage.removeItem(`zinja_matchup_seed_${dateStr}`);
+  await loadMatchupsForDate(dateStr);
+  // Also update admin matchups preview
+  renderAdminMatchups(dateStr);
+}
+
+// Admin: re-shuffle (with password check)
+async function adminRerollMatchups() {
+  const pw = prompt("Enter admin password to re-shuffle:");
+  if (pw !== ADMIN_PASSWORD) { alert("❌ Invalid password"); return; }
+  const dateInput = document.getElementById("adminMatchDate");
+  const dateStr = dateInput?.value;
+  if (!dateStr) { alert("Please select a date first."); return; }
+  localStorage.removeItem(`zinja_matchup_seed_${dateStr}`);
+  await renderAdminMatchups(dateStr);
+  await loadMatchupsForDate(dateStr);
+}
+
+// Admin: preview matchups
+async function renderAdminMatchups(dateStr) {
+  const container = document.getElementById("adminMatchupsContainer");
+  if (!container || !dateStr) return;
+  container.innerHTML = '<p style="text-align:center;">⏳ Loading...</p>';
+  try {
+    const players = await supabaseFetch(`/rest/v1/open_play?select=player_name,skill_level&play_date=eq.${encodeURIComponent(dateStr)}`);
+    if (!players || players.length === 0) {
+      container.innerHTML = `<p style="color:#888;">Walang players sa ${formatDate(dateStr)}.</p>`;
+      return;
+    }
+    const seedKey = `zinja_matchup_seed_${dateStr}`;
+    let seed = localStorage.getItem(seedKey);
+    if (!seed) {
+      seed = Math.random().toString(36).substring(2, 10);
+      localStorage.setItem(seedKey, seed);
+    }
+    const shuffled = seededShuffle(players, seed);
+    const matchups = buildMatchups(shuffled);
+    renderMatchups(matchups, dateStr, shuffled.length);
+    container.innerHTML = `<p style="color:#10b981; font-weight:600;">✅ Matchups generated for ${formatDate(dateStr)} · ${shuffled.length} players · ${matchups.length} matches</p>`;
+  } catch (error) {
+    container.innerHTML = `<p style="color:red;">❌ ${error.message}</p>`;
+  }
+}
+
+// ====================
+// ADMIN DELETE FUNCTIONS
+// ====================
+
+async function deleteBooking(id) {
+  const pw = prompt("Enter admin password to delete this booking:");
+  if (pw !== ADMIN_PASSWORD) { alert("❌ Invalid password"); return; }
+  if (!confirm("Sigurado ka bang gusto mong i-delete itong booking na ito? Hindi na ito maibabalik.")) return;
+  try {
+    await supabaseFetch(`/rest/v1/bookings?id=eq.${id}`, { method: "DELETE" });
+    alert("✅ Booking deleted.");
+    await loadAdminData();
+  } catch (error) {
+    alert("❌ Delete failed: " + error.message);
+  }
+}
+
+async function deleteOpenPlay(id) {
+  const pw = prompt("Enter admin password to delete this player:");
+  if (pw !== ADMIN_PASSWORD) { alert("❌ Invalid password"); return; }
+  if (!confirm("Sigurado ka bang gusto mong i-delete itong player registration?")) return;
+  try {
+    await supabaseFetch(`/rest/v1/open_play?id=eq.${id}`, { method: "DELETE" });
+    alert("✅ Player removed.");
+    await loadAdminData();
+  } catch (error) {
+    alert("❌ Delete failed: " + error.message);
+  }
 }// ====================
 // CLUB CHAT
 // ====================
@@ -871,7 +987,7 @@ function setupChat() {
 }
 
 // ====================
-// ADMIN PANEL
+// ADMIN PANEL (WITH DELETE + MATCHUPS)
 // ====================
 
 async function loadAdminData() {
@@ -887,9 +1003,9 @@ async function loadAdminData() {
   if (dataDiv) dataDiv.style.display = 'block';
 
   try {
-    const bkRes = await supabaseFetch('/rest/v1/bookings?select=customer_name,mobile,booking_date,start_time,court,duration_hours,price,created_at&order=created_at.desc');
+    const bkRes = await supabaseFetch('/rest/v1/bookings?select=id,customer_name,mobile,booking_date,start_time,court,duration_hours,price,created_at&order=created_at.desc');
     const bookings = bkRes || [];
-    const opRes = await supabaseFetch('/rest/v1/open_play?select=player_name,mobile,play_date,skill_level&order=created_at.desc');
+    const opRes = await supabaseFetch('/rest/v1/open_play?select=id,player_name,mobile,play_date,skill_level&order=created_at.desc');
     const openplay = opRes || [];
     adminData.bookings = bookings;
     adminData.cancelled = [];
@@ -902,7 +1018,7 @@ async function loadAdminData() {
 
 function switchAdminTab(tab) {
   currentAdminTab = tab;
-  const tabs = ['bookings', 'openplay', 'cancelled'];
+  const tabs = ['bookings', 'openplay', 'matchups'];
   tabs.forEach(t => {
     const btn = document.getElementById(`tab${t.charAt(0).toUpperCase() + t.slice(1)}`);
     if (btn) {
@@ -933,6 +1049,7 @@ function renderAdminContent() {
     } else {
       html = adminData.bookings.map(b => `
         <div class="admin-card">
+          <button class="admin-delete-btn" onclick="deleteBooking('${b.id}')">🗑 Delete</button>
           <h4>🏓 ${escapeHtml(b.customer_name || 'Unknown')}</h4>
           <p>📱 ${escapeHtml(b.mobile || 'No phone')}</p>
           <p>📅 ${escapeHtml(b.booking_date || 'No date')} at ${escapeHtml(b.start_time || 'No time')}</p>
@@ -947,6 +1064,7 @@ function renderAdminContent() {
     } else {
       html = adminData.openplay.map(o => `
         <div class="admin-card">
+          <button class="admin-delete-btn" onclick="deleteOpenPlay('${o.id}')">🗑 Delete</button>
           <h4>🏓 ${escapeHtml(o.player_name || 'Unknown')}</h4>
           <p>📱 ${escapeHtml(o.mobile || 'No phone')}</p>
           <p>📅 ${escapeHtml(o.play_date || 'No date')}</p>
@@ -954,10 +1072,28 @@ function renderAdminContent() {
         </div>
       `).join('');
     }
-  } else if (currentAdminTab === 'cancelled') {
-    html = '<p style="color: #888;">No cancelled bookings to display.</p>';
+  } else if (currentAdminTab === 'matchups') {
+    const today = new Date().toISOString().split("T")[0];
+    html = `
+      <div style="background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px;">
+        <h3 style="color: #7c3aed; margin-top: 0;">🎲 Matchups Generator</h3>
+        <p style="color: #666; font-size: 0.9em;">Pumili ng date at i-generate ang matchups. Lahat ng registered players ay isasama.</p>
+        <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
+          <input id="adminMatchDate" type="date" value="${today}" style="flex: 1; min-width: 200px; padding: 12px; border-radius: 8px; border: 1px solid #ddd;">
+          <button type="button" onclick="adminGenerateMatchups()" style="padding: 12px 24px; background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; border: none; border-radius: 8px; font-weight: 700; cursor: pointer;">🎲 Generate</button>
+          <button type="button" onclick="adminRerollMatchups()" style="padding: 12px 24px; background: #ef4444; color: #fff; border: none; border-radius: 8px; font-weight: 700; cursor: pointer;">🔀 Re-Shuffle</button>
+        </div>
+        <div id="adminMatchupsContainer">
+          <p style="color: #888;">Pumili ng date at i-click ang Generate.</p>
+        </div>
+      </div>
+    `;
   }
   container.innerHTML = html;
+  if (currentAdminTab === 'matchups') {
+    const dateInput = document.getElementById("adminMatchDate");
+    if (dateInput) dateInput.addEventListener("change", () => renderAdminMatchups(dateInput.value));
+  }
 }
 
 // ====================
@@ -980,7 +1116,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   updateLiveClosureStatus();
 
-  // Refresh Buttons
   const refreshBookingsBtn = document.getElementById("refreshBookingsBtn");
   if (refreshBookingsBtn) {
     refreshBookingsBtn.addEventListener("click", async () => {
@@ -1003,20 +1138,12 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Matchups Buttons
-  const generateMatchupsBtn = document.getElementById("generateMatchupsBtn");
-  if (generateMatchupsBtn) {
-    generateMatchupsBtn.addEventListener("click", generateMatchups);
+  // Auto-load matchups kapag nagbago ang playDate
+  const playDateInput = document.getElementById("playDate");
+  if (playDateInput) {
+    playDateInput.addEventListener("change", () => loadMatchupsForDate(playDateInput.value));
   }
 
-  // Set default match date to today
-  const matchDateInput = document.getElementById("matchDate");
-  if (matchDateInput) {
-    const today = new Date().toISOString().split("T")[0];
-    matchDateInput.value = today;
-  }
-
-  // Smart Polling
   let lastChatLoad = 0;
   let lastDataLoad = 0;
   let lastStatusUpdate = 0;
