@@ -23,9 +23,6 @@ const OPEN_PLAY_FEE = 50;
 const MATCH_DURATION_MIN = 15;
 const MATCH_TARGET_SCORE = 11;
 
-// ===== SKILL MATCHING THRESHOLDS =====
-// If total players < 12 → ALL MIXED (para lahat makalaro)
-// If >= 12 players AND may 2+ skill tiers na may 4+ players → SKILL-BASED
 const MIXED_MODE_THRESHOLD = 12;
 const MIN_TIER_SIZE = 4;
 
@@ -51,6 +48,12 @@ function getPHTNow() {
   const now = new Date();
   const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
   return new Date(utcMs + (PHT_OFFSET_HOURS * 3600000));
+}
+
+// ===== NEW: Get current PHT time in minutes (for auto-delete finished matches) =====
+function getPHTMinutes() {
+  const pht = getPHTNow();
+  return pht.getHours() * 60 + pht.getMinutes();
 }
 
 function generateCancelCode() {
@@ -680,7 +683,7 @@ async function cancelOpenPlay() {
 }
 
 // ====================
-// AUTO MATCH SYSTEM (BULLETPROOF VERSION)
+// AUTO MATCH SYSTEM
 // ====================
 
 function seededShuffle(array, seed) {
@@ -713,7 +716,6 @@ function groupPlayersBySkill(players) {
   return { advanced, intermediate, beginner, flexible };
 }
 
-// ===== SIMPLIFIED BULLETPROOF buildPools =====
 function buildPools(players) {
   const total = players.length;
   const groups = groupPlayersBySkill(players);
@@ -722,19 +724,15 @@ function buildPools(players) {
   const begCount = groups.beginner.length;
   const flexCount = groups.flexible.length;
 
-  // DEBUG
   console.log('=== MATCHUP DEBUG ===');
   console.log('Total players:', total);
   console.log('Advanced:', advCount, '| Intermediate:', intCount, '| Beginner:', begCount, '| Any level:', flexCount);
-  console.log('Mixed mode threshold:', MIXED_MODE_THRESHOLD);
 
-  // RULE 1: If < 12 players total → ALWAYS Mixed mode (kasama lahat)
   if (total < MIXED_MODE_THRESHOLD) {
-    console.log('→ MIXED MODE (few players, all included)');
+    console.log('→ MIXED MODE (few players)');
     return [{ name: 'Mixed', color: '#7c3aed', players: [...players] }];
   }
 
-  // RULE 2: Skill-based mode requires at least 2 tiers with >= 4 players each
   const hasAdvTier = advCount >= MIN_TIER_SIZE;
   const hasIntTier = intCount >= MIN_TIER_SIZE;
   const hasBegTier = begCount >= MIN_TIER_SIZE;
@@ -742,50 +740,34 @@ function buildPools(players) {
 
   console.log('Valid tiers:', validTierCount, '(need >= 2)');
 
-  // RULE 3: If < 2 valid tiers → Mixed mode (all included)
   if (validTierCount < 2) {
-    console.log('→ MIXED MODE (not enough valid skill tiers)');
+    console.log('→ MIXED MODE (not enough valid tiers)');
     return [{ name: 'Mixed', color: '#7c3aed', players: [...players] }];
   }
 
-  // RULE 4: Skill-based mode
   console.log('→ SKILL-BASED MODE');
   const pools = [];
   const leftover = [];
 
-  if (hasAdvTier) {
-    pools.push({ name: 'Advanced', color: '#dc2626', players: [...groups.advanced] });
-  } else {
-    leftover.push(...groups.advanced);
-  }
+  if (hasAdvTier) pools.push({ name: 'Advanced', color: '#dc2626', players: [...groups.advanced] });
+  else leftover.push(...groups.advanced);
 
-  if (hasIntTier) {
-    pools.push({ name: 'Intermediate', color: '#f59e0b', players: [...groups.intermediate] });
-  } else {
-    leftover.push(...groups.intermediate);
-  }
+  if (hasIntTier) pools.push({ name: 'Intermediate', color: '#f59e0b', players: [...groups.intermediate] });
+  else leftover.push(...groups.intermediate);
 
-  if (hasBegTier) {
-    pools.push({ name: 'Beginner', color: '#10b981', players: [...groups.beginner] });
-  } else {
-    leftover.push(...groups.beginner);
-  }
+  if (hasBegTier) pools.push({ name: 'Beginner', color: '#10b981', players: [...groups.beginner] });
+  else leftover.push(...groups.beginner);
 
-  // Always add flexible (Any level) players to leftover
   leftover.push(...groups.flexible);
-
-  console.log('Leftover players:', leftover.length);
 
   if (leftover.length >= MIN_TIER_SIZE) {
     pools.push({ name: 'Mixed', color: '#7c3aed', players: leftover });
   } else if (leftover.length > 0) {
-    // Merge sa pinakamalaking tier
     const largest = pools.reduce((max, p) => p.players.length > max.players.length ? p : max);
     largest.players.push(...leftover);
     console.log('Merged leftover into', largest.name);
   }
 
-  console.log('Final pools:', pools.map(p => `${p.name}(${p.players.length})`).join(', '));
   return pools;
 }
 
@@ -848,6 +830,7 @@ function generateAutoSchedule(players, startTime, availableCourts) {
   return schedule;
 }
 
+// ===== NEW: renderAutoSchedule with auto-delete finished matches =====
 function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts) {
   const container = document.getElementById("matchupsContainer");
   if (!container) return;
@@ -857,33 +840,59 @@ function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts) {
     return;
   }
 
+  // ===== AUTO-DELETE FINISHED MATCHES =====
+  const today = new Date().toISOString().split("T")[0];
+  const isToday = dateStr === today;
+  const currentPHTMin = getPHTMinutes();
+
+  let visibleSchedule = schedule;
+  if (isToday) {
+    visibleSchedule = schedule.filter(m => timeToMinutes(m.endTime) > currentPHTMin);
+  }
+
+  // If lahat tapos na
+  if (visibleSchedule.length === 0) {
+    container.innerHTML = `
+      <div style="text-align:center; padding: 40px 20px; background: rgba(124,58,237,0.15); border-radius: 12px; border: 1px solid rgba(124,58,237,0.3);">
+        <p style="font-size: 2em; margin: 8px 0;">🏆</p>
+        <p style="font-size: 1.2em; font-weight: 700; color: #7c3aed; margin: 8px 0;">Session Complete!</p>
+        <p style="font-size: 0.95em; opacity: 0.85; margin: 4px 0;">All matches for ${formatDate(dateStr)} are done.</p>
+        <p style="font-size: 0.85em; opacity: 0.7; margin-top: 16px;">Thanks for playing! See you next session (6PM-12AM).</p>
+      </div>
+    `;
+    return;
+  }
+
   const numCourts = availableCourts.length;
   const courtsLabel = numCourts === 2 ? "🏓 2 Courts (parallel)" : `🏓 1 Court (Court ${availableCourts[0]})`;
 
-  const lastMatch = schedule[schedule.length - 1];
+  const lastMatch = visibleSchedule[visibleSchedule.length - 1];
   const sessionEnd = lastMatch ? formatTime12(lastMatch.endTime) : "N/A";
 
-  const totalPlayerSlots = schedule.length * 4;
+  const totalPlayerSlots = visibleSchedule.length * 4;
   const gamesPerPlayer = Math.round(totalPlayerSlots / playerCount);
 
   const tierCounts = {};
-  schedule.forEach(m => { tierCounts[m.tier] = (tierCounts[m.tier] || 0) + 1; });
+  visibleSchedule.forEach(m => { tierCounts[m.tier] = (tierCounts[m.tier] || 0) + 1; });
   const tierSummary = Object.entries(tierCounts).map(([t, c]) => `${t}: ${c}`).join(' · ');
 
   const isMixedMode = tierCounts['Mixed'] && Object.keys(tierCounts).length === 1;
   const modeLabel = isMixedMode ? "🎲 Mixed Mode" : "🎯 Skill-Based Mode";
 
+  const completedCount = schedule.length - visibleSchedule.length;
+
   let html = `
     <div style="text-align: center; margin-bottom: 20px; padding: 16px; background: rgba(124,58,237,0.15); border-radius: 12px; border: 1px solid rgba(124,58,237,0.3);">
       <p style="font-size: 1.1em; margin: 4px 0;">📅 <strong>${formatDate(dateStr)}</strong></p>
       <p style="font-size: 0.95em; margin: 4px 0; opacity: 0.9;">👥 ${playerCount} players · ${courtsLabel}</p>
-      <p style="font-size: 0.95em; margin: 4px 0; opacity: 0.9;">🏓 ${schedule.length} matches · 🕐 Start: <strong>${formatTime12(SESSION_START_TIME)}</strong> · End: <strong>${sessionEnd}</strong></p>
+      <p style="font-size: 0.95em; margin: 4px 0; opacity: 0.9;">🏓 ${visibleSchedule.length} remaining · 🕐 End: <strong>${sessionEnd}</strong></p>
       <p style="font-size: 0.85em; margin: 4px 0; opacity: 0.75;">~${gamesPerPlayer} games per player · 15 min/match to 11 points</p>
       <p style="font-size: 0.85em; margin: 8px 0 0 0; opacity: 0.85;">${modeLabel} — ${tierSummary}</p>
+      ${completedCount > 0 ? `<p style="font-size: 0.8em; margin: 8px 0 0 0; opacity: 0.6;">✅ ${completedCount} match${completedCount === 1 ? '' : 'es'} completed (auto-hidden)</p>` : ''}
     </div>
   `;
 
-  schedule.forEach((m, idx) => {
+  visibleSchedule.forEach((m, idx) => {
     const isNow = idx < numCourts;
     const isNext = idx >= numCourts && idx < numCourts * 2;
     let cls = "matchup-card";
@@ -920,7 +929,7 @@ function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts) {
     `;
   });
 
-  html += `<p style="text-align: center; font-size: 0.85em; opacity: 0.7; margin-top: 24px;">💡 ${isMixedMode ? 'Mixed mode — lahat magkakasama.' : 'Skill-based matching — Advanced vs Advanced, Beginner vs Beginner.'} Auto-generated 6PM-12AM. Admin can re-shuffle.</p>`;
+  html += `<p style="text-align: center; font-size: 0.85em; opacity: 0.7; margin-top: 24px;">💡 ${isMixedMode ? 'Mixed mode — all together.' : 'Skill-based matching — Advanced vs Advanced, Beginner vs Beginner.'} Finished matches are auto-hidden. Admin can re-shuffle.</p>`;
   container.innerHTML = html;
 }
 
@@ -1292,6 +1301,14 @@ document.addEventListener("DOMContentLoaded", () => {
     matchDateInput.addEventListener("change", () => loadAutoMatchups(matchDateInput.value));
     loadAutoMatchups(today);
   }
+
+  // ===== NEW: Auto-refresh matchups every 1 minute (para mag-update ang auto-delete) =====
+  setInterval(async () => {
+    const matchDateInput = document.getElementById("matchDate");
+    if (matchDateInput?.value && document.visibilityState === 'visible') {
+      await loadAutoMatchups(matchDateInput.value);
+    }
+  }, 60000);
 
   let lastChatLoad = 0;
   let lastDataLoad = 0;
