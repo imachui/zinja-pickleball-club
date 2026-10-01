@@ -12,14 +12,12 @@
     .admin-card h4 { margin: 0 0 8px 0; color: #7c3aed; }
     .admin-card p { margin: 4px 0; font-size: 0.92em; color: #444; }
     .admin-badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 0.78em; font-weight: 600; background: #dcfce7; color: #166534; }
-    .admin-badge.cancelled { background: #fee2e2; color: #991b1b; }
     .admin-tab-btn { padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.95em; transition: all 0.2s; font-family: inherit; }
     .admin-delete-btn { position: absolute; top: 12px; right: 12px; background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.85em; font-weight: 600; }
     .admin-delete-btn:hover { background: #dc2626; }
     .matchup-card { background: linear-gradient(135deg, #1e293b, #0f172a); border-radius: 12px; padding: 16px; margin-bottom: 12px; border-left: 4px solid #7c3aed; color: #fff; }
     .matchup-card.now-playing { border-left-color: #10b981; background: linear-gradient(135deg, #064e3b, #065f46); }
     .matchup-card.up-next { border-left-color: #f59e0b; background: linear-gradient(135deg, #78350f, #92400e); }
-    .matchup-card.reserve { border-left-color: #6b7280; opacity: 0.7; }
     .team-block { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: rgba(255,255,255,0.1); border-radius: 8px; margin: 4px 0; flex-wrap: wrap; }
     .vs-badge { text-align: center; font-weight: 700; color: #a78bfa; padding: 4px 0; }
   </style>
@@ -69,7 +67,7 @@
   <section id="download" style="background: linear-gradient(135deg, #7c3aed 0%, #06b6d4 100%); padding: 60px 20px; text-align: center; color: white; position: relative; overflow: hidden;">
     <div style="max-width: 700px; margin: 0 auto; position: relative; z-index: 2;">
       <h2 style="color: white; font-size: 2em; margin-bottom: 10px;">📱 Get the ZINJA App</h2>
-      <p style="margin-bottom: 25px; font-size: 1.15em; opacity: 0.95;">Book courts, join Open Play — lahat sa isang app!</p>
+      <p style="margin-bottom: 25px; font-size: 1.15em; opacity: 0.95;">Book courts, join Open Play — all in one app!</p>
       <div style="display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; align-items: center;">
         <a href="ZINJA-Pickleball.apk" download style="display: inline-flex; align-items: center; gap: 10px; padding: 16px 35px; background: white; color: #7c3aed; text-decoration: none; border-radius: 50px; font-weight: bold; font-size: 1.05em; box-shadow: 0 6px 20px rgba(0,0,0,0.25); transition: transform 0.2s;">⬇ Download APK</a>
         <div style="display: inline-flex; align-items: center; gap: 8px; padding: 16px 25px; background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.3); border-radius: 50px; font-size: 1.05em;">🤖 Android 7.0+</div>
@@ -78,10 +76,10 @@
       <div style="margin-top: 30px; padding: 15px; background: rgba(255,255,255,0.1); border-radius: 12px; text-align: left; font-size: 0.9em;">
         <p style="margin: 0 0 8px 0; font-weight: bold;">⚠️ How to install:</p>
         <ol style="margin: 0; padding-left: 20px; line-height: 1.6;">
-          <li>I-tap ang "Download APK" button</li>
-          <li>Payagan ang "Install from unknown sources"</li>
-          <li>Buksan ang na-download na APK file</li>
-          <li>I-tap ang "Install" at buksan ang app!</li>
+          <li>Tap the "Download APK" button</li>
+          <li>Allow "Install from unknown sources"</li>
+          <li>Open the downloaded APK file</li>
+          <li>Tap "Install" and open the app!</li>
         </ol>
       </div>
     </div>
@@ -139,7 +137,7 @@
   <section id="openplay" class="dark">
     <h2>Join Open Play</h2>
     <p>Open Play is ₱50 per player. Sessions run <strong>6:00 PM to 12:00 AM</strong> daily.</p>
-    <p style="font-size: 0.9em; opacity: 0.85;">🎯 16 players per court · 2 courts · Random matchups every session.</p>
+    <p style="font-size: 0.9em; opacity: 0.85;">🎯 16 players per court · 2 courts · Auto-generated matchups to 11 points.</p>
     <form id="playForm">
       <input id="player" placeholder="Full Name" required>
       <input id="playerPhone" placeholder="Mobile Number" required>
@@ -162,13 +160,18 @@
 
     <div id="openPlayList" style="margin-top: 20px;"></div>
 
-    <!-- MATCHUPS VIEW (Public view - no generate buttons) -->
+    <!-- MATCHUPS SECTION (Auto-loaded) -->
     <div id="matchupsSection" style="margin-top: 40px; padding-top: 30px; border-top: 2px solid #444;">
       <h2 style="text-align: center;">🎯 Matchups & Schedule</h2>
-      <p style="text-align: center; font-size: 0.95em; opacity: 0.9;">Tingnan kung sino ang susunod na lalaro. Lahat ng players nagkakasama at naglalaban!</p>
+      <p style="text-align: center; font-size: 0.95em; opacity: 0.9;">Auto-generated schedule — matches to 11 points (~15 min each). Everyone plays!</p>
       
+      <div style="max-width: 500px; margin: 20px auto;">
+        <label style="display: block; margin-bottom: 8px; font-size: 0.9em; opacity: 0.9;">Select date:</label>
+        <input id="matchDate" type="date" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #444; background: #1a1a2e; color: #fff;">
+      </div>
+
       <div id="matchupsContainer" style="max-width: 900px; margin: 20px auto;">
-        <p style="text-align: center; opacity: 0.7;">Pumili ng date para makita ang matchups.</p>
+        <p style="text-align: center; opacity: 0.7;">Choose a date to see auto-generated matchups.</p>
       </div>
     </div>
   </section>
@@ -235,7 +238,7 @@
 
   <section id="admin" style="background: #f8fafc; padding: 40px 20px;">
     <h2 style="text-align: center;">🔐 Admin Panel</h2>
-    <p style="color: #666; font-size: 0.92em; text-align: center;">Enter the admin password to view all bookings, open play registrations, at mag-generate ng matchups.</p>
+    <p style="color: #666; font-size: 0.92em; text-align: center;">Enter the admin password to view bookings, open play registrations, and manage matchups.</p>
     <div style="max-width: 500px; margin: 0 auto 20px auto; display: flex; gap: 8px;">
       <input id="adminPassword" type="password" placeholder="Admin Password" style="flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #ddd;">
       <button class="btn" type="button" onclick="loadAdminData()" style="white-space: nowrap;">View Data</button>
@@ -259,7 +262,7 @@
 
   <footer>© <span id="year"></span> ZINJA Pickleball Club</footer>
 
-  <script src="zinja-app.js?v=17"></script>
+  <script src="zinja-app.js?v=18"></script>
   <script>
     document.getElementById('year').textContent = new Date().getFullYear();
   </script>
