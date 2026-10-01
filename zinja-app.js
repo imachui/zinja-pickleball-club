@@ -20,12 +20,11 @@ const PLAYERS_PER_COURT = 16;
 const TOTAL_COURTS = 2;
 const OPEN_PLAY_FEE = 50;
 
-// ===== AUTO-GENERATE SETTINGS =====
 const MATCH_DURATION_MIN = 15;
 const MATCH_TARGET_SCORE = 11;
-const FEW_PLAYERS_THRESHOLD = 8;    // < 8 = all mixed
-const MIN_TIER_SIZE = 4;             // Need >= 4 for own tier
-const MIN_VALID_TIERS_FOR_SKILL = 2; // Need >= 2 valid tiers para skill-based mode
+const FEW_PLAYERS_THRESHOLD = 8;
+const MIN_TIER_SIZE = 4;
+const MIN_VALID_TIERS_FOR_SKILL = 2;
 const SESSION_START_TIME = "18:00";
 const SESSION_END_TIME = "24:00";
 
@@ -325,9 +324,7 @@ async function checkOpenPlayCapacity(playDate) {
   const registrations = await supabaseFetch(`/rest/v1/open_play?select=id&play_date=eq.${encodeURIComponent(playDate)}`);
   const currentCount = (registrations || []).length;
   return {
-    availableCourts,
-    maxSlots,
-    currentCount,
+    availableCourts, maxSlots, currentCount,
     spotsLeft: maxSlots - currentCount,
     isFull: currentCount >= maxSlots,
     noCourts: availableCourts.length === 0
@@ -339,7 +336,6 @@ async function updateOpenPlayInfo() {
   const infoDiv = document.getElementById("openPlayInfo");
   if (!infoDiv) return;
   if (!playDate) { infoDiv.innerHTML = ""; return; }
-
   try {
     const closureCheck = checkClosureForOpenPlay(playDate);
     if (closureCheck.closed) {
@@ -370,7 +366,6 @@ async function checkAvailability() {
   const availabilityDiv = document.getElementById("availabilityInfo");
   if (!availabilityDiv) return;
   if (!bookingDate || !court) { availabilityDiv.innerHTML = ""; return; }
-
   try {
     const closureCheck = checkClosureForBooking(bookingDate, "17:00", 12);
     if (closureCheck.closed) {
@@ -528,7 +523,6 @@ async function handleBookingSubmit(event) {
     if (availabilityDiv) availabilityDiv.innerHTML = "";
     await loadBookings();
     
-    // Auto-refresh matchups kapag may bagong booking
     const matchDateInput = document.getElementById("matchDate");
     if (matchDateInput && matchDateInput.value === bookingDate) {
       localStorage.removeItem(`zinja_matchup_seed_${bookingDate}`);
@@ -587,7 +581,6 @@ async function handleOpenPlaySubmit(event) {
     if (infoDiv) infoDiv.innerHTML = "";
     await loadOpenPlay();
     
-    // AUTO-REFRESH MATCHUPS kapag may bagong player
     const matchDateInput = document.getElementById("matchDate");
     if (matchDateInput && matchDateInput.value === playDate) {
       localStorage.removeItem(`zinja_matchup_seed_${playDate}`);
@@ -683,7 +676,7 @@ async function cancelOpenPlay() {
 }
 
 // ====================
-// AUTO MATCH SYSTEM (6PM-12AM + SKILL-BASED)
+// AUTO MATCH SYSTEM
 // ====================
 
 function seededShuffle(array, seed) {
@@ -720,46 +713,55 @@ function buildPools(players) {
   const pools = [];
   const total = players.length;
 
-  // If few players total → lahat Mixed mode
+  // FEW PLAYERS → all Mixed mode
   if (total < FEW_PLAYERS_THRESHOLD) {
     pools.push({ name: 'Mixed', color: '#7c3aed', players: [...players] });
     return pools;
   }
 
   const groups = groupPlayersBySkill(players);
-  const tiers = [
-    { name: 'Advanced', color: '#dc2626', players: groups.advanced },
-    { name: 'Intermediate', color: '#f59e0b', players: groups.intermediate },
-    { name: 'Beginner', color: '#10b981', players: groups.beginner }
-  ];
+  
+  // Valid tier = has >= 4 players
+  const validAdvanced = groups.advanced.length >= MIN_TIER_SIZE;
+  const validIntermediate = groups.intermediate.length >= MIN_TIER_SIZE;
+  const validBeginner = groups.beginner.length >= MIN_TIER_SIZE;
+  const validCount = [validAdvanced, validIntermediate, validBeginner].filter(Boolean).length;
 
-  // Valid tiers: may >= MIN_TIER_SIZE players
-  const validTiers = tiers.filter(t => t.players.length >= MIN_TIER_SIZE);
-  const smallTiers = tiers.filter(t => t.players.length > 0 && t.players.length < MIN_TIER_SIZE);
+  console.log('[MATCHUP DEBUG] Total players:', total);
+  console.log('[MATCHUP DEBUG] Advanced:', groups.advanced.length, 'valid:', validAdvanced);
+  console.log('[MATCHUP DEBUG] Intermediate:', groups.intermediate.length, 'valid:', validIntermediate);
+  console.log('[MATCHUP DEBUG] Beginner:', groups.beginner.length, 'valid:', validBeginner);
+  console.log('[MATCHUP DEBUG] Valid tiers count:', validCount, '(need >=', MIN_VALID_TIERS_FOR_SKILL, ')');
 
-  // Kung kulang sa valid tiers → lahat Mixed mode
-  if (validTiers.length < MIN_VALID_TIERS_FOR_SKILL) {
+  // If fewer than 2 valid tiers → ALL MIXED (include everyone!)
+  if (validCount < MIN_VALID_TIERS_FOR_SKILL) {
+    console.log('[MATCHUP DEBUG] → MIXED MODE (all players)');
     pools.push({ name: 'Mixed', color: '#7c3aed', players: [...players] });
     return pools;
   }
 
-  // May >= 2 valid tiers → skill-based mode
-  validTiers.forEach(t => {
-    pools.push({ name: t.name, color: t.color, players: [...t.players] });
-  });
+  // Skill-based mode
+  console.log('[MATCHUP DEBUG] → SKILL-BASED MODE');
+  if (validAdvanced) pools.push({ name: 'Advanced', color: '#dc2626', players: [...groups.advanced] });
+  if (validIntermediate) pools.push({ name: 'Intermediate', color: '#f59e0b', players: [...groups.intermediate] });
+  if (validBeginner) pools.push({ name: 'Beginner', color: '#10b981', players: [...groups.beginner] });
 
-  // I-collect lahat ng leftover (small tiers + flexible)
+  // Leftover: small tiers + flexible
   const leftover = [];
-  smallTiers.forEach(t => leftover.push(...t.players));
+  if (groups.advanced.length > 0 && !validAdvanced) leftover.push(...groups.advanced);
+  if (groups.intermediate.length > 0 && !validIntermediate) leftover.push(...groups.intermediate);
+  if (groups.beginner.length > 0 && !validBeginner) leftover.push(...groups.beginner);
   leftover.push(...groups.flexible);
 
+  console.log('[MATCHUP DEBUG] Leftover players:', leftover.length);
+
   if (leftover.length >= MIN_TIER_SIZE) {
-    // Enough for own Mixed pool
     pools.push({ name: 'Mixed', color: '#7c3aed', players: leftover });
   } else if (leftover.length > 0) {
-    // Merge sa pinakamalaking tier
+    // Merge into largest pool
     const largest = pools.reduce((max, p) => p.players.length > max.players.length ? p : max);
     largest.players.push(...leftover);
+    console.log('[MATCHUP DEBUG] Merged leftover into', largest.name);
   }
 
   return pools;
@@ -772,14 +774,12 @@ function generateAutoSchedule(players, startTime, availableCourts) {
   const pools = buildPools(players);
   if (pools.length === 0) return [];
 
-  // ===== TIME CAP =====
   const sessionStartMin = timeToMinutes(SESSION_START_TIME);
   const sessionEndMin = 24 * 60;
   const sessionMinutes = sessionEndMin - sessionStartMin;
   const totalWaves = Math.floor(sessionMinutes / MATCH_DURATION_MIN);
   const maxMatches = totalWaves * numCourts;
 
-  // ===== GENERATE ROUNDS =====
   const allMatches = [];
   let round = 0;
   const MAX_SAFETY_ROUNDS = 200;
@@ -807,7 +807,6 @@ function generateAutoSchedule(players, startTime, availableCourts) {
 
   if (allMatches.length === 0) return [];
 
-  // ===== SCHEDULE =====
   const schedule = [];
   let currentTime = startTime;
   for (let i = 0; i < allMatches.length; i += numCourts) {
@@ -849,7 +848,6 @@ function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts) {
   schedule.forEach(m => { tierCounts[m.tier] = (tierCounts[m.tier] || 0) + 1; });
   const tierSummary = Object.entries(tierCounts).map(([t, c]) => `${t}: ${c}`).join(' · ');
 
-  // Determine mode label
   const isMixedMode = tierCounts['Mixed'] && Object.keys(tierCounts).length === 1;
   const modeLabel = isMixedMode ? "🎲 Mixed Mode" : "🎯 Skill-Based Mode";
 
@@ -1024,7 +1022,7 @@ async function deleteOpenPlay(id) {
       await loadAutoMatchups(playerDate);
     }
   } catch (error) { alert("❌ Delete failed: " + error.message); }
-// ====================
+}// ====================
 // CLUB CHAT
 // ====================
 
@@ -1127,10 +1125,6 @@ function setupChat() {
   loadChatMessages();
 }
 
-// ====================
-// ADMIN PANEL
-// ====================
-
 async function loadAdminData() {
   const pw = document.getElementById('adminPassword')?.value;
   const resultDiv = document.getElementById('adminResult');
@@ -1216,7 +1210,7 @@ function renderAdminContent() {
       <div style="background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px;">
         <h3 style="color: #7c3aed; margin-top: 0;">🎲 Matchups Manager</h3>
         <p style="color: #666; font-size: 0.9em;">Auto-generated schedule from 6PM to 12AM — matches to 11 points (~15 min).</p>
-        <p style="color: #888; font-size: 0.85em; font-style: italic;">Few players (<8) = Mixed Mode · 2+ valid tiers (4+ each) = Skill-Based Mode</p>
+        <p style="color: #888; font-size: 0.85em; font-style: italic;">Few players (&lt;8) = Mixed Mode · 2+ valid tiers (4+ each) = Skill-Based Mode</p>
         <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
           <input id="adminMatchDate" type="date" value="${today}" style="flex: 1; min-width: 200px; padding: 12px; border-radius: 8px; border: 1px solid #ddd;">
           <button type="button" onclick="renderAdminMatchups(document.getElementById('adminMatchDate').value)" style="padding: 12px 24px; background: linear-gradient(135deg, #7c3aed, #6d28d9); color: #fff; border: none; border-radius: 8px; font-weight: 700; cursor: pointer;">🔄 Load</button>
@@ -1230,10 +1224,6 @@ function renderAdminContent() {
   }
   container.innerHTML = html;
 }
-
-// ====================
-// START
-// ====================
 
 document.addEventListener("DOMContentLoaded", () => {
   const bookingForm = document.getElementById("bookingForm");
