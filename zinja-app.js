@@ -20,9 +20,10 @@ const PLAYERS_PER_COURT = 16;
 const TOTAL_COURTS = 2;
 const OPEN_PLAY_FEE = 50;
 
-const MATCH_DURATION_MIN = 15; // Estimate: 15 minutes per match to 11 points
+const MATCH_DURATION_MIN = 15;
 const MATCH_TARGET_SCORE = 11;
-const GAMES_PER_PLAYER = 3; // Each player plays ~3 games
+const GAMES_PER_PLAYER = 3;
+const FEW_PLAYERS_THRESHOLD = 8; // < 8 = mixed, >= 8 = skill-based
 
 const MORNING_START_MIN = 6 * 60;
 const MORNING_END_MIN = 16 * 60;
@@ -290,26 +291,39 @@ function announceClosureInChat() {
   container.insertBefore(notice, container.firstChild);
 }
 
+async function getAvailableCourtsForDate(playDate) {
+  if (!playDate) return [];
+  try {
+    const bookings = await supabaseFetch(`/rest/v1/bookings?select=court,start_time,duration_hours&booking_date=eq.${encodeURIComponent(playDate)}`);
+    const occupiedCourts = new Set();
+    (bookings || []).forEach(b => {
+      const bStart = timeToMinutes(b.start_time);
+      const bEnd = bStart + Number(b.duration_hours) * 60;
+      if (bStart < OPEN_PLAY_END_MIN && OPEN_PLAY_START_MIN < bEnd) {
+        occupiedCourts.add(Number(b.court));
+      }
+    });
+    const availableCourts = [];
+    for (let c = 1; c <= TOTAL_COURTS; c++) {
+      if (!occupiedCourts.has(c)) availableCourts.push(c);
+    }
+    return availableCourts;
+  } catch (error) {
+    console.error("Available courts error:", error);
+    return [1, 2];
+  }
+}
+
 async function checkOpenPlayCapacity(playDate) {
   if (!playDate) return null;
-  const bookings = await supabaseFetch(`/rest/v1/bookings?select=court,start_time,duration_hours&booking_date=eq.${encodeURIComponent(playDate)}`);
-  const occupiedCourts = new Set();
-  (bookings || []).forEach(b => {
-    const bStart = timeToMinutes(b.start_time);
-    const bEnd = bStart + Number(b.duration_hours) * 60;
-    if (bStart < OPEN_PLAY_END_MIN && OPEN_PLAY_START_MIN < bEnd) {
-      occupiedCourts.add(Number(b.court));
-    }
-  });
-  const availableCourts = [];
-  for (let c = 1; c <= TOTAL_COURTS; c++) {
-    if (!occupiedCourts.has(c)) availableCourts.push(c);
-  }
+  const availableCourts = await getAvailableCourtsForDate(playDate);
   const maxSlots = availableCourts.length * PLAYERS_PER_COURT;
   const registrations = await supabaseFetch(`/rest/v1/open_play?select=id&play_date=eq.${encodeURIComponent(playDate)}`);
   const currentCount = (registrations || []).length;
   return {
-    availableCourts, maxSlots, currentCount,
+    availableCourts,
+    maxSlots,
+    currentCount,
     spotsLeft: maxSlots - currentCount,
     isFull: currentCount >= maxSlots,
     noCourts: availableCourts.length === 0
@@ -486,7 +500,7 @@ async function handleBookingSubmit(event) {
       const conflictEnd = addHoursToTime(conflictingBooking.start_time, conflictingBooking.duration_hours);
       const newEnd = addHoursToTime(bookingTime, duration);
       showResult(result, `❌ BOOKING CONFLICT! Court ${court} on ${formatDate(bookingDate)} is already booked from ${conflictStart} to ${conflictEnd}.`, false);
-      alert(`⚠️ BOOKING CONFLICT!\n\nCourt ${court} on ${formatDate(bookingDate)}\n\nAlready reserved: ${conflictStart} - ${conflictEnd}\nYour requested: ${formatTime(bookingTime)} - ${newEnd}\n\nPlease choose a different time or court.`);
+      alert(`⚠️ BOOKING CONFLICT!\n\nCourt ${court} on ${formatDate(bookingDate)}\n\nAlready reserved: ${conflictStart} - ${conflictEnd}\nYour requested: ${formatTime(bookingTime)} - ${newEnd}`);
       return;
     }
     const priceCalc = calculateBookingPrice(bookingTime, duration);
@@ -540,12 +554,12 @@ async function handleOpenPlaySubmit(event) {
     const cap = await checkOpenPlayCapacity(playDate);
     if (cap.noCourts) {
       showResult(result, `❌ Open Play is CANCELLED on ${formatDate(playDate)}. Both courts are booked.`, false);
-      alert(`⚠️ OPEN PLAY UNAVAILABLE\n\n${formatDate(playDate)}\n\nBoth courts are booked during Open Play hours (6PM-12AM).`);
+      alert(`⚠️ OPEN PLAY UNAVAILABLE\n\n${formatDate(playDate)}`);
       return;
     }
     if (cap.isFull) {
       showResult(result, `❌ Open Play is FULL on ${formatDate(playDate)}. ${cap.currentCount}/${cap.maxSlots} slots taken.`, false);
-      alert(`⚠️ OPEN PLAY FULL\n\n${formatDate(playDate)}\n\n${cap.currentCount}/${cap.maxSlots} slots taken.`);
+      alert(`⚠️ OPEN PLAY FULL\n\n${formatDate(playDate)}`);
       return;
     }
     const cancellationCode = generateCancelCode();
@@ -651,7 +665,7 @@ async function cancelOpenPlay() {
 }
 
 // ====================
-// AUTO MATCH SYSTEM
+// AUTO MATCH SYSTEM (SKILL-BASED + FEW PLAYERS MODE)
 // ====================
 
 function seededShuffle(array, seed) {
@@ -669,85 +683,155 @@ function seededShuffle(array, seed) {
   return arr;
 }
 
-function generateAutoSchedule(players, startTime = "18:00") {
-  if (!players || players.length < 2) return [];
+function groupPlayersBySkill(players) {
+  const advanced = [];
+  const intermediate = [];
+  const beginner = [];
+  const flexible = [];
+  players.forEach(p => {
+    const lvl = String(p.skill_level || '').trim();
+    if (lvl === 'Advanced') advanced.push(p);
+    else if (lvl === 'Intermediate') intermediate.push(p);
+    else if (lvl === 'Beginner') beginner.push(p);
+    else flexible.push(p);
+  });
+  return { advanced, intermediate, beginner, flexible };
+}
+
+function pushMatchesForPool(pool, tierName, tierColor, allMatches) {
+  for (let round = 0; round < GAMES_PER_PLAYER; round++) {
+    const shuffled = seededShuffle(pool, `${tierName}-round-${round}`);
+    for (let i = 0; i + 4 <= shuffled.length; i += 4) {
+      allMatches.push({
+        tier: tierName,
+        tierColor: tierColor,
+        round: round + 1,
+        teamA: [shuffled[i], shuffled[i+1]],
+        teamB: [shuffled[i+2], shuffled[i+3]]
+      });
+    }
+  }
+}
+
+function generateAutoSchedule(players, startTime, availableCourts) {
+  if (!players || players.length < 4 || !availableCourts || availableCourts.length === 0) return [];
+
+  const numCourts = availableCourts.length;
+  const totalPlayers = players.length;
+  const allMatches = [];
+
+  // ===== FEW PLAYERS MODE: mixed matching (walang skill grouping) =====
+  if (totalPlayers < FEW_PLAYERS_THRESHOLD) {
+    pushMatchesForPool(players, 'Mixed', '#7c3aed', allMatches);
+  } else {
+    // ===== MANY PLAYERS MODE: skill-based grouping =====
+    const groups = groupPlayersBySkill(players);
+
+    // Tiers with >= 4 players get their own matches
+    if (groups.advanced.length >= 4) {
+      pushMatchesForPool(groups.advanced, 'Advanced', '#dc2626', allMatches);
+    }
+    if (groups.intermediate.length >= 4) {
+      pushMatchesForPool(groups.intermediate, 'Intermediate', '#f59e0b', allMatches);
+    }
+    if (groups.beginner.length >= 4) {
+      pushMatchesForPool(groups.beginner, 'Beginner', '#10b981', allMatches);
+    }
+
+    // Small tiers + "Any level" go to Mixed pool
+    const mixedPool = [];
+    if (groups.advanced.length > 0 && groups.advanced.length < 4) mixedPool.push(...groups.advanced);
+    if (groups.intermediate.length > 0 && groups.intermediate.length < 4) mixedPool.push(...groups.intermediate);
+    if (groups.beginner.length > 0 && groups.beginner.length < 4) mixedPool.push(...groups.beginner);
+    mixedPool.push(...groups.flexible);
+
+    if (mixedPool.length >= 4) {
+      pushMatchesForPool(mixedPool, 'Mixed', '#7c3aed', allMatches);
+    }
+  }
+
+  if (allMatches.length === 0) return [];
+
+  // Group by round para sequential ang oras (Round 1 first, then 2, then 3)
+  const roundsMap = {};
+  allMatches.forEach(m => {
+    if (!roundsMap[m.round]) roundsMap[m.round] = [];
+    roundsMap[m.round].push(m);
+  });
+
   const schedule = [];
   let currentTime = startTime;
-  const totalSlots = players.length * GAMES_PER_PLAYER;
-  const totalMatches = Math.max(1, Math.round(totalSlots / 4));
+  const sortedRounds = Object.keys(roundsMap).map(Number).sort((a, b) => a - b);
 
-  // Round-based approach: reshuffle every "round"
-  let matchNum = 1;
-  let round = 0;
-  while (matchNum <= totalMatches) {
-    const shuffled = seededShuffle(players, `round-${round}`);
-    for (let i = 0; i < shuffled.length && matchNum <= totalMatches; i += 4) {
-      const matchPlayers = [];
-      for (let j = 0; j < 4; j++) {
-        matchPlayers.push(shuffled[(i + j) % shuffled.length]);
-      }
-      schedule.push({
-        matchNumber: matchNum,
-        round: round + 1,
-        startTime: currentTime,
-        endTime: addMinutesToTime(currentTime, MATCH_DURATION_MIN),
-        teamA: [matchPlayers[0], matchPlayers[1]],
-        teamB: [matchPlayers[2], matchPlayers[3]]
+  sortedRounds.forEach(roundNum => {
+    const roundMatches = roundsMap[roundNum];
+    // Waves: numCourts matches run in parallel
+    for (let i = 0; i < roundMatches.length; i += numCourts) {
+      const wave = roundMatches.slice(i, i + numCourts);
+      wave.forEach((match, idx) => {
+        match.court = availableCourts[idx];
+        match.startTime = currentTime;
+        match.endTime = addMinutesToTime(currentTime, MATCH_DURATION_MIN);
+        schedule.push(match);
       });
       currentTime = addMinutesToTime(currentTime, MATCH_DURATION_MIN);
-      matchNum++;
     }
-    round++;
-  }
+  });
 
   return schedule;
 }
 
-function renderAutoSchedule(schedule, dateStr, playerCount) {
+function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts) {
   const container = document.getElementById("matchupsContainer");
   if (!container) return;
 
   if (schedule.length === 0) {
-    container.innerHTML = `<p style="text-align:center;color:#f59e0b;">⚠️ No matchups for ${formatDate(dateStr)}.</p>`;
+    container.innerHTML = `<p style="text-align:center;color:#f59e0b;">⚠️ No matchups for ${formatDate(dateStr)}. Need at least 4 players.</p>`;
     return;
   }
 
-  const totalMinutes = schedule.length * MATCH_DURATION_MIN;
+  const numCourts = availableCourts.length;
+  const totalMinutes = Math.ceil(schedule.length / numCourts) * MATCH_DURATION_MIN;
   const totalHours = Math.floor(totalMinutes / 60);
   const remainingMins = totalMinutes % 60;
   const sessionLength = totalHours > 0 ? `${totalHours}h ${remainingMins}m` : `${remainingMins}m`;
+  const courtsLabel = numCourts === 2 ? "🏓 2 Courts (parallel)" : `🏓 1 Court (Court ${availableCourts[0]})`;
+  const modeLabel = playerCount < FEW_PLAYERS_THRESHOLD ? "🎲 Mixed Mode (few players)" : "🎯 Skill-Based Mode";
+
+  // Tier summary
+  const tierCounts = {};
+  schedule.forEach(m => { tierCounts[m.tier] = (tierCounts[m.tier] || 0) + 1; });
+  const tierSummary = Object.entries(tierCounts).map(([t, c]) => `${t}: ${c}`).join(' · ');
 
   let html = `
     <div style="text-align: center; margin-bottom: 20px; padding: 16px; background: rgba(124,58,237,0.15); border-radius: 12px; border: 1px solid rgba(124,58,237,0.3);">
       <p style="font-size: 1.1em; margin: 4px 0;">📅 <strong>${formatDate(dateStr)}</strong></p>
-      <p style="font-size: 0.95em; margin: 4px 0; opacity: 0.9;">👥 ${playerCount} players · 🏓 ${schedule.length} matches</p>
-      <p style="font-size: 0.95em; margin: 4px 0; opacity: 0.9;">⏱️ Estimated session: <strong>${sessionLength}</strong> (15 min/match to 11 points)</p>
+      <p style="font-size: 0.95em; margin: 4px 0; opacity: 0.9;">👥 ${playerCount} players · ${courtsLabel}</p>
+      <p style="font-size: 0.95em; margin: 4px 0; opacity: 0.9;">🏓 ${schedule.length} matches · ⏱️ Estimated session: <strong>${sessionLength}</strong></p>
+      <p style="font-size: 0.8em; margin: 4px 0; opacity: 0.7;">(15 min/match to 11 points)</p>
+      <p style="font-size: 0.85em; margin: 8px 0 0 0; opacity: 0.85;">${modeLabel} — ${tierSummary}</p>
     </div>
   `;
 
-  let matchCounter = 0;
-  let currentCourt = 1;
-  const matchesPerCourt = Math.ceil(schedule.length / TOTAL_COURTS);
-
   schedule.forEach((m, idx) => {
-    // Distribute matches across 2 courts
-    const court = (idx % TOTAL_COURTS) + 1;
-    if (idx % matchesPerCourt === 0 && idx > 0) {
-      // Court transition marker (optional)
-    }
-    matchCounter++;
-    const isNow = matchCounter === 1;
-    const isNext = matchCounter === 2;
+    const isNow = idx < numCourts;
+    const isNext = idx >= numCourts && idx < numCourts * 2;
     let cls = "matchup-card";
-    let badge = `⏳ MATCH #${matchCounter}`;
+    let badge = `⏳ MATCH #${idx + 1}`;
     if (isNow) { cls += " now-playing"; badge = "🟢 NOW PLAYING"; }
     else if (isNext) { cls += " up-next"; badge = "🟡 UP NEXT"; }
+
+    const tierColor = m.tierColor || '#7c3aed';
+    const tierIcon = m.tier === 'Advanced' ? '🔥' : m.tier === 'Intermediate' ? '⚡' : m.tier === 'Beginner' ? '🌱' : '🎲';
 
     html += `
       <div class="${cls}">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 6px;">
           <span style="font-size: 0.85em; font-weight: 700;">${badge}</span>
-          <span style="font-size: 0.75em; opacity: 0.85;">🕐 ${formatTime12(m.startTime)} - ${formatTime12(m.endTime)}</span>
+          <span style="font-size: 0.75em; opacity: 0.9;">🏓 Court ${m.court} · 🕐 ${formatTime12(m.startTime)} - ${formatTime12(m.endTime)}</span>
+        </div>
+        <div style="margin-bottom: 8px;">
+          <span style="display: inline-block; padding: 3px 12px; background: ${tierColor}33; border: 1px solid ${tierColor}; border-radius: 20px; font-size: 0.75em; font-weight: 700; color: #fff;">${tierIcon} ${m.tier} · Round ${m.round}</span>
         </div>
         <div class="team-block">
           <strong style="color: #10b981;">Team A:</strong>
@@ -766,7 +850,7 @@ function renderAutoSchedule(schedule, dateStr, playerCount) {
     `;
   });
 
-  html += `<p style="text-align: center; font-size: 0.85em; opacity: 0.7; margin-top: 24px;">💡 Matches are auto-generated. Admin can re-shuffle from the Admin Panel.</p>`;
+  html += `<p style="text-align: center; font-size: 0.85em; opacity: 0.7; margin-top: 24px;">💡 ${playerCount < FEW_PLAYERS_THRESHOLD ? 'Mixed mode — lahat magkakasama.' : 'Skill-based matching — Advanced vs Advanced, Beginner vs Beginner.'} Admin can re-shuffle from the Admin Panel.</p>`;
   container.innerHTML = html;
 }
 
@@ -784,29 +868,29 @@ async function loadAutoMatchups(dateStr) {
       container.innerHTML = `<p style="text-align:center;color:#f59e0b;">⚠️ Need at least 4 players to generate matchups. Currently: ${players.length}.</p>`;
       return;
     }
+    const availableCourts = await getAvailableCourtsForDate(dateStr);
+    if (availableCourts.length === 0) {
+      container.innerHTML = `<p style="text-align:center;color:#ef4444;">⚠️ Both courts are booked for Open Play hours on ${formatDate(dateStr)}. No matchups to generate.</p>`;
+      return;
+    }
     const seedKey = `zinja_matchup_seed_${dateStr}`;
     let seed = localStorage.getItem(seedKey);
-    if (!seed) {
-      seed = "default-seed";
-      localStorage.setItem(seedKey, seed);
-    }
+    if (!seed) { seed = "default-seed"; localStorage.setItem(seedKey, seed); }
     const shuffled = seededShuffle(players, seed);
-    const schedule = generateAutoSchedule(shuffled);
-    renderAutoSchedule(schedule, dateStr, shuffled.length);
+    const schedule = generateAutoSchedule(shuffled, OPEN_PLAY_START_TIME, availableCourts);
+    renderAutoSchedule(schedule, dateStr, shuffled.length, availableCourts);
   } catch (error) {
     console.error("Matchups error:", error);
     container.innerHTML = `<p style="text-align:center;color:#ef4444;">❌ ${error.message}</p>`;
   }
 }
 
-// Admin: re-shuffle with password
 async function adminRerollMatchups() {
   const pw = prompt("Enter admin password to re-shuffle:");
   if (pw !== ADMIN_PASSWORD) { alert("❌ Invalid password"); return; }
   const dateInput = document.getElementById("adminMatchDate");
   const dateStr = dateInput?.value;
   if (!dateStr) { alert("Please select a date first."); return; }
-  // Change seed to force new shuffle
   const newSeed = Math.random().toString(36).substring(2, 10);
   localStorage.setItem(`zinja_matchup_seed_${dateStr}`, newSeed);
   await renderAdminMatchups(dateStr);
@@ -823,18 +907,25 @@ async function renderAdminMatchups(dateStr) {
       container.innerHTML = `<p style="color:#888;">Need at least 4 players. Currently: ${players?.length || 0}.</p>`;
       return;
     }
+    const availableCourts = await getAvailableCourtsForDate(dateStr);
+    if (availableCourts.length === 0) {
+      container.innerHTML = `<p style="color:#ef4444;">⚠️ No courts available on ${formatDate(dateStr)}.</p>`;
+      return;
+    }
     const seedKey = `zinja_matchup_seed_${dateStr}`;
     let seed = localStorage.getItem(seedKey) || "default-seed";
     const shuffled = seededShuffle(players, seed);
-    const schedule = generateAutoSchedule(shuffled);
-    const totalMinutes = schedule.length * MATCH_DURATION_MIN;
-    container.innerHTML = `<p style="color:#10b981; font-weight:600;">✅ Schedule for ${formatDate(dateStr)} — ${shuffled.length} players · ${schedule.length} matches · ~${Math.round(totalMinutes/60*10)/10}h total</p>`;
+    const schedule = generateAutoSchedule(shuffled, OPEN_PLAY_START_TIME, availableCourts);
+    const numCourts = availableCourts.length;
+    const totalMinutes = Math.ceil(schedule.length / numCourts) * MATCH_DURATION_MIN;
+    const courtsLabel = numCourts === 2 ? "Courts 1 & 2" : `Court ${availableCourts[0]}`;
+    const modeLabel = players.length < FEW_PLAYERS_THRESHOLD ? "Mixed Mode" : "Skill-Based Mode";
+    container.innerHTML = `<p style="color:#10b981; font-weight:600;">✅ ${courtsLabel} · ${shuffled.length} players · ${schedule.length} matches · ~${(totalMinutes/60).toFixed(1)}h total · ${modeLabel}</p>`;
   } catch (error) {
     container.innerHTML = `<p style="color:red;">❌ ${error.message}</p>`;
   }
 }
 
-// Admin: delete functions
 async function deleteBooking(id) {
   const pw = prompt("Enter admin password to delete this booking:");
   if (pw !== ADMIN_PASSWORD) { alert("❌ Invalid password"); return; }
@@ -843,9 +934,7 @@ async function deleteBooking(id) {
     await supabaseFetch(`/rest/v1/bookings?id=eq.${id}`, { method: "DELETE" });
     alert("✅ Booking deleted.");
     await loadAdminData();
-  } catch (error) {
-    alert("❌ Delete failed: " + error.message);
-  }
+  } catch (error) { alert("❌ Delete failed: " + error.message); }
 }
 
 async function deleteOpenPlay(id) {
@@ -856,10 +945,10 @@ async function deleteOpenPlay(id) {
     await supabaseFetch(`/rest/v1/open_play?id=eq.${id}`, { method: "DELETE" });
     alert("✅ Player removed.");
     await loadAdminData();
-  } catch (error) {
-    alert("❌ Delete failed: " + error.message);
-  }
-}// ====================
+  } catch (error) { alert("❌ Delete failed: " + error.message); }
+}
+
+// ====================
 // CLUB CHAT
 // ====================
 
@@ -867,7 +956,6 @@ async function loadChatMessages() {
   const container = document.getElementById("chatMessages");
   if (!container) return;
   if (document.visibilityState !== 'visible') return;
-
   try {
     const rows = await supabaseFetch("/rest/v1/chat_messages?select=player_name,message,created_at&order=created_at.asc&limit=50");
     if (!rows || rows.length === 0) {
@@ -900,13 +988,10 @@ async function sendChatMessage() {
   const messageInput = document.getElementById("chatInput");
   const name = nameInput?.value.trim();
   const message = messageInput?.value.trim();
-
   if (!name) { alert("Please enter your name first."); nameInput?.focus(); return; }
   if (!message) { alert("Please type a message."); return; }
   if (message.length > 500) { alert("Message is too long. Maximum is 500 characters."); return; }
-
   try { localStorage.setItem("zinja_chat_name", name); } catch {}
-
   try {
     const sendBtn = document.getElementById("sendChatBtn");
     if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = "..."; }
@@ -1005,12 +1090,10 @@ function switchAdminTab(tab) {
         btn.style.background = 'linear-gradient(135deg, #7c3aed, #6d28d9)';
         btn.style.color = '#ffffff';
         btn.style.border = '2px solid #6d28d9';
-        btn.style.boxShadow = '0 2px 8px rgba(124,58,237,0.3)';
       } else {
         btn.style.background = '#ffffff';
         btn.style.color = '#333333';
         btn.style.border = '2px solid #dddddd';
-        btn.style.boxShadow = 'none';
       }
     }
   });
@@ -1056,7 +1139,8 @@ function renderAdminContent() {
     html = `
       <div style="background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px;">
         <h3 style="color: #7c3aed; margin-top: 0;">🎲 Matchups Manager</h3>
-        <p style="color: #666; font-size: 0.9em;">Auto-generated schedule — each match to 11 points (~15 min). Re-shuffle to change pairings.</p>
+        <p style="color: #666; font-size: 0.9em;">Auto-generated schedule — each match to 11 points (~15 min). Auto-detects available courts & player count.</p>
+        <p style="color: #888; font-size: 0.85em; font-style: italic;">Few players (<8) = Mixed Mode · Many players (≥8) = Skill-Based Mode</p>
         <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
           <input id="adminMatchDate" type="date" value="${today}" style="flex: 1; min-width: 200px; padding: 12px; border-radius: 8px; border: 1px solid #ddd;">
           <button type="button" onclick="renderAdminMatchups(document.getElementById('adminMatchDate').value)" style="padding: 12px 24px; background: linear-gradient(135deg, #7c3aed, #6d28d9); color: #fff; border: none; border-radius: 8px; font-weight: 700; cursor: pointer;">🔄 Load</button>
@@ -1113,13 +1197,11 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Auto-load matchups when matchDate changes
   const matchDateInput = document.getElementById("matchDate");
   if (matchDateInput) {
     const today = new Date().toISOString().split("T")[0];
     matchDateInput.value = today;
     matchDateInput.addEventListener("change", () => loadAutoMatchups(matchDateInput.value));
-    // Auto-load today's matchups
     loadAutoMatchups(today);
   }
 
