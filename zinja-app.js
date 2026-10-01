@@ -23,7 +23,6 @@ const OPEN_PLAY_FEE = 50;
 // ===== AUTO-GENERATE SETTINGS =====
 const MATCH_DURATION_MIN = 15;
 const MATCH_TARGET_SCORE = 11;
-const GAMES_PER_PLAYER = 3;
 const FEW_PLAYERS_THRESHOLD = 8;
 const SESSION_START_TIME = "18:00";
 const SESSION_END_TIME = "24:00";
@@ -526,6 +525,13 @@ async function handleBookingSubmit(event) {
     const availabilityDiv = document.getElementById("availabilityInfo");
     if (availabilityDiv) availabilityDiv.innerHTML = "";
     await loadBookings();
+    
+    // Auto-refresh matchups kapag may bagong booking (baka ma-block ang court)
+    const matchDateInput = document.getElementById("matchDate");
+    if (matchDateInput && matchDateInput.value === bookingDate) {
+      localStorage.removeItem(`zinja_matchup_seed_${bookingDate}`);
+      await loadAutoMatchups(bookingDate);
+    }
   } catch (error) {
     console.error("Booking error:", error);
     showResult(result, `Something went wrong. ${error.message || "Please try again."}`, false);
@@ -578,6 +584,13 @@ async function handleOpenPlaySubmit(event) {
     const infoDiv = document.getElementById("openPlayInfo");
     if (infoDiv) infoDiv.innerHTML = "";
     await loadOpenPlay();
+    
+    // AUTO-REFRESH MATCHUPS kapag may bagong player
+    const matchDateInput = document.getElementById("matchDate");
+    if (matchDateInput && matchDateInput.value === playDate) {
+      localStorage.removeItem(`zinja_matchup_seed_${playDate}`);
+      await loadAutoMatchups(playDate);
+    }
   } catch (error) {
     console.error("Open Play error:", error);
     showResult(result, `Something went wrong. ${error.message || "Please try again."}`, false);
@@ -668,7 +681,7 @@ async function cancelOpenPlay() {
 }
 
 // ====================
-// AUTO MATCH SYSTEM (TIME-CAPPED: 6PM-12AM)
+// AUTO MATCH SYSTEM (6PM-12AM FILLED)
 // ====================
 
 function seededShuffle(array, seed) {
@@ -716,7 +729,7 @@ function generateAutoSchedule(players, startTime, availableCourts) {
     if (groups.advanced.length >= 4) pools.push({ name: 'Advanced', color: '#dc2626', players: groups.advanced });
     if (groups.intermediate.length >= 4) pools.push({ name: 'Intermediate', color: '#f59e0b', players: groups.intermediate });
     if (groups.beginner.length >= 4) pools.push({ name: 'Beginner', color: '#10b981', players: groups.beginner });
-
+    
     const mixedPool = [];
     if (groups.advanced.length > 0 && groups.advanced.length < 4) mixedPool.push(...groups.advanced);
     if (groups.intermediate.length > 0 && groups.intermediate.length < 4) mixedPool.push(...groups.intermediate);
@@ -727,25 +740,25 @@ function generateAutoSchedule(players, startTime, availableCourts) {
 
   if (pools.length === 0) return [];
 
-  // ===== TIME CAP CALCULATION =====
-  const sessionStartMin = timeToMinutes(SESSION_START_TIME); // 1080 = 6 PM
-  const sessionEndMin = 24 * 60; // 1440 = 12 AM
+  // ===== TIME CAP =====
+  const sessionStartMin = timeToMinutes(SESSION_START_TIME); // 1080 (6PM)
+  const sessionEndMin = 24 * 60; // 1440 (12AM)
   const sessionMinutes = sessionEndMin - sessionStartMin; // 360 min
-  const maxWaves = Math.floor(sessionMinutes / MATCH_DURATION_MIN); // 24 waves max
-  const maxTotalMatches = maxWaves * numCourts; // 48 matches (2 courts) or 24 matches (1 court)
+  const totalWaves = Math.floor(sessionMinutes / MATCH_DURATION_MIN); // 24 waves
+  const maxMatches = totalWaves * numCourts; // 48 (2 courts) or 24 (1 court)
 
-  // ===== GENERATE ROUNDS UNTIL CAP IS REACHED =====
+  // ===== GENERATE MATCHES UNTIL CAP IS REACHED =====
   const allMatches = [];
   let round = 0;
-  let matchCount = 0;
+  const MAX_SAFETY_ROUNDS = 200; // Prevent infinite loop
 
-  while (matchCount < maxTotalMatches) {
+  while (allMatches.length < maxMatches && round < MAX_SAFETY_ROUNDS) {
     let matchesThisRound = 0;
     pools.forEach(p => {
-      if (matchCount + matchesThisRound >= maxTotalMatches) return;
+      if (allMatches.length >= maxMatches) return;
       const shuffled = seededShuffle(p.players, `${p.name}-round-${round}`);
       for (let i = 0; i + 4 <= shuffled.length; i += 4) {
-        if (matchCount + matchesThisRound >= maxTotalMatches) break;
+        if (allMatches.length >= maxMatches) break;
         allMatches.push({
           tier: p.name,
           tierColor: p.color,
@@ -757,41 +770,26 @@ function generateAutoSchedule(players, startTime, availableCourts) {
       }
     });
     if (matchesThisRound === 0) break;
-    matchCount += matchesThisRound;
     round++;
-    if (round > 100) break; // Safety limit
   }
 
   if (allMatches.length === 0) return [];
 
-  // ===== GROUP BY ROUND =====
-  const roundsMap = {};
-  allMatches.forEach(m => {
-    if (!roundsMap[m.round]) roundsMap[m.round] = [];
-    roundsMap[m.round].push(m);
-  });
-
-  // ===== SCHEDULE =====
+  // ===== SCHEDULE: WAVE BY WAVE (parallel sa courts) =====
   const schedule = [];
   let currentTime = startTime;
-  const sortedRounds = Object.keys(roundsMap).map(Number).sort((a, b) => a - b);
-
-  for (const roundNum of sortedRounds) {
-    const roundMatches = roundsMap[roundNum];
-    for (let i = 0; i < roundMatches.length; i += numCourts) {
-      const currentMinutes = timeToMinutes(currentTime);
-      if (currentMinutes + MATCH_DURATION_MIN > sessionEndMin) break;
-
-      const wave = roundMatches.slice(i, i + numCourts);
-      wave.forEach((match, idx) => {
-        match.court = availableCourts[idx];
-        match.startTime = currentTime;
-        match.endTime = addMinutesToTime(currentTime, MATCH_DURATION_MIN);
-        schedule.push(match);
-      });
-      currentTime = addMinutesToTime(currentTime, MATCH_DURATION_MIN);
-    }
-    if (timeToMinutes(currentTime) + MATCH_DURATION_MIN > sessionEndMin) break;
+  for (let i = 0; i < allMatches.length; i += numCourts) {
+    const currentMinutes = timeToMinutes(currentTime);
+    if (currentMinutes >= sessionEndMin) break;
+    
+    const wave = allMatches.slice(i, i + numCourts);
+    wave.forEach((match, idx) => {
+      match.court = availableCourts[idx];
+      match.startTime = currentTime;
+      match.endTime = addMinutesToTime(currentTime, MATCH_DURATION_MIN);
+      schedule.push(match);
+    });
+    currentTime = addMinutesToTime(currentTime, MATCH_DURATION_MIN);
   }
 
   return schedule;
@@ -807,17 +805,12 @@ function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts) {
   }
 
   const numCourts = availableCourts.length;
-  const totalMinutes = Math.ceil(schedule.length / numCourts) * MATCH_DURATION_MIN;
-  const totalHours = Math.floor(totalMinutes / 60);
-  const remainingMins = totalMinutes % 60;
-  const sessionLength = totalHours > 0 ? `${totalHours}h ${remainingMins}m` : `${remainingMins}m`;
   const courtsLabel = numCourts === 2 ? "🏓 2 Courts (parallel)" : `🏓 1 Court (Court ${availableCourts[0]})`;
   const modeLabel = playerCount < FEW_PLAYERS_THRESHOLD ? "🎲 Mixed Mode (few players)" : "🎯 Skill-Based Mode";
 
   const lastMatch = schedule[schedule.length - 1];
   const sessionEnd = lastMatch ? formatTime12(lastMatch.endTime) : "N/A";
 
-  // Each player plays ~(total matches × 4) / playerCount / numCourts parallel factor
   const totalPlayerSlots = schedule.length * 4;
   const gamesPerPlayer = Math.round(totalPlayerSlots / playerCount);
 
@@ -829,8 +822,7 @@ function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts) {
     <div style="text-align: center; margin-bottom: 20px; padding: 16px; background: rgba(124,58,237,0.15); border-radius: 12px; border: 1px solid rgba(124,58,237,0.3);">
       <p style="font-size: 1.1em; margin: 4px 0;">📅 <strong>${formatDate(dateStr)}</strong></p>
       <p style="font-size: 0.95em; margin: 4px 0; opacity: 0.9;">👥 ${playerCount} players · ${courtsLabel}</p>
-      <p style="font-size: 0.95em; margin: 4px 0; opacity: 0.9;">🏓 ${schedule.length} matches · ⏱️ Estimated session: <strong>${sessionLength}</strong></p>
-      <p style="font-size: 0.95em; margin: 4px 0; opacity: 0.9;">🕐 Start: <strong>${formatTime12(SESSION_START_TIME)}</strong> · End: <strong>${sessionEnd}</strong></p>
+      <p style="font-size: 0.95em; margin: 4px 0; opacity: 0.9;">🏓 ${schedule.length} matches · 🕐 Start: <strong>${formatTime12(SESSION_START_TIME)}</strong> · End: <strong>${sessionEnd}</strong></p>
       <p style="font-size: 0.85em; margin: 4px 0; opacity: 0.75;">~${gamesPerPlayer} games per player · 15 min/match to 11 points</p>
       <p style="font-size: 0.85em; margin: 8px 0 0 0; opacity: 0.85;">${modeLabel} — ${tierSummary}</p>
     </div>
@@ -955,9 +947,23 @@ async function deleteBooking(id) {
   if (pw !== ADMIN_PASSWORD) { alert("❌ Invalid password"); return; }
   if (!confirm("Are you sure you want to delete this booking? This cannot be undone.")) return;
   try {
+    // Get booking date first
+    let bookingDate = null;
+    try {
+      const info = await supabaseFetch(`/rest/v1/bookings?id=eq.${id}&select=booking_date`);
+      if (info && info[0]) bookingDate = info[0].booking_date;
+    } catch (e) { console.warn("Could not fetch booking date", e); }
+    
     await supabaseFetch(`/rest/v1/bookings?id=eq.${id}`, { method: "DELETE" });
     alert("✅ Booking deleted.");
     await loadAdminData();
+    await loadBookings();
+    
+    // Auto-refresh matchups kasi nagbago ang available courts
+    const matchDateInput = document.getElementById("matchDate");
+    if (matchDateInput && bookingDate && matchDateInput.value === bookingDate) {
+      await loadAutoMatchups(bookingDate);
+    }
   } catch (error) { alert("❌ Delete failed: " + error.message); }
 }
 
@@ -966,9 +972,23 @@ async function deleteOpenPlay(id) {
   if (pw !== ADMIN_PASSWORD) { alert("❌ Invalid password"); return; }
   if (!confirm("Are you sure you want to delete this player registration? This cannot be undone.")) return;
   try {
+    // Get player date first
+    let playerDate = null;
+    try {
+      const info = await supabaseFetch(`/rest/v1/open_play?id=eq.${id}&select=play_date`);
+      if (info && info[0]) playerDate = info[0].play_date;
+    } catch (e) { console.warn("Could not fetch player date", e); }
+    
     await supabaseFetch(`/rest/v1/open_play?id=eq.${id}`, { method: "DELETE" });
     alert("✅ Player removed.");
     await loadAdminData();
+    
+    // Auto-refresh matchups
+    const matchDateInput = document.getElementById("matchDate");
+    if (matchDateInput && playerDate && matchDateInput.value === playerDate) {
+      localStorage.removeItem(`zinja_matchup_seed_${playerDate}`);
+      await loadAutoMatchups(playerDate);
+    }
   } catch (error) { alert("❌ Delete failed: " + error.message); }
 }// ====================
 // CLUB CHAT
