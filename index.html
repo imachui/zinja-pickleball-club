@@ -14,6 +14,11 @@
     .admin-badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 0.78em; font-weight: 600; background: #dcfce7; color: #166534; }
     .admin-badge.cancelled { background: #fee2e2; color: #991b1b; }
     .admin-tab-btn { padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.95em; transition: all 0.2s; font-family: inherit; }
+    .matchup-card { background: linear-gradient(135deg, #1e293b, #0f172a); border-radius: 12px; padding: 16px; margin-bottom: 12px; border-left: 4px solid #7c3aed; color: #fff; }
+    .matchup-card.now-playing { border-left-color: #10b981; background: linear-gradient(135deg, #064e3b, #065f46); }
+    .matchup-card.up-next { border-left-color: #f59e0b; background: linear-gradient(135deg, #78350f, #92400e); }
+    .team-block { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: rgba(255,255,255,0.1); border-radius: 8px; margin: 4px 0; }
+    .vs-badge { text-align: center; font-weight: 700; color: #a78bfa; padding: 4px 0; }
   </style>
 </head>
 <body>
@@ -54,7 +59,7 @@
 
   <section class="cards">
     <div><b>🏓 2 Courts</b><p>Two courts available.</p></div>
-    <div><b>₱100-150 / hour</b><p>Day & evening rates.</p></div>
+    <div><b>₱100 (6AM-4PM) • ₱150 (5PM-12AM)</b><p>Day & evening rates.</p></div>
     <div><b>₱50 Open Play</b><p>Join other players.</p></div>
   </section>
 
@@ -81,7 +86,7 @@
 
   <section id="booking">
     <h2>Book a Court</h2>
-    <p>Choose your date, time and court.</p>
+    <p>Choose your date, time and court. <strong>₱100/hour (6AM-4PM)</strong> · <strong>₱150/hour (5PM-12AM)</strong></p>
     <form id="bookingForm">
       <input id="name" placeholder="Full Name" required>
       <input id="phone" placeholder="Mobile Number" required>
@@ -121,7 +126,6 @@
     </form>
     <div id="bookingResult"></div>
 
-    <!-- REFRESH BUTTON FOR BOOKINGS -->
     <div style="margin-top: 16px; text-align: center;">
       <button type="button" id="refreshBookingsBtn" style="padding: 10px 24px; background: linear-gradient(135deg, #7c3aed, #6d28d9); color: #fff; border: none; border-radius: 20px; font-weight: 600; cursor: pointer; font-size: 0.9em; box-shadow: 0 2px 8px rgba(124,58,237,0.3);">🔄 Refresh Bookings</button>
     </div>
@@ -131,7 +135,8 @@
 
   <section id="openplay" class="dark">
     <h2>Join Open Play</h2>
-    <p>Open Play is ₱50 per player. Sessions run <strong>5:00 PM to 12:00 AM</strong> daily.</p>
+    <p>Open Play is ₱50 per player. Sessions run <strong>6:00 PM to 12:00 AM</strong> daily.</p>
+    <p style="font-size: 0.9em; opacity: 0.85;">🎯 16 players per court · 2 courts · Random matchups every session.</p>
     <form id="playForm">
       <input id="player" placeholder="Full Name" required>
       <input id="playerPhone" placeholder="Mobile Number" required>
@@ -148,12 +153,26 @@
     </form>
     <div id="playResult"></div>
 
-    <!-- REFRESH BUTTON FOR OPEN PLAY -->
     <div style="margin-top: 16px; text-align: center;">
       <button type="button" id="refreshOpenPlayBtn" style="padding: 10px 24px; background: linear-gradient(135deg, #10b981, #059669); color: #fff; border: none; border-radius: 20px; font-weight: 600; cursor: pointer; font-size: 0.9em; box-shadow: 0 2px 8px rgba(16,185,129,0.3);">🔄 Refresh Open Play</button>
     </div>
 
     <div id="openPlayList" style="margin-top: 20px;"></div>
+
+    <!-- MATCHUPS SECTION -->
+    <div id="matchupsSection" style="margin-top: 40px; padding-top: 30px; border-top: 2px solid #444;">
+      <h2 style="text-align: center;">🎯 Matchups & Schedule</h2>
+      <p style="text-align: center; font-size: 0.95em; opacity: 0.9;">Random teams — lahat nagkakasama at naglalaban. Tingnan kung sino ang susunod na lalaro.</p>
+      
+      <div style="max-width: 500px; margin: 20px auto; display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;">
+        <input id="matchDate" type="date" style="flex: 1; min-width: 200px; padding: 12px; border-radius: 8px; border: 1px solid #444; background: #1a1a2e; color: #fff;">
+        <button id="generateMatchupsBtn" type="button" style="padding: 12px 24px; background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 0.95em; box-shadow: 0 2px 8px rgba(245,158,11,0.4);">🎲 Generate Matchups</button>
+      </div>
+
+      <div id="matchupsContainer" style="max-width: 900px; margin: 20px auto;">
+        <p style="text-align: center; opacity: 0.7;">Pumili ng date at i-click ang "Generate Matchups" para makita ang random teams.</p>
+      </div>
+    </div>
   </section>
 
   <section id="chat" class="dark">
@@ -237,12 +256,12 @@
   <section id="contact">
     <h2>ZINJA Pickleball Club</h2>
     <p>Malusay, Guihulngan City, Negros Oriental</p>
-    <p>Court rental: ₱100/hour (6AM-5PM) • ₱150/hour (5PM-12AM) • Open Play: ₱50/player</p>
+    <p>Court rental: ₱100/hour (6AM-4PM) • ₱150/hour (5PM-12AM) • Open Play: ₱50/player (6PM-12AM)</p>
   </section>
 
   <footer>© <span id="year"></span> ZINJA Pickleball Club</footer>
 
-  <script src="zinja-app.js?v=15"></script>
+  <script src="zinja-app.js?v=16"></script>
   <script>
     document.getElementById('year').textContent = new Date().getFullYear();
   </script>
