@@ -11,7 +11,6 @@
     .admin-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); position: relative; }
     .admin-card h4 { margin: 0 0 8px 0; color: #7c3aed; }
     .admin-card p { margin: 4px 0; font-size: 0.92em; color: #444; }
-    .admin-badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 0.78em; font-weight: 600; background: #dcfce7; color: #166534; }
     .admin-tab-btn { padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.95em; transition: all 0.2s; font-family: inherit; }
     .admin-delete-btn { position: absolute; top: 12px; right: 12px; background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.85em; font-weight: 600; }
     .admin-delete-btn:hover { background: #dc2626; }
@@ -37,13 +36,13 @@
     </nav>
   </header>
 
-  <div id="liveStatus" style="background: linear-gradient(135deg, #059669, #047857); color: white; padding: 12px 20px; text-align: center; font-size: 0.95em; font-weight: 500; transition: background 0.3s;">
+  <div id="liveStatus" style="background: linear-gradient(135deg, #059669, #047857); color: white; padding: 12px 20px; text-align: center; font-size: 0.95em; font-weight: 500;">
     <span style="display: inline-block; width: 10px; height: 10px; background: #fff; border-radius: 50%; margin-right: 8px;"></span>
     <strong>Loading status...</strong>
   </div>
 
   <div style="background: linear-gradient(135deg, #1e3a8a, #7c3aed); color: white; padding: 10px 20px; text-align: center; font-size: 0.88em;">
-    📢 <strong>Weekly Schedule:</strong> Courts and Open Play are closed every <strong>Friday 5:00 PM to Saturday 5:00 PM</strong> (Philippine Time) for our scheduled rest period.
+    📢 <strong>Weekly Schedule:</strong> Courts and Open Play are closed every <strong>Friday 5:00 PM to Saturday 5:00 PM</strong> (Philippine Time).
   </div>
 
   <section id="home" class="hero">
@@ -64,12 +63,12 @@
     <div><b>₱50 Open Play</b><p>Join other players.</p></div>
   </section>
 
-  <section id="download" style="background: linear-gradient(135deg, #7c3aed 0%, #06b6d4 100%); padding: 60px 20px; text-align: center; color: white; position: relative; overflow: hidden;">
-    <div style="max-width: 700px; margin: 0 auto; position: relative; z-index: 2;">
+  <section id="download" style="background: linear-gradient(135deg, #7c3aed 0%, #06b6d4 100%); padding: 60px 20px; text-align: center; color: white;">
+    <div style="max-width: 700px; margin: 0 auto;">
       <h2 style="color: white; font-size: 2em; margin-bottom: 10px;">📱 Get the ZINJA App</h2>
       <p style="margin-bottom: 25px; font-size: 1.15em; opacity: 0.95;">Book courts, join Open Play — all in one app!</p>
       <div style="display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; align-items: center;">
-        <a href="ZINJA-Pickleball.apk" download style="display: inline-flex; align-items: center; gap: 10px; padding: 16px 35px; background: white; color: #7c3aed; text-decoration: none; border-radius: 50px; font-weight: bold; font-size: 1.05em; box-shadow: 0 6px 20px rgba(0,0,0,0.25); transition: transform 0.2s;">⬇ Download APK</a>
+        <a href="ZINJA-Pickleball.apk" download style="display: inline-flex; align-items: center; gap: 10px; padding: 16px 35px; background: white; color: #7c3aed; text-decoration: none; border-radius: 50px; font-weight: bold; font-size: 1.05em; box-shadow: 0 6px 20px rgba(0,0,0,0.25);">⬇ Download APK</a>
         <div style="display: inline-flex; align-items: center; gap: 8px; padding: 16px 25px; background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.3); border-radius: 50px; font-size: 1.05em;">🤖 Android 7.0+</div>
       </div>
       <p style="margin-top: 25px; font-size: 0.9em; opacity: 0.85;">Version 1.0 · Free · No ads</p>
@@ -111,7 +110,7 @@
         <option value="9">9 hours</option>
         <option value="10">10 hours</option>
       </select>
-      <div id="priceDisplay" style="display: none; margin: 12px 0; padding: 14px 18px; background: linear-gradient(135deg, #7c3aed, #06b6d4); border-radius: 12px; color: #fff; box-shadow: 0 4px 12px rgba(124,58,237,0.3);">
+      <div id="priceDisplay" style="display: none; margin: 12px 0; padding: 14px 18px; background: linear-gradient(135deg, #7c3aed, #06b6d4); border-radius: 12px; color: #fff;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
           <span style="font-size: 0.9em; opacity: 0.9;">📊 Rate per hour</span>
           <strong id="ratePerHour" style="font-size: 1.1em;">₱0</strong>
@@ -128,7 +127,7 @@
     <div id="bookingResult"></div>
 
     <div style="margin-top: 16px; text-align: center;">
-      <button type="button" id="refreshBookingsBtn" style="padding: 10px 24px; background: linear-gradient(135deg, #7c3aed, #6d28d9); color: #fff; border: none; border-radius: 20px; font-weight: 600; cursor: pointer; font-size: 0.9em; box-shadow: 0 2px 8px rgba(124,58,237,0.3);">🔄 Refresh Bookings</button>
+      <button type="button" id="refreshBookingsBtn" style="padding: 10px 24px; background: linear-gradient(135deg, #7c3aed, #6d28d9); color: #fff; border: none; border-radius: 20px; font-weight: 600; cursor: pointer; font-size: 0.9em;">🔄 Refresh Bookings</button>
     </div>
 
     <div id="bookingsList" style="margin-top: 20px;"></div>
@@ -137,7 +136,7 @@
   <section id="openplay" class="dark">
     <h2>Join Open Play</h2>
     <p>Open Play is ₱50 per player. Sessions run <strong>6:00 PM to 12:00 AM</strong> daily.</p>
-    <p style="font-size: 0.9em; opacity: 0.85;">🎯 16 players per court · 2 courts · Auto-generated matchups to 11 points.</p>
+    <p style="font-size: 0.9em; opacity: 0.85;">🎯 Skill-based matchups — Advanced vs Advanced, Beginners vs Beginners.</p>
     <form id="playForm">
       <input id="player" placeholder="Full Name" required>
       <input id="playerPhone" placeholder="Mobile Number" required>
@@ -155,21 +154,18 @@
     <div id="playResult"></div>
 
     <div style="margin-top: 16px; text-align: center;">
-      <button type="button" id="refreshOpenPlayBtn" style="padding: 10px 24px; background: linear-gradient(135deg, #10b981, #059669); color: #fff; border: none; border-radius: 20px; font-weight: 600; cursor: pointer; font-size: 0.9em; box-shadow: 0 2px 8px rgba(16,185,129,0.3);">🔄 Refresh Open Play</button>
+      <button type="button" id="refreshOpenPlayBtn" style="padding: 10px 24px; background: linear-gradient(135deg, #10b981, #059669); color: #fff; border: none; border-radius: 20px; font-weight: 600; cursor: pointer; font-size: 0.9em;">🔄 Refresh Open Play</button>
     </div>
 
     <div id="openPlayList" style="margin-top: 20px;"></div>
 
-    <!-- MATCHUPS SECTION (Auto-loaded) -->
     <div id="matchupsSection" style="margin-top: 40px; padding-top: 30px; border-top: 2px solid #444;">
       <h2 style="text-align: center;">🎯 Matchups & Schedule</h2>
-      <p style="text-align: center; font-size: 0.95em; opacity: 0.9;">Auto-generated schedule — matches to 11 points (~15 min each). Everyone plays!</p>
-      
+      <p style="text-align: center; font-size: 0.95em; opacity: 0.9;">Auto-generated schedule — matches to 11 points (~15 min each).</p>
       <div style="max-width: 500px; margin: 20px auto;">
         <label style="display: block; margin-bottom: 8px; font-size: 0.9em; opacity: 0.9;">Select date:</label>
         <input id="matchDate" type="date" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #444; background: #1a1a2e; color: #fff;">
       </div>
-
       <div id="matchupsContainer" style="max-width: 900px; margin: 20px auto;">
         <p style="text-align: center; opacity: 0.7;">Choose a date to see auto-generated matchups.</p>
       </div>
@@ -238,7 +234,7 @@
 
   <section id="admin" style="background: #f8fafc; padding: 40px 20px;">
     <h2 style="text-align: center;">🔐 Admin Panel</h2>
-    <p style="color: #666; font-size: 0.92em; text-align: center;">Enter the admin password to view bookings, open play registrations, and manage matchups.</p>
+    <p style="color: #666; font-size: 0.92em; text-align: center;">Enter the admin password to manage bookings, players, and matchups.</p>
     <div style="max-width: 500px; margin: 0 auto 20px auto; display: flex; gap: 8px;">
       <input id="adminPassword" type="password" placeholder="Admin Password" style="flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #ddd;">
       <button class="btn" type="button" onclick="loadAdminData()" style="white-space: nowrap;">View Data</button>
@@ -246,7 +242,7 @@
     <div id="adminResult"></div>
     <div id="adminData" style="display: none; max-width: 900px; margin: 0 auto;">
       <div style="display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap;">
-        <button type="button" onclick="switchAdminTab('bookings')" id="tabBookings" class="admin-tab-btn" style="background: linear-gradient(135deg, #7c3aed, #6d28d9); color: #ffffff; border: 2px solid #6d28d9; box-shadow: 0 2px 8px rgba(124,58,237,0.3);">📋 Court Bookings</button>
+        <button type="button" onclick="switchAdminTab('bookings')" id="tabBookings" class="admin-tab-btn" style="background: linear-gradient(135deg, #7c3aed, #6d28d9); color: #ffffff; border: 2px solid #6d28d9;">📋 Court Bookings</button>
         <button type="button" onclick="switchAdminTab('openplay')" id="tabOpenPlay" class="admin-tab-btn" style="background: #ffffff; color: #333333; border: 2px solid #dddddd;">🏓 Open Play</button>
         <button type="button" onclick="switchAdminTab('matchups')" id="tabMatchups" class="admin-tab-btn" style="background: #ffffff; color: #333333; border: 2px solid #dddddd;">🎲 Matchups</button>
       </div>
@@ -262,7 +258,7 @@
 
   <footer>© <span id="year"></span> ZINJA Pickleball Club</footer>
 
-  <script src="zinja-app.js?v=18"></script>
+  <script src="zinja-app.js?v=21"></script>
   <script>
     document.getElementById('year').textContent = new Date().getFullYear();
   </script>
