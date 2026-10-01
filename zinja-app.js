@@ -13,15 +13,17 @@ const STATUS_POLL_MS = 300000;
 const BOOKING_DISPLAY_DAYS = 30;
 const OPENPLAY_DISPLAY_DAYS = 7;
 
-const OPEN_PLAY_START_MIN = 17 * 60;
-const OPEN_PLAY_END_MIN = 24 * 60;
-const OPEN_PLAY_START_TIME = "17:00";
+// OPEN PLAY: 6PM - 12AM (CHANGED from 5PM)
+const OPEN_PLAY_START_MIN = 18 * 60;  // 6 PM
+const OPEN_PLAY_END_MIN = 24 * 60;     // 12 AM
+const OPEN_PLAY_START_TIME = "18:00";
 const PLAYERS_PER_COURT = 16;
 const TOTAL_COURTS = 2;
 const OPEN_PLAY_FEE = 50;
 
-const MORNING_START_MIN = 6 * 60;
-const MORNING_END_MIN = 17 * 60;
+// PRICING: Day rate 6AM-4PM (CHANGED from 5PM)
+const MORNING_START_MIN = 6 * 60;   // 6 AM
+const MORNING_END_MIN = 16 * 60;    // 4 PM (CHANGED from 17 = 5PM)
 const MORNING_RATE = 100;
 const EVENING_RATE = 150;
 
@@ -146,6 +148,8 @@ function calculateBookingPrice(startTime, durationHours) {
 
   for (let i = 0; i < Number(durationHours); i++) {
     const hourStart = startMin + (i * 60);
+    // MORNING: 6AM - 4PM = ₱100
+    // EVENING: 4PM - 12AM = ₱150
     if (hourStart >= MORNING_START_MIN && hourStart < MORNING_END_MIN) {
       total += MORNING_RATE;
       morningHours++;
@@ -182,7 +186,7 @@ function updatePriceDisplay() {
   if (calc.breakdown) {
     noteEl.textContent = `Mixed rate: ${calc.breakdown}`;
   } else {
-    noteEl.textContent = calc.rate === MORNING_RATE ? "☀️ Day rate (6AM-5PM)" : "🌙 Evening rate (5PM-12AM)";
+    noteEl.textContent = calc.rate === MORNING_RATE ? "☀️ Day rate (6AM-4PM)" : "🌙 Evening rate (5PM-12AM)";
   }
 }
 
@@ -311,13 +315,13 @@ async function updateOpenPlayInfo() {
     infoDiv.innerHTML = "<p>⏳ Checking available slots...</p>";
     const cap = await checkOpenPlayCapacity(playDate);
     if (cap.noCourts) {
-      infoDiv.innerHTML = `<div style="background:#ffebee;padding:12px;border-radius:8px;border-left:4px solid #ef4444;"><strong>❌ Open Play unavailable on ${formatDate(playDate)}</strong><p style="margin:6px 0 0 0;font-size:0.9em;">Both courts are booked during Open Play hours (5PM-12AM).</p></div>`;
+      infoDiv.innerHTML = `<div style="background:#ffebee;padding:12px;border-radius:8px;border-left:4px solid #ef4444;"><strong>❌ Open Play unavailable on ${formatDate(playDate)}</strong><p style="margin:6px 0 0 0;font-size:0.9em;">Both courts are booked during Open Play hours (6PM-12AM).</p></div>`;
       return;
     }
     const statusColor = cap.isFull ? "#ef4444" : (cap.spotsLeft < 5 ? "#ff9800" : "#4caf50");
     const statusBg = cap.isFull ? "#ffebee" : (cap.spotsLeft < 5 ? "#fff3e0" : "#e8f5e9");
     const courtLabel = cap.availableCourts.length === 2 ? "🏓 2 Courts (both available)" : `🏓 1 Court (Court ${cap.availableCourts[0]})`;
-    infoDiv.innerHTML = `<div style="background:${statusBg};padding:12px;border-radius:8px;border-left:4px solid ${statusColor};"><strong>Open Play on ${formatDate(playDate)} (5PM - 12AM)</strong><p style="margin:6px 0;font-size:0.95em;">${courtLabel}</p><p style="margin:6px 0;font-size:0.95em;"><strong>${cap.currentCount}/${cap.maxSlots}</strong> slots taken ${cap.isFull ? "— <strong>FULL</strong>" : `— <strong>${cap.spotsLeft}</strong> slots left`}</p></div>`;
+    infoDiv.innerHTML = `<div style="background:${statusBg};padding:12px;border-radius:8px;border-left:4px solid ${statusColor};"><strong>Open Play on ${formatDate(playDate)} (6PM - 12AM)</strong><p style="margin:6px 0;font-size:0.95em;">${courtLabel}</p><p style="margin:6px 0;font-size:0.95em;"><strong>${cap.currentCount}/${cap.maxSlots}</strong> slots taken ${cap.isFull ? "— <strong>FULL</strong>" : `— <strong>${cap.spotsLeft}</strong> slots left`}</p></div>`;
   } catch (error) { console.error("Open play info error:", error); infoDiv.innerHTML = ""; }
 }
 
@@ -520,7 +524,7 @@ async function handleOpenPlaySubmit(event) {
     const cap = await checkOpenPlayCapacity(playDate);
     if (cap.noCourts) {
       showResult(result, `❌ Open Play is CANCELLED on ${formatDate(playDate)}. Both courts are booked.`, false);
-      alert(`⚠️ OPEN PLAY UNAVAILABLE\n\n${formatDate(playDate)}\n\nBoth courts are booked during Open Play hours (5PM-12AM).`);
+      alert(`⚠️ OPEN PLAY UNAVAILABLE\n\n${formatDate(playDate)}\n\nBoth courts are booked during Open Play hours (6PM-12AM).`);
       return;
     }
     if (cap.isFull) {
@@ -536,7 +540,7 @@ async function handleOpenPlaySubmit(event) {
     });
     saveCancellation("open_play", { mobile, code: cancellationCode });
     const newCount = cap.currentCount + 1;
-    showResult(result, `✅ Thank you, ${name}! Open Play confirmed for ${formatDate(playDate)} (5PM-12AM). Fee: ₱${OPEN_PLAY_FEE}. Cancellation code: ${cancellationCode}.\n\n📊 Slots: ${newCount}/${cap.maxSlots} taken.`, true);
+    showResult(result, `✅ Thank you, ${name}! Open Play confirmed for ${formatDate(playDate)} (6PM-12AM). Fee: ₱${OPEN_PLAY_FEE}. Cancellation code: ${cancellationCode}.\n\n📊 Slots: ${newCount}/${cap.maxSlots} taken.`, true);
     form.reset();
     const infoDiv = document.getElementById("openPlayInfo");
     if (infoDiv) infoDiv.innerHTML = "";
@@ -628,6 +632,137 @@ async function cancelOpenPlay() {
       showResult(result, "No matching Open Play registration was found.", false);
     }
   } catch (error) { showResult(result, `Cancellation failed. ${error.message || "Please try again."}`, false); }
+}
+
+// ====================
+// MATCHUPS SYSTEM (NEW)
+// ====================
+
+function seededShuffle(array, seed) {
+  // Deterministic shuffle based on seed
+  const arr = [...array];
+  let s = 0;
+  for (let i = 0; i < String(seed).length; i++) s += String(seed).charCodeAt(i);
+  const rand = () => {
+    s = (s * 9301 + 49297) % 233280;
+    return s / 233280;
+  };
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+async function generateMatchups() {
+  const container = document.getElementById("matchupsContainer");
+  const dateInput = document.getElementById("matchDate");
+  const date = dateInput?.value;
+  if (!container) return;
+  if (!date) { container.innerHTML = '<p style="text-align:center;color:#f59e0b;">⚠️ Please select a date first.</p>'; return; }
+
+  container.innerHTML = '<p style="text-align:center;">⏳ Loading players...</p>';
+
+  try {
+    const players = await supabaseFetch(`/rest/v1/open_play?select=player_name,skill_level&play_date=eq.${encodeURIComponent(date)}`);
+    if (!players || players.length === 0) {
+      container.innerHTML = `<p style="text-align:center;color:#f59e0b;">⚠️ No Open Play registrations for ${formatDate(date)}.</p>`;
+      return;
+    }
+
+    // Get or create a shuffle seed for this date (saved in localStorage)
+    const seedKey = `zinja_matchup_seed_${date}`;
+    let seed = localStorage.getItem(seedKey);
+    if (!seed) {
+      seed = Math.random().toString(36).substring(2, 10);
+      localStorage.setItem(seedKey, seed);
+    }
+
+    // Shuffle players deterministically
+    const shuffled = seededShuffle(players, seed);
+
+    // Build matchups: split into 2 courts, 16 players each
+    const playersPerCourt = PLAYERS_PER_COURT; // 16
+    const playersPerMatch = 4; // 2v2 doubles
+    const matchesPerCourt = Math.floor(playersPerCourt / playersPerMatch); // 4
+
+    const courts = {};
+    for (let c = 1; c <= TOTAL_COURTS; c++) courts[c] = [];
+
+    let idx = 0;
+    for (let c = 1; c <= TOTAL_COURTS; c++) {
+      const courtPlayers = shuffled.slice(idx, idx + playersPerCourt);
+      idx += playersPerCourt;
+      for (let m = 0; m < matchesPerCourt; m++) {
+        const matchPlayers = courtPlayers.slice(m * playersPerMatch, (m + 1) * playersPerMatch);
+        if (matchPlayers.length < playersPerMatch) break;
+        courts[c].push({
+          matchNumber: m + 1,
+          teamA: [matchPlayers[0], matchPlayers[1]],
+          teamB: [matchPlayers[2], matchPlayers[3]]
+        });
+      }
+    }
+
+    // Render matchups
+    let html = `
+      <div style="text-align: center; margin-bottom: 20px;">
+        <p style="font-size: 1.1em; margin: 8px 0;">📅 <strong>${formatDate(date)}</strong> · ${shuffled.length} players</p>
+        <button type="button" onclick="rerollMatchups()" style="padding: 8px 20px; background: #ef4444; color: #fff; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 0.9em;">🔀 Re-Shuffle Matchups</button>
+      </div>
+    `;
+
+    let matchCounter = 0;
+    for (let c = 1; c <= TOTAL_COURTS; c++) {
+      const matches = courts[c];
+      if (matches.length === 0) continue;
+      html += `<h3 style="color: #a78bfa; margin-top: 24px; margin-bottom: 12px;">🏓 Court ${c}</h3>`;
+      matches.forEach(m => {
+        matchCounter++;
+        const isNow = matchCounter === 1;
+        const isNext = matchCounter === 2;
+        const cls = isNow ? "matchup-card now-playing" : (isNext ? "matchup-card up-next" : "matchup-card");
+        const badge = isNow ? '🟢 NOW PLAYING' : (isNext ? '🟡 UP NEXT' : `⏳ MATCH #${matchCounter}`);
+        html += `
+          <div class="${cls}">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+              <span style="font-size: 0.85em; font-weight: 700; opacity: 0.9;">${badge}</span>
+              <span style="font-size: 0.75em; opacity: 0.7;">Match ${m.matchNumber} · Court ${c}</span>
+            </div>
+            <div class="team-block">
+              <strong style="color: #10b981;">Team A:</strong>
+              <span>${escapeHtml(m.teamA[0].player_name)}</span>
+              <span style="opacity: 0.5;">&</span>
+              <span>${escapeHtml(m.teamA[1].player_name)}</span>
+            </div>
+            <div class="vs-badge">— VS —</div>
+            <div class="team-block">
+              <strong style="color: #f59e0b;">Team B:</strong>
+              <span>${escapeHtml(m.teamB[0].player_name)}</span>
+              <span style="opacity: 0.5;">&</span>
+              <span>${escapeHtml(m.teamB[1].player_name)}</span>
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    html += `<p style="text-align: center; font-size: 0.85em; opacity: 0.7; margin-top: 24px;">💡 Tip: I-click ang "Re-Shuffle" para mag-iba ang random teams.</p>`;
+
+    container.innerHTML = html;
+  } catch (error) {
+    console.error("Matchups error:", error);
+    container.innerHTML = `<p style="text-align:center;color:#ef4444;">❌ Unable to load matchups: ${error.message}</p>`;
+  }
+}
+
+function rerollMatchups() {
+  const dateInput = document.getElementById("matchDate");
+  const date = dateInput?.value;
+  if (!date) return;
+  // Clear the seed para mag-generate ng bago
+  localStorage.removeItem(`zinja_matchup_seed_${date}`);
+  generateMatchups();
 }// ====================
 // CLUB CHAT
 // ====================
@@ -845,6 +980,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   updateLiveClosureStatus();
 
+  // Refresh Buttons
   const refreshBookingsBtn = document.getElementById("refreshBookingsBtn");
   if (refreshBookingsBtn) {
     refreshBookingsBtn.addEventListener("click", async () => {
@@ -867,6 +1003,20 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // Matchups Buttons
+  const generateMatchupsBtn = document.getElementById("generateMatchupsBtn");
+  if (generateMatchupsBtn) {
+    generateMatchupsBtn.addEventListener("click", generateMatchups);
+  }
+
+  // Set default match date to today
+  const matchDateInput = document.getElementById("matchDate");
+  if (matchDateInput) {
+    const today = new Date().toISOString().split("T")[0];
+    matchDateInput.value = today;
+  }
+
+  // Smart Polling
   let lastChatLoad = 0;
   let lastDataLoad = 0;
   let lastStatusUpdate = 0;
