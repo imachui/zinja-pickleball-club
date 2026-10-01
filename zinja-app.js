@@ -22,9 +22,13 @@ const OPEN_PLAY_FEE = 50;
 
 const MATCH_DURATION_MIN = 15;
 const MATCH_TARGET_SCORE = 11;
-const FEW_PLAYERS_THRESHOLD = 8;
+
+// ===== SKILL MATCHING THRESHOLDS =====
+// If total players < 12 → ALL MIXED (para lahat makalaro)
+// If >= 12 players AND may 2+ skill tiers na may 4+ players → SKILL-BASED
+const MIXED_MODE_THRESHOLD = 12;
 const MIN_TIER_SIZE = 4;
-const MIN_VALID_TIERS_FOR_SKILL = 2;
+
 const SESSION_START_TIME = "18:00";
 const SESSION_END_TIME = "24:00";
 
@@ -676,7 +680,7 @@ async function cancelOpenPlay() {
 }
 
 // ====================
-// AUTO MATCH SYSTEM
+// AUTO MATCH SYSTEM (BULLETPROOF VERSION)
 // ====================
 
 function seededShuffle(array, seed) {
@@ -709,61 +713,79 @@ function groupPlayersBySkill(players) {
   return { advanced, intermediate, beginner, flexible };
 }
 
+// ===== SIMPLIFIED BULLETPROOF buildPools =====
 function buildPools(players) {
-  const pools = [];
   const total = players.length;
-
-  // FEW PLAYERS → all Mixed mode
-  if (total < FEW_PLAYERS_THRESHOLD) {
-    pools.push({ name: 'Mixed', color: '#7c3aed', players: [...players] });
-    return pools;
-  }
-
   const groups = groupPlayersBySkill(players);
-  
-  // Valid tier = has >= 4 players
-  const validAdvanced = groups.advanced.length >= MIN_TIER_SIZE;
-  const validIntermediate = groups.intermediate.length >= MIN_TIER_SIZE;
-  const validBeginner = groups.beginner.length >= MIN_TIER_SIZE;
-  const validCount = [validAdvanced, validIntermediate, validBeginner].filter(Boolean).length;
+  const advCount = groups.advanced.length;
+  const intCount = groups.intermediate.length;
+  const begCount = groups.beginner.length;
+  const flexCount = groups.flexible.length;
 
-  console.log('[MATCHUP DEBUG] Total players:', total);
-  console.log('[MATCHUP DEBUG] Advanced:', groups.advanced.length, 'valid:', validAdvanced);
-  console.log('[MATCHUP DEBUG] Intermediate:', groups.intermediate.length, 'valid:', validIntermediate);
-  console.log('[MATCHUP DEBUG] Beginner:', groups.beginner.length, 'valid:', validBeginner);
-  console.log('[MATCHUP DEBUG] Valid tiers count:', validCount, '(need >=', MIN_VALID_TIERS_FOR_SKILL, ')');
+  // DEBUG
+  console.log('=== MATCHUP DEBUG ===');
+  console.log('Total players:', total);
+  console.log('Advanced:', advCount, '| Intermediate:', intCount, '| Beginner:', begCount, '| Any level:', flexCount);
+  console.log('Mixed mode threshold:', MIXED_MODE_THRESHOLD);
 
-  // If fewer than 2 valid tiers → ALL MIXED (include everyone!)
-  if (validCount < MIN_VALID_TIERS_FOR_SKILL) {
-    console.log('[MATCHUP DEBUG] → MIXED MODE (all players)');
-    pools.push({ name: 'Mixed', color: '#7c3aed', players: [...players] });
-    return pools;
+  // RULE 1: If < 12 players total → ALWAYS Mixed mode (kasama lahat)
+  if (total < MIXED_MODE_THRESHOLD) {
+    console.log('→ MIXED MODE (few players, all included)');
+    return [{ name: 'Mixed', color: '#7c3aed', players: [...players] }];
   }
 
-  // Skill-based mode
-  console.log('[MATCHUP DEBUG] → SKILL-BASED MODE');
-  if (validAdvanced) pools.push({ name: 'Advanced', color: '#dc2626', players: [...groups.advanced] });
-  if (validIntermediate) pools.push({ name: 'Intermediate', color: '#f59e0b', players: [...groups.intermediate] });
-  if (validBeginner) pools.push({ name: 'Beginner', color: '#10b981', players: [...groups.beginner] });
+  // RULE 2: Skill-based mode requires at least 2 tiers with >= 4 players each
+  const hasAdvTier = advCount >= MIN_TIER_SIZE;
+  const hasIntTier = intCount >= MIN_TIER_SIZE;
+  const hasBegTier = begCount >= MIN_TIER_SIZE;
+  const validTierCount = [hasAdvTier, hasIntTier, hasBegTier].filter(Boolean).length;
 
-  // Leftover: small tiers + flexible
+  console.log('Valid tiers:', validTierCount, '(need >= 2)');
+
+  // RULE 3: If < 2 valid tiers → Mixed mode (all included)
+  if (validTierCount < 2) {
+    console.log('→ MIXED MODE (not enough valid skill tiers)');
+    return [{ name: 'Mixed', color: '#7c3aed', players: [...players] }];
+  }
+
+  // RULE 4: Skill-based mode
+  console.log('→ SKILL-BASED MODE');
+  const pools = [];
   const leftover = [];
-  if (groups.advanced.length > 0 && !validAdvanced) leftover.push(...groups.advanced);
-  if (groups.intermediate.length > 0 && !validIntermediate) leftover.push(...groups.intermediate);
-  if (groups.beginner.length > 0 && !validBeginner) leftover.push(...groups.beginner);
+
+  if (hasAdvTier) {
+    pools.push({ name: 'Advanced', color: '#dc2626', players: [...groups.advanced] });
+  } else {
+    leftover.push(...groups.advanced);
+  }
+
+  if (hasIntTier) {
+    pools.push({ name: 'Intermediate', color: '#f59e0b', players: [...groups.intermediate] });
+  } else {
+    leftover.push(...groups.intermediate);
+  }
+
+  if (hasBegTier) {
+    pools.push({ name: 'Beginner', color: '#10b981', players: [...groups.beginner] });
+  } else {
+    leftover.push(...groups.beginner);
+  }
+
+  // Always add flexible (Any level) players to leftover
   leftover.push(...groups.flexible);
 
-  console.log('[MATCHUP DEBUG] Leftover players:', leftover.length);
+  console.log('Leftover players:', leftover.length);
 
   if (leftover.length >= MIN_TIER_SIZE) {
     pools.push({ name: 'Mixed', color: '#7c3aed', players: leftover });
   } else if (leftover.length > 0) {
-    // Merge into largest pool
+    // Merge sa pinakamalaking tier
     const largest = pools.reduce((max, p) => p.players.length > max.players.length ? p : max);
     largest.players.push(...leftover);
-    console.log('[MATCHUP DEBUG] Merged leftover into', largest.name);
+    console.log('Merged leftover into', largest.name);
   }
 
+  console.log('Final pools:', pools.map(p => `${p.name}(${p.players.length})`).join(', '));
   return pools;
 }
 
@@ -1210,7 +1232,7 @@ function renderAdminContent() {
       <div style="background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px;">
         <h3 style="color: #7c3aed; margin-top: 0;">🎲 Matchups Manager</h3>
         <p style="color: #666; font-size: 0.9em;">Auto-generated schedule from 6PM to 12AM — matches to 11 points (~15 min).</p>
-        <p style="color: #888; font-size: 0.85em; font-style: italic;">Few players (&lt;8) = Mixed Mode · 2+ valid tiers (4+ each) = Skill-Based Mode</p>
+        <p style="color: #888; font-size: 0.85em; font-style: italic;">&lt; 12 players = Mixed Mode · ≥ 12 players with 2+ valid tiers = Skill-Based Mode</p>
         <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
           <input id="adminMatchDate" type="date" value="${today}" style="flex: 1; min-width: 200px; padding: 12px; border-radius: 8px; border: 1px solid #ddd;">
           <button type="button" onclick="renderAdminMatchups(document.getElementById('adminMatchDate').value)" style="padding: 12px 24px; background: linear-gradient(135deg, #7c3aed, #6d28d9); color: #fff; border: none; border-radius: 8px; font-weight: 700; cursor: pointer;">🔄 Load</button>
