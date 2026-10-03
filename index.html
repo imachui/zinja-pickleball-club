@@ -10,186 +10,194 @@
     html, body { margin: 0; padding: 0; }
     body {
       font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      background: #f5f7fa;
-      color: #111;
+      /* 🎨 Background matches ZINJA logo — deep purple → blue gradient */
+      background: linear-gradient(180deg, #0d0530 0%, #1a0b3d 25%, #2d1b69 60%, #1e3a8a 100%);
+      background-attachment: fixed;
+      background-size: cover;
+      color: #fff;
       min-height: 100vh;
     }
 
     /* TOP BAR */
     .topbar {
       position: sticky; top: 0; z-index: 60;
-      background: #ffffff;
+      background: rgba(13, 5, 48, 0.85);
+      backdrop-filter: blur(10px);
       padding: 10px 18px;
       display: flex; align-items: center; gap: 12px;
-      border-bottom: 1px solid #e5e7eb;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+      border-bottom: 1px solid rgba(168, 85, 247, 0.25);
     }
     .topbar a {
-      display: flex; align-items: center; gap: 12px;
-      color: #111; text-decoration: none;
+      display: flex; align-items: center; gap: 10px;
+      color: #fff; text-decoration: none;
     }
-    .topbar img { height: 52px; }
+    .topbar img { height: 42px; }
     .topbar .brand-text { display: flex; flex-direction: column; line-height: 1.1; }
-    .topbar .brand-text strong { font-size: 1.15em; color: #111; letter-spacing: 0.3px; }
-    .topbar .brand-text small { font-size: 0.7em; color: #666; letter-spacing: 1.5px; font-weight: 600; }
+    .topbar .brand-text strong {
+      font-size: 1.05em;
+      color: #fff;
+      letter-spacing: 1px;
+      background: linear-gradient(90deg, #c084fc, #60a5fa);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .topbar .brand-text small {
+      font-size: 0.65em; color: #a5b4fc; letter-spacing: 2px; font-weight: 700;
+    }
 
     /* STATUS BANNERS */
-    #liveStatus {
-      padding: 10px 18px; text-align: center;
-      font-size: 0.9em; font-weight: 600;
-      color: #fff;
-    }
+    #liveStatus { padding: 10px 18px; text-align: center; font-size: 0.9em; font-weight: 600; color: #fff; }
     .weekly-banner {
-      background: linear-gradient(135deg,#1e3a8a,#7c3aed);
+      background: linear-gradient(135deg, #1e3a8a, #7c3aed);
       color: #fff; padding: 8px 18px;
       text-align: center; font-size: 0.82em;
+      border-bottom: 1px solid rgba(168, 85, 247, 0.3);
     }
 
     /* PAGES */
-    .page { display: none; padding: 20px 16px 40px 16px; max-width: 720px; margin: 0 auto; }
+    .page { display: none; padding: 20px 16px 60px 16px; max-width: 720px; margin: 0 auto; }
     .page.active { display: block; }
 
     .page-header {
       display: flex; align-items: center; gap: 12px;
       padding: 12px 16px;
-      background: linear-gradient(135deg,#7c3aed,#6d28d9);
+      background: linear-gradient(135deg, #7c3aed, #6d28d9);
       color: #fff;
-      border-radius: 12px;
+      border-radius: 14px;
       margin: 0 0 20px 0;
+      box-shadow: 0 4px 20px rgba(124, 58, 237, 0.4);
     }
     .page-header button {
-      background: rgba(255,255,255,0.22);
+      background: rgba(255, 255, 255, 0.22);
       border: none; color: #fff;
       padding: 8px 14px; border-radius: 20px;
       font-weight: 700; cursor: pointer; font-size: 0.88em;
       font-family: inherit;
     }
-    .page-header h2 { margin: 0; font-size: 1.05em; flex: 1; text-align: center; padding-right: 60px; }
-
-    /* HERO (HOME) */
-    .hero {
-      background: linear-gradient(135deg, #0f172a 0%, #1e293b 45%, #7c3aed 140%);
-      border-radius: 18px;
-      padding: 28px 22px 26px 22px;
-      color: #fff;
-      text-align: center;
-      margin-bottom: 18px;
-      box-shadow: 0 10px 30px rgba(15,23,42,0.18);
-      position: relative;
-      overflow: hidden;
+    .page-header h2 {
+      margin: 0; font-size: 1.05em; flex: 1;
+      text-align: center; padding-right: 60px;
     }
-    .hero::before {
-      content: '';
-      position: absolute;
-      top: -50%; right: -30%;
-      width: 320px; height: 320px;
-      background: radial-gradient(circle, rgba(16,185,129,0.35), transparent 70%);
-      pointer-events: none;
+
+    /* HERO (LOGO ONLY) */
+    .hero {
+      text-align: center;
+      padding: 20px 0 10px 0;
+      margin-bottom: 20px;
     }
     .hero-logo {
-      width: 140px; height: 140px; object-fit: contain;
-      display: block; margin: 0 auto 10px auto;
-      filter: drop-shadow(0 4px 12px rgba(0,0,0,0.35));
+      width: 200px;
+      max-width: 60vw;
+      height: auto;
+      display: block;
+      margin: 0 auto;
+      filter: drop-shadow(0 8px 32px rgba(168, 85, 247, 0.65)) drop-shadow(0 0 60px rgba(59, 130, 246, 0.4));
+      animation: glow 4s ease-in-out infinite alternate;
     }
-    .hero .welcome { font-size: 0.78em; letter-spacing: 3px; opacity: 0.85; font-weight: 700; margin: 0; }
-    .hero h1 {
-      margin: 6px 0 4px 0;
-      font-size: 2.1em;
-      letter-spacing: 1px;
-      font-weight: 900;
-      color: #fff;
-      line-height: 1.05;
-    }
-    .hero .tagline {
-      margin: 8px 0 6px 0;
-      font-size: 1.02em;
-      font-weight: 700;
-      color: #a7f3d0;
-    }
-    .hero .subtagline {
-      margin: 0 auto 18px auto;
-      max-width: 420px;
-      font-size: 0.9em;
-      opacity: 0.9;
-      line-height: 1.5;
+    @keyframes glow {
+      from { filter: drop-shadow(0 8px 24px rgba(168, 85, 247, 0.55)) drop-shadow(0 0 40px rgba(59, 130, 246, 0.35)); }
+      to   { filter: drop-shadow(0 8px 36px rgba(192, 132, 252, 0.75)) drop-shadow(0 0 80px rgba(96, 165, 250, 0.5)); }
     }
     .hero .location {
       display: inline-block;
-      padding: 6px 14px;
-      background: rgba(255,255,255,0.12);
+      padding: 8px 18px;
+      margin-top: 12px;
+      background: rgba(168, 85, 247, 0.15);
+      border: 1px solid rgba(168, 85, 247, 0.4);
       border-radius: 20px;
-      font-size: 0.8em;
-      margin-bottom: 18px;
-      border: 1px solid rgba(255,255,255,0.15);
+      font-size: 0.82em;
+      color: #e9d5ff;
+      font-weight: 500;
     }
-    .hero-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+    .hero-actions { display: flex; flex-direction: column; gap: 12px; margin-top: 22px; max-width: 420px; margin-left: auto; margin-right: auto; }
     .hero-btn {
       display: flex; align-items: center; justify-content: center; gap: 10px;
-      padding: 15px 20px; border-radius: 12px;
-      font-weight: 800; font-size: 1em;
-      text-decoration: none; cursor: pointer;
-      border: none; font-family: inherit;
-      transition: transform 0.15s;
+      padding: 16px 22px;
+      border-radius: 14px;
+      font-weight: 800; font-size: 1.02em;
+      cursor: pointer;
+      border: none;
+      font-family: inherit;
+      transition: transform 0.15s, box-shadow 0.15s;
     }
     .hero-btn:active { transform: scale(0.98); }
-    .hero-btn.primary { background: linear-gradient(135deg,#10b981,#059669); color: #fff; }
-    .hero-btn.secondary { background: #ffffff; color: #7c3aed; }
+    .hero-btn.primary {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: #fff;
+      box-shadow: 0 6px 24px rgba(16, 185, 129, 0.4);
+    }
+    .hero-btn.primary:hover { box-shadow: 0 8px 32px rgba(16, 185, 129, 0.55); }
+    .hero-btn.secondary {
+      background: linear-gradient(135deg, #a855f7, #7c3aed);
+      color: #fff;
+      box-shadow: 0 6px 24px rgba(168, 85, 247, 0.4);
+    }
+    .hero-btn.secondary:hover { box-shadow: 0 8px 32px rgba(168, 85, 247, 0.55); }
 
     /* QUICK STATS */
     .quick-stats {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
       gap: 10px;
-      margin-bottom: 18px;
+      margin-bottom: 20px;
     }
     .stat-card {
-      background: #fff;
-      border-radius: 12px;
+      background: rgba(30, 20, 80, 0.55);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(168, 85, 247, 0.28);
+      border-radius: 14px;
       padding: 14px 8px;
       text-align: center;
-      border: 1px solid #e5e7eb;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+      transition: border-color 0.2s;
     }
+    .stat-card:hover { border-color: rgba(168, 85, 247, 0.6); }
     .stat-card .icon { font-size: 1.6em; display: block; margin-bottom: 6px; }
-    .stat-card .num { font-size: 1.05em; font-weight: 800; color: #111; }
-    .stat-card .lbl { font-size: 0.72em; color: #666; margin-top: 2px; }
+    .stat-card .num {
+      font-size: 1.05em; font-weight: 800;
+      background: linear-gradient(90deg, #c084fc, #60a5fa);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .stat-card .lbl { font-size: 0.7em; color: #c7d2fe; margin-top: 3px; }
 
     /* SECTION TITLES */
     .section-title {
-      font-size: 0.78em;
-      font-weight: 800;
+      font-size: 0.78em; font-weight: 800;
       letter-spacing: 2px;
-      color: #6b7280;
-      margin: 22px 4px 10px 4px;
+      color: #c084fc;
+      margin: 24px 4px 12px 4px;
       text-transform: uppercase;
+      text-align: center;
     }
 
     /* MENU CARDS */
     .menu-card {
       display: flex; align-items: center; gap: 14px;
       padding: 15px 16px;
-      background: #ffffff;
+      background: rgba(255, 255, 255, 0.96);
       border-radius: 14px;
       margin-bottom: 10px;
       color: #111;
       cursor: pointer;
-      border: 1px solid #e5e7eb;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+      border: 1px solid rgba(168, 85, 247, 0.15);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
       transition: all 0.15s;
       user-select: none;
     }
     .menu-card:hover, .menu-card:active {
       transform: translateX(3px);
-      border-color: #7c3aed;
-      box-shadow: 0 4px 12px rgba(124,58,237,0.12);
+      border-color: #a855f7;
+      box-shadow: 0 6px 22px rgba(168, 85, 247, 0.35);
     }
     .menu-card .icon { font-size: 1.7em; }
     .menu-card .info { flex: 1; }
-    .menu-card .title { font-weight: 700; font-size: 1em; margin: 0 0 3px 0; color: #111; }
+    .menu-card .title { font-weight: 800; font-size: 1em; margin: 0 0 3px 0; color: #1a0b3d; }
     .menu-card .subtitle { font-size: 0.82em; color: #6b7280; margin: 0; }
-    .menu-card .arrow { font-size: 1.4em; opacity: 0.35; color: #7c3aed; }
+    .menu-card .arrow { font-size: 1.4em; opacity: 0.45; color: #a855f7; }
 
-    /* FORM ELEMENTS (LIGHT THEME) */
+    /* FORM ELEMENTS (LIGHT) */
     input, select, textarea {
       width: 100%;
       padding: 12px 14px;
@@ -200,69 +208,73 @@
       margin-bottom: 10px;
       font-size: 1em;
       font-family: inherit;
-      transition: border-color 0.15s;
+      transition: border-color 0.15s, box-shadow 0.15s;
     }
     input:focus, select:focus, textarea:focus {
       outline: none;
       border-color: #7c3aed;
-      box-shadow: 0 0 0 3px rgba(124,58,237,0.12);
+      box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
     }
     input::placeholder { color: #9ca3af; }
-
-    /* Make calendar & clock icons visible */
     input[type="date"]::-webkit-calendar-picker-indicator,
     input[type="time"]::-webkit-calendar-picker-indicator {
       filter: none;
-      opacity: 0.7;
+      opacity: 0.75;
       cursor: pointer;
+      font-size: 1.15em;
     }
 
     .btn, button.primary {
       display: inline-block;
       padding: 12px 22px;
-      background: linear-gradient(135deg,#7c3aed,#6d28d9);
+      background: linear-gradient(135deg, #7c3aed, #6d28d9);
       color: #fff; border: none; border-radius: 10px;
       font-weight: 700; cursor: pointer; font-size: 1em;
       font-family: inherit;
+      transition: transform 0.15s, box-shadow 0.15s;
+      box-shadow: 0 4px 12px rgba(124, 58, 237, 0.35);
     }
-    .btn.alt { background: linear-gradient(135deg,#10b981,#059669); }
+    .btn:hover, button.primary:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(124, 58, 237, 0.45); }
+    .btn.alt {
+      background: linear-gradient(135deg, #10b981, #059669);
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
+    }
+    .btn.alt:hover { box-shadow: 0 6px 18px rgba(16, 185, 129, 0.45); }
     .btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
-    h2 { font-size: 1.25em; margin: 4px 0 12px 0; color: #111; }
-    h3 { font-size: 1em; margin: 16px 0 8px 0; color: #111; }
-    p { line-height: 1.5; color: #374151; }
+    h2 { font-size: 1.25em; margin: 4px 0 12px 0; color: #fff; }
+    h3 { font-size: 1.05em; margin: 16px 0 8px 0; color: #e9d5ff; }
+    p { line-height: 1.5; color: #d1d5db; }
 
-    /* CARD WRAPPER FOR FORMS */
+    /* CARD (WHITE CONTENT BOXES) */
     .card {
       background: #ffffff;
       border-radius: 14px;
-      padding: 16px;
+      padding: 18px;
       margin-bottom: 16px;
-      border: 1px solid #e5e7eb;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.22);
     }
-    .card.dark-section {
-      background: #f9fafb;
-      border-color: #e5e7eb;
-    }
-    .card h3 { margin-top: 0; color: #7c3aed; }
+    .card h2, .card h3 { color: #1a0b3d; }
+    .card p { color: #374151; }
+    .card.dark-section { background: #ffffff; }
 
     /* CHAT FULL SCREEN */
     #page-chat { padding: 0; max-width: none; }
-    #page-chat.active { display: flex; flex-direction: column; height: calc(100vh - 76px); }
+    #page-chat.active { display: flex; flex-direction: column; height: calc(100vh - 70px); }
     #page-chat .chat-wrap {
       display: flex; flex-direction: column;
       height: 100%; max-width: 720px; margin: 0 auto; width: 100%;
       background: #f5f7fa;
     }
     #page-chat .chat-top {
-      background: linear-gradient(135deg,#7c3aed,#6d28d9);
+      background: linear-gradient(135deg, #7c3aed, #6d28d9);
       color: #fff;
       display: flex; align-items: center; gap: 12px;
       padding: 12px 16px;
+      box-shadow: 0 4px 16px rgba(124, 58, 237, 0.4);
     }
     #page-chat .chat-top button {
-      background: rgba(255,255,255,0.22); border: none; color: #fff;
+      background: rgba(255, 255, 255, 0.22); border: none; color: #fff;
       padding: 8px 14px; border-radius: 20px;
       font-weight: 700; cursor: pointer; font-size: 0.88em;
     }
@@ -284,13 +296,17 @@
     }
 
     /* ADMIN PANEL */
-    #page-admin { background: #f5f7fa; max-width: none; }
+    #page-admin { max-width: none; }
     #page-admin .admin-wrap { max-width: 900px; margin: 0 auto; }
+    #page-admin .card h2, #page-admin .card h3 { color: #1a0b3d; }
+    #page-admin .card p { color: #374151; }
 
     /* FOOTER */
     footer {
-      text-align: center; padding: 24px;
-      color: #9ca3af; font-size: 0.82em;
+      text-align: center; padding: 30px 24px;
+      color: #a5b4fc; font-size: 0.82em;
+      border-top: 1px solid rgba(168, 85, 247, 0.2);
+      margin-top: 30px;
     }
   </style>
 </head>
@@ -314,16 +330,14 @@
     📢 <strong>Weekly Schedule:</strong> Courts and Open Play are closed every <strong>Friday 5:00 PM to Saturday 5:00 PM</strong> (Philippine Time).
   </div>
 
-  <!-- ==================== HOME (LANDING) ==================== -->
+  <!-- ==================== HOME (LOGO + MENU) ==================== -->
   <section id="page-home" class="page active">
 
+    <!-- HERO — LOGO ONLY -->
     <div class="hero">
       <img class="hero-logo" src="logo.png" alt="ZINJA Logo">
-      <p class="welcome">WELCOME TO</p>
-      <h1>ZINJA PICKLEBALL CLUB</h1>
-      <p class="tagline">Play. Connect. Stay Active.</p>
-      <p class="subtagline">A community for all skill levels — where fun, fitness, and friendship meet on the court.</p>
       <div class="location">📍 Malusay, Guihulngan City, Negros Oriental</div>
+
       <div class="hero-actions">
         <button class="hero-btn primary" onclick="showPage('booking')">📅 Book a Court &nbsp;→</button>
         <button class="hero-btn secondary" onclick="showPage('openplay')">👥 Join Open Play &nbsp;→</button>
@@ -492,7 +506,7 @@
     </div>
 
     <div class="card">
-      <p style="margin:0 0 6px 0; text-align:center;"><strong>₱50 per player</strong> · 6:00 PM to 12:00 AM daily</p>
+      <p style="margin:0 0 6px 0; text-align:center; color:#1a0b3d;"><strong>₱50 per player</strong> · 6:00 PM to 12:00 AM daily</p>
       <p style="font-size:0.85em; text-align:center; color:#666;">Admin picks teams each night. Walk-ins welcome on-site.</p>
 
       <form id="playForm" style="margin-top:14px;">
@@ -519,9 +533,9 @@
       <button onclick="showPage('home')">← Back</button>
       <h2>🏆 Live Matches</h2>
     </div>
-    <p style="font-size:0.9em; text-align:center; color:#666;">Courts 1 & 2 · Tap the winning team on each card.</p>
+    <p style="font-size:0.9em; text-align:center; color:#c7d2fe;">Courts 1 & 2 · Tap the winning team on each card.</p>
     <div id="matchupsContainer">
-      <p style="text-align:center; color:#888;">Loading live board...</p>
+      <p style="text-align:center; color:#a5b4fc;">Loading live board...</p>
     </div>
   </section>
 
@@ -657,24 +671,24 @@
     </div>
 
     <div class="card">
-      <h3>ZINJA Pickleball Club</h3>
-      <p>📍 Malusay, Guihulngan City, Negros Oriental</p>
+      <h3 style="margin-top:0;">ZINJA Pickleball Club</h3>
+      <p style="color:#374151;">📍 Malusay, Guihulngan City, Negros Oriental</p>
 
       <h3>Court Rental Rates</h3>
-      <p>💵 ₱100/hour (6:00 AM – 4:00 PM)<br>
+      <p style="color:#374151;">💵 ₱100/hour (6:00 AM – 4:00 PM)<br>
          💵 ₱150/hour (5:00 PM – 12:00 AM)</p>
 
       <h3>Open Play</h3>
-      <p>🎯 ₱50 per player · 6:00 PM – 12:00 AM</p>
+      <p style="color:#374151;">🎯 ₱50 per player · 6:00 PM – 12:00 AM</p>
 
       <h3>Weekly Rest Period</h3>
-      <p>🔴 Closed Friday 5:00 PM to Saturday 5:00 PM (PHT)</p>
+      <p style="color:#374151;">🔴 Closed Friday 5:00 PM to Saturday 5:00 PM (PHT)</p>
     </div>
   </section>
 
   <footer>© <span id="year"></span> ZINJA Pickleball Club</footer>
 
-  <script src="zinja-app.js?v=39"></script>
+  <script src="zinja-app.js?v=40"></script>
   <script>
     document.getElementById('year').textContent = new Date().getFullYear();
   </script>
