@@ -678,7 +678,7 @@ async function cancelOpenPlay() {
     }
   } catch (error) { showResult(result, `Cancellation failed. ${error.message || "Please try again."}`, false); }
 }// ====================
-// AUTO MATCH SYSTEM (MIXED MODE) + WIN/LOSE
+// SWISS-STYLE TOURNAMENT (WINNERS vs WINNERS, LOSERS vs LOSERS)
 // ====================
 
 function seededShuffle(array, seed) {
@@ -718,7 +718,7 @@ async function saveMatchResult(playDate, court, startTime, winningTeam) {
   const filter = `play_date=eq.${encodeURIComponent(playDate)}&court=eq.${court}&start_time=eq.${encodeURIComponent(startTime)}`;
   try {
     await supabaseFetch(`/rest/v1/match_results?${filter}`, { method: "DELETE" });
-  } catch (e) { /* ignore if none existed */ }
+  } catch (e) { /* ignore if none */ }
   await supabaseFetch("/rest/v1/match_results", {
     method: "POST",
     headers: { Prefer: "return=representation" },
@@ -731,7 +731,6 @@ async function saveMatchResult(playDate, court, startTime, winningTeam) {
   });
 }
 
-// Global function so onclick handlers can find it
 window.reportWin = async function (playDate, court, startTime, winningTeam) {
   const teamLabel = winningTeam === 'A' ? 'Team A' : 'Team B';
   if (!confirm(`🏆 Confirm: ${teamLabel} won this match?`)) return;
@@ -743,61 +742,139 @@ window.reportWin = async function (playDate, court, startTime, winningTeam) {
   }
 };
 
-function generateAutoSchedule(players, startTime, availableCourts) {
+function getBracketLabel(rec) {
+  const total = rec.wins + rec.losses;
+  if (total === 0) return '🎲 Opening Round';
+  if (rec.losses === 0) return `🔥 ${rec.wins}-0 Winners Bracket`;
+  if (rec.wins === 0) return `💪 0-${rec.losses} Losers Bracket`;
+  return `⚖️ ${rec.wins}-${rec.losses} Bracket`;
+}
+
+function swissPairRound(players, records, roundNum, dateStr, seed) {
+  const groups = {};
+  players.forEach(p => {
+    const r = records[p.player_name] || { wins: 0, losses: 0 };
+    const key = `${r.wins}-${r.losses}`;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(p);
+  });
+
+  const sortedKeys = Object.keys(groups).sort((a, b) => {
+    const [aw, al] = a.split('-').map(Number);
+    const [bw, bl] = b.split('-').map(Number);
+    if (bw !== aw) return bw - aw;
+    return al - bl;
+  });
+
+  const ordered = [];
+  sortedKeys.forEach((key, gi) => {
+    const shuffled = seededShuffle(groups[key], `swiss-${seed}-r${roundNum}-g${gi}-${key}`);
+    ordered.push(...shuffled);
+  });
+
+  const pairs = [];
+  for (let i = 0; i + 4 <= ordered.length; i += 4) {
+    pairs.push({
+      teamA: [ordered[i], ordered[i+1]],
+      teamB: [ordered[i+2], ordered[i+3]]
+    });
+  }
+  return pairs;
+}
+
+function generateAutoSchedule(players, startTime, availableCourts, resultsMap, dateStr) {
   if (!players || players.length < 4 || !availableCourts || availableCourts.length === 0) return [];
 
   const numCourts = availableCourts.length;
-  const totalPlayers = players.length;
-
-  const sessionStartMin = timeToMinutes(SESSION_START_TIME);
   const sessionEndMin = 24 * 60;
+  const sessionStartMin = timeToMinutes(startTime);
   const sessionMinutes = sessionEndMin - sessionStartMin;
   const totalWaves = Math.floor(sessionMinutes / MATCH_DURATION_MIN);
   const maxMatchesByTime = totalWaves * numCourts;
-  const maxMatchesByGames = Math.floor((totalPlayers * GAMES_PER_PLAYER) / 4);
+  const maxMatchesByGames = Math.floor((players.length * GAMES_PER_PLAYER) / 4);
   const maxMatches = Math.min(maxMatchesByTime, maxMatchesByGames);
 
-  const allMatches = [];
-  let round = 0;
-  const MAX_SAFETY_ROUNDS = 200;
+  const records = {};
+  players.forEach(p => { records[p.player_name] = { wins: 0, losses: 0 }; });
 
-  while (allMatches.length < maxMatches && round < MAX_SAFETY_ROUNDS) {
-    const shuffled = seededShuffle(players, `mixed-round-${round}`);
-    let matchesThisRound = 0;
-    for (let i = 0; i + 4 <= shuffled.length; i += 4) {
-      if (allMatches.length >= maxMatches) break;
-      allMatches.push({
-        tier: 'Mixed',
-        tierColor: '#7c3aed',
-        round: round + 1,
-        teamA: [shuffled[i], shuffled[i+1]],
-        teamB: [shuffled[i+2], shuffled[i+3]]
-      });
-      matchesThisRound++;
+  const seedKey = `zinja_matchup_seed_${dateStr}`;
+  let seed = localStorage.getItem(seedKey);
+  if (!seed) { seed = "default-seed"; localStorage.setItem(seedKey, seed); }
+
+  const allMatches = [];
+  let currentTime = startTime;
+  let round = 1;
+  const MAX_ROUNDS = 30;
+
+  while (allMatches.length < maxMatches && round <= MAX_ROUNDS) {
+    if (timeToMinutes(currentTime) >= sessionEndMin) break;
+
+    // Build pairs for this round
+    let pairs;
+    if (round === 1) {
+      const shuffled = seededShuffle(players, seed);
+      pairs = [];
+      for (let i = 0; i + 4 <= shuffled.length; i += 4) {
+        pairs.push({ teamA: [shuffled[i], shuffled[i+1]], teamB: [shuffled[i+2], shuffled[i+3]] });
+      }
+    } else {
+      pairs = swissPairRound(players, records, round, dateStr, seed);
     }
-    if (matchesThisRound === 0) break;
+
+    if (pairs.length === 0) break;
+
+    // Check if the full round can fit in the remaining time
+    const wavesNeeded = Math.ceil(pairs.length / numCourts);
+    const roundEndMin = timeToMinutes(currentTime) + wavesNeeded * MATCH_DURATION_MIN;
+    if (roundEndMin > sessionEndMin) break;
+
+    const matchesThisRound = [];
+    let waveTime = currentTime;
+
+    for (let w = 0; w < wavesNeeded; w++) {
+      for (let c = 0; c < numCourts && w * numCourts + c < pairs.length; c++) {
+        if (allMatches.length >= maxMatches) break;
+        const p = pairs[w * numCourts + c];
+        const match = {
+          tier: 'Mixed',
+          tierColor: '#7c3aed',
+          round: round,
+          teamA: p.teamA,
+          teamB: p.teamB,
+          court: availableCourts[c],
+          startTime: waveTime,
+          endTime: addMinutesToTime(waveTime, MATCH_DURATION_MIN)
+        };
+        // Bracket label uses records BEFORE this round is played
+        const recA = records[p.teamA[0].player_name];
+        match.bracket = getBracketLabel(recA);
+        allMatches.push(match);
+        matchesThisRound.push(match);
+      }
+      waveTime = addMinutesToTime(waveTime, MATCH_DURATION_MIN);
+      if (allMatches.length >= maxMatches) break;
+    }
+
+    if (matchesThisRound.length === 0) break;
+
+    // Apply any known results for this round to update records for the next round
+    matchesThisRound.forEach(m => {
+      const key = matchKey(dateStr, m.court, m.startTime);
+      const result = resultsMap[key];
+      if (result === 'A') {
+        m.teamA.forEach(p => records[p.player_name].wins++);
+        m.teamB.forEach(p => records[p.player_name].losses++);
+      } else if (result === 'B') {
+        m.teamB.forEach(p => records[p.player_name].wins++);
+        m.teamA.forEach(p => records[p.player_name].losses++);
+      }
+    });
+
+    currentTime = waveTime;
     round++;
   }
 
-  if (allMatches.length === 0) return [];
-
-  const schedule = [];
-  let currentTime = startTime;
-  for (let i = 0; i < allMatches.length; i += numCourts) {
-    const currentMinutes = timeToMinutes(currentTime);
-    if (currentMinutes >= sessionEndMin) break;
-
-    const wave = allMatches.slice(i, i + numCourts);
-    wave.forEach((match, idx) => {
-      match.court = availableCourts[idx];
-      match.startTime = currentTime;
-      match.endTime = addMinutesToTime(currentTime, MATCH_DURATION_MIN);
-      schedule.push(match);
-    });
-    currentTime = addMinutesToTime(currentTime, MATCH_DURATION_MIN);
-  }
-
-  return schedule;
+  return allMatches;
 }
 
 function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts, matchResults) {
@@ -864,9 +941,9 @@ function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts, mat
       <p style="font-size: 0.95em; margin: 4px 0; opacity: 0.9;">👥 ${playerCount} players · ${courtsLabel}</p>
       <p style="font-size: 0.95em; margin: 4px 0; opacity: 0.9;">🏓 ${visibleSchedule.length} ${isBeforeSession ? 'scheduled' : 'matches'} · 🕐 End: <strong>${sessionEnd}</strong></p>
       <p style="font-size: 0.85em; margin: 4px 0; opacity: 0.75;">20 min per match · Target: 11 points</p>
-      <p style="font-size: 0.85em; margin: 8px 0 0 0; opacity: 0.85;">🎲 Mixed Mode — All players together</p>
+      <p style="font-size: 0.85em; margin: 8px 0 0 0; opacity: 0.85;">🏆 Winners play winners · 💪 Losers play losers</p>
       ${completedCount > 0 ? `<p style="font-size: 0.8em; margin: 8px 0 0 0; opacity: 0.6;">✅ ${completedCount} match${completedCount === 1 ? '' : 'es'} completed (auto-hidden)</p>` : ''}
-      <p style="font-size: 0.8em; margin: 6px 0 0 0; opacity: 0.6;">🏆 After your match, tap the winning team below</p>
+      <p style="font-size: 0.8em; margin: 6px 0 0 0; opacity: 0.6;">After your match, tap the winning team on the card</p>
     </div>
     ${countdownBanner}
   `;
@@ -886,14 +963,13 @@ function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts, mat
     }
 
     const key = matchKey(dateStr, m.court, m.startTime);
-    const result = matchResults[key]; // 'A' | 'B' | undefined
+    const result = matchResults[key];
     const aWon = result === 'A';
     const bWon = result === 'B';
     const hasResult = !!result;
 
     const markA = aWon ? ' 🏆' : (bWon ? ' ❌' : '');
     const markB = bWon ? ' 🏆' : (aWon ? ' ❌' : '');
-
     const nameStyleA = bWon ? 'text-decoration: line-through; opacity: 0.55;' : '';
     const nameStyleB = aWon ? 'text-decoration: line-through; opacity: 0.55;' : '';
 
@@ -906,12 +982,12 @@ function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts, mat
         <button type="button"
           onclick="reportWin('${dateStr}', ${m.court}, '${m.startTime}', 'A')"
           style="flex: 1; min-width: 130px; padding: 10px 14px; border: 2px solid ${aWon ? '#10b981' : 'rgba(255,255,255,0.15)'}; border-radius: 8px; background: ${aWon ? '#10b981' : 'rgba(16,185,129,0.2)'}; color: #fff; font-weight: 700; font-size: 0.85em; cursor: pointer;">
-          ${aWon ? '✓ ' : '🏆 '}Team A Wins
+          ${aWon ? '✓ ' : '🏆 '}Team A Won
         </button>
         <button type="button"
           onclick="reportWin('${dateStr}', ${m.court}, '${m.startTime}', 'B')"
           style="flex: 1; min-width: 130px; padding: 10px 14px; border: 2px solid ${bWon ? '#f59e0b' : 'rgba(255,255,255,0.15)'}; border-radius: 8px; background: ${bWon ? '#f59e0b' : 'rgba(245,158,11,0.2)'}; color: #fff; font-weight: 700; font-size: 0.85em; cursor: pointer;">
-          ${bWon ? '✓ ' : '🏆 '}Team B Wins
+          ${bWon ? '✓ ' : '🏆 '}Team B Won
         </button>
       </div>
     `;
@@ -922,8 +998,9 @@ function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts, mat
           <span style="font-size: 0.85em; font-weight: 700;">${badge}</span>
           <span style="font-size: 0.75em; opacity: 0.9;">🏓 Court ${m.court} · 🕐 ${formatTime12(m.startTime)} - ${formatTime12(m.endTime)}</span>
         </div>
-        <div style="margin-bottom: 8px;">
-          <span style="display: inline-block; padding: 3px 12px; background: #7c3aed33; border: 1px solid #7c3aed; border-radius: 20px; font-size: 0.75em; font-weight: 700; color: #fff;">🎲 Mixed · Round ${m.round}</span>
+        <div style="margin-bottom: 8px; display: flex; gap: 6px; flex-wrap: wrap;">
+          <span style="display: inline-block; padding: 3px 12px; background: #7c3aed33; border: 1px solid #7c3aed; border-radius: 20px; font-size: 0.75em; font-weight: 700; color: #fff;">Round ${m.round}</span>
+          <span style="display: inline-block; padding: 3px 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.25); border-radius: 20px; font-size: 0.75em; font-weight: 700; color: #fff;">${m.bracket || '🎲 Opening Round'}</span>
         </div>
         <div class="team-block" style="${nameStyleA}">
           <strong style="color: #10b981;">Team A:</strong>
@@ -946,7 +1023,7 @@ function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts, mat
     `;
   });
 
-  html += `<p style="text-align: center; font-size: 0.85em; opacity: 0.7; margin-top: 24px;">💡 Mixed Mode — all players are mixed together. Tap 🏆 next to the team that won.</p>`;
+  html += `<p style="text-align: center; font-size: 0.85em; opacity: 0.7; margin-top: 24px;">💡 Winners play winners. Losers play losers. Tap 🏆 after each match to update the brackets.</p>`;
   container.innerHTML = html;
 }
 
@@ -969,13 +1046,9 @@ async function loadAutoMatchups(dateStr) {
       container.innerHTML = `<p style="text-align:center;color:#ef4444;">⚠️ Both courts are booked for Open Play hours on ${formatDate(dateStr)}. No matchups to generate.</p>`;
       return;
     }
-    const seedKey = `zinja_matchup_seed_${dateStr}`;
-    let seed = localStorage.getItem(seedKey);
-    if (!seed) { seed = "default-seed"; localStorage.setItem(seedKey, seed); }
-    const shuffled = seededShuffle(players, seed);
     const matchResults = await loadMatchResults(dateStr);
-    const schedule = generateAutoSchedule(shuffled, SESSION_START_TIME, availableCourts);
-    renderAutoSchedule(schedule, dateStr, shuffled.length, availableCourts, matchResults);
+    const schedule = generateAutoSchedule(players, SESSION_START_TIME, availableCourts, matchResults, dateStr);
+    renderAutoSchedule(schedule, dateStr, players.length, availableCourts, matchResults);
   } catch (error) {
     console.error("Matchups error:", error);
     container.innerHTML = `<p style="text-align:center;color:#ef4444;">❌ ${error.message}</p>`;
@@ -988,6 +1061,10 @@ async function adminRerollMatchups() {
   const dateInput = document.getElementById("adminMatchDate");
   const dateStr = dateInput?.value;
   if (!dateStr) { alert("Please select a date first."); return; }
+  if (!confirm("This will delete all match results for this date and start fresh. Continue?")) return;
+  try {
+    await supabaseFetch(`/rest/v1/match_results?play_date=eq.${encodeURIComponent(dateStr)}`, { method: "DELETE" });
+  } catch (e) { /* ignore */ }
   const newSeed = Math.random().toString(36).substring(2, 10);
   localStorage.setItem(`zinja_matchup_seed_${dateStr}`, newSeed);
   await renderAdminMatchups(dateStr);
@@ -1009,15 +1086,15 @@ async function renderAdminMatchups(dateStr) {
       container.innerHTML = `<p style="color:#ef4444;">⚠️ No courts available on ${formatDate(dateStr)}.</p>`;
       return;
     }
-    const seedKey = `zinja_matchup_seed_${dateStr}`;
-    let seed = localStorage.getItem(seedKey) || "default-seed";
-    const shuffled = seededShuffle(players, seed);
-    const schedule = generateAutoSchedule(shuffled, SESSION_START_TIME, availableCourts);
+    const matchResults = await loadMatchResults(dateStr);
+    const schedule = generateAutoSchedule(players, SESSION_START_TIME, availableCourts, matchResults, dateStr);
     const numCourts = availableCourts.length;
     const courtsLabel = numCourts === 2 ? "Courts 1 & 2" : `Court ${availableCourts[0]}`;
     const lastMatch = schedule[schedule.length - 1];
     const endTime = lastMatch ? formatTime12(lastMatch.endTime) : "N/A";
-    container.innerHTML = `<p style="color:#10b981; font-weight:600;">✅ ${courtsLabel} · ${shuffled.length} players · ${schedule.length} matches · Ends ${endTime} · 🎲 Mixed Mode</p>`;
+    const totalRounds = schedule.length > 0 ? schedule[schedule.length - 1].round : 0;
+    container.innerHTML = `<p style="color:#10b981; font-weight:600;">✅ ${courtsLabel} · ${players.length} players · ${schedule.length} matches across ${totalRounds} round(s) · Ends ${endTime}</p>
+      <p style="color:#888; font-size:0.85em; margin-top:4px;">🏆 Winners play winners · 💪 Losers play losers</p>`;
   } catch (error) {
     container.innerHTML = `<p style="color:red;">❌ ${error.message}</p>`;
   }
@@ -1260,12 +1337,12 @@ function renderAdminContent() {
     html = `
       <div style="background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px;">
         <h3 style="color: #7c3aed; margin-top: 0;">🎲 Matchups Manager</h3>
-        <p style="color: #666; font-size: 0.9em;">Auto-generated schedule from 6PM to 12AM — 20 minutes per match to 11 points.</p>
-        <p style="color: #888; font-size: 0.85em; font-style: italic;">🎲 Mixed Mode — All players are mixed together</p>
+        <p style="color: #666; font-size: 0.9em;">Winners play winners. Losers play losers. Every result re-pairs the next round.</p>
+        <p style="color: #888; font-size: 0.85em; font-style: italic;">20 minutes per match · Target: 11 points</p>
         <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
           <input id="adminMatchDate" type="date" value="${today}" style="flex: 1; min-width: 200px; padding: 12px; border-radius: 8px; border: 1px solid #ddd;">
           <button type="button" onclick="renderAdminMatchups(document.getElementById('adminMatchDate').value)" style="padding: 12px 24px; background: linear-gradient(135deg, #7c3aed, #6d28d9); color: #fff; border: none; border-radius: 8px; font-weight: 700; cursor: pointer;">🔄 Load</button>
-          <button type="button" onclick="adminRerollMatchups()" style="padding: 12px 24px; background: #ef4444; color: #fff; border: none; border-radius: 8px; font-weight: 700; cursor: pointer;">🔀 Re-Shuffle</button>
+          <button type="button" onclick="adminRerollMatchups()" style="padding: 12px 24px; background: #ef4444; color: #fff; border: none; border-radius: 8px; font-weight: 700; cursor: pointer;">🔀 Reset Brackets</button>
         </div>
         <div id="adminMatchupsContainer">
           <p style="color: #888;">Select a date and click Load.</p>
@@ -1358,7 +1435,7 @@ document.addEventListener("DOMContentLoaded", () => {
   requestAnimationFrame(smartLoop);
 
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === 'visible') {
+    if (document.visibilityState === "visible") {
       loadChatMessages();
       loadBookings();
       loadOpenPlay();
