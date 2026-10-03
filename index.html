@@ -84,6 +84,49 @@
     }
     .page-header h2 { margin: 0; font-size: 1.05em; flex: 1; text-align: center; padding-right: 60px; color: #fff; }
 
+    /* ==================== LIVE MATCHES TOP SECTION ==================== */
+    .live-top {
+      max-width: 900px;
+      margin: 20px auto 10px auto;
+      padding: 0 16px;
+    }
+    .live-top-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 14px; flex-wrap: wrap; gap: 8px;
+    }
+    .live-top-header h2 {
+      font-size: 1.3em; font-weight: 900; color: #fff;
+      display: flex; align-items: center; gap: 8px;
+      letter-spacing: 0.5px;
+    }
+    .live-top-header .live-dot {
+      display: inline-block; width: 10px; height: 10px;
+      background: #10b981; border-radius: 50%;
+      box-shadow: 0 0 12px #10b981;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(1.2); }
+    }
+    .live-top-header a {
+      color: #c084fc; font-weight: 700; font-size: 0.85em;
+      cursor: pointer; text-decoration: none;
+    }
+    .live-top #matchupsContainer {
+      /* Container for rendered match cards */
+    }
+    .live-top .live-empty {
+      text-align: center; padding: 24px 20px;
+      background: linear-gradient(135deg, rgba(124,58,237,0.15), rgba(59,30,110,0.15));
+      border: 1px solid rgba(168,85,247,0.3);
+      border-radius: 14px;
+      margin-bottom: 12px;
+    }
+    .live-top .live-empty p {
+      color: #c7d2fe; margin: 4px 0;
+    }
+
     /* ==================== HERO ==================== */
     .hero {
       background:
@@ -242,9 +285,7 @@
     }
     .card h3 { color: #831843; }
 
-    /* ============================================================
-       🎯 TEXT VISIBILITY FIX — lahat ng text sa pink cards
-       ============================================================ */
+    /* Fix: text visibility inside pink cards */
     .card strong, .card b { color: #831843; }
     .card .open-play-item strong { color: #831843; font-weight: 800; }
     .card .booking-item strong { color: #831843; font-weight: 800; }
@@ -341,6 +382,8 @@
       .nav-logo-text strong { font-size: 1.1em; }
       .nav-logo-text small { font-size: 0.55em; letter-spacing: 2px; }
       .page-inner { padding: 16px 12px 50px 12px; }
+      .live-top { padding: 0 12px; margin-top: 14px; }
+      .live-top-header h2 { font-size: 1.1em; }
     }
   </style>
 </head>
@@ -366,7 +409,6 @@
     <a onclick="menuGo('home')"><span class="icon">🏠</span>Home</a>
     <a onclick="menuGo('booking')"><span class="icon">🏓</span>Book a Court</a>
     <a onclick="menuGo('openplay')"><span class="icon">🎯</span>Join Open Play</a>
-    <a onclick="menuGo('live')"><span class="icon">🏆</span>Live Matches</a>
     <a onclick="menuGo('players')"><span class="icon">📋</span>Open Play Players</a>
     <a onclick="menuGo('chat')"><span class="icon">💬</span>Club Chat</a>
     <a onclick="menuGo('download')"><span class="icon">📱</span>Get the App</a>
@@ -384,6 +426,19 @@
 
   <!-- ==================== HOME ==================== -->
   <section id="page-home" class="page active">
+
+    <!-- 🆕 LIVE MATCHES AT TOP -->
+    <div class="live-top">
+      <div class="live-top-header">
+        <h2><span class="live-dot"></span> Live Matches</h2>
+      </div>
+      <div id="matchupsContainer">
+        <div class="live-empty">
+          <p style="font-size:1.5em; margin:8px 0;">⏳</p>
+          <p style="font-weight:700;">Loading live board...</p>
+        </div>
+      </div>
+    </div>
 
     <div class="hero">
       <div class="hero-inner">
@@ -437,12 +492,6 @@
           <div class="feature-icon green">👥</div>
           <p class="title">Join Open Play</p>
           <p class="desc">Meet and play with the community.</p>
-        </div>
-
-        <div class="feature-card" onclick="showPage('live')">
-          <div class="feature-icon orange">🏆</div>
-          <p class="title">Live Matches</p>
-          <p class="desc">Check ongoing games and results.</p>
         </div>
 
         <div class="feature-card" onclick="showPage('players')">
@@ -592,20 +641,6 @@
           <button class="btn" type="submit" style="width:100%;">Join Open Play</button>
         </form>
         <div id="playResult"></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ==================== LIVE MATCHES ==================== -->
-  <section id="page-live" class="page">
-    <div class="page-inner">
-      <div class="page-header">
-        <button onclick="showPage('home')">← Back</button>
-        <h2>🏆 Live Matches</h2>
-      </div>
-      <p style="text-align:center; color:#c7d2fe; margin-bottom:16px;">Courts 1 &amp; 2 · Tap the winning team on each card.</p>
-      <div id="matchupsContainer">
-        <p style="text-align:center; color:#a5b4fc;">Loading live board...</p>
       </div>
     </div>
   </section>
@@ -760,7 +795,7 @@
     © <span id="year"></span> ZINJA Pickleball Club · Malusay, Guihulngan City
   </footer>
 
-  <script src="zinja-app.js?v=44"></script>
+  <script src="zinja-app.js?v=45"></script>
   <script>
     document.getElementById('year').textContent = new Date().getFullYear();
 
@@ -780,6 +815,19 @@
       const el = document.getElementById('scheduleSection');
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
+
+    // 🆕 Auto-refresh live board on home page
+    setInterval(() => {
+      if (document.visibilityState === 'visible' &&
+          document.getElementById('page-home').classList.contains('active')) {
+        if (typeof renderLiveBoard === 'function') renderLiveBoard();
+      }
+    }, 60000);
+
+    // 🆕 Extra render on load (in case external JS's render happens before our elements exist)
+    setTimeout(() => {
+      if (typeof renderLiveBoard === 'function') renderLiveBoard();
+    }, 400);
 
     const scheduleData = {
       MON: { title: 'Monday', hours: '6:00 AM – 12:00 AM', morning: 'Available (6AM–4PM)', evening: 'Available (5PM–12AM)', status: 'open' },
