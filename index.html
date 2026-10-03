@@ -30,24 +30,11 @@
     .nav-logo-text { display: flex; flex-direction: column; line-height: 1; color: #fff; }
     .nav-logo-text strong { font-size: 1.35em; font-weight: 900; letter-spacing: 1px; color: #fff; }
     .nav-logo-text small { font-size: 0.62em; letter-spacing: 3px; color: #e5e7eb; font-weight: 700; margin-top: 2px; }
-    .hamburger {
-      background: transparent; border: none; cursor: pointer;
-      padding: 8px; display: flex; flex-direction: column; gap: 5px;
-    }
+    .hamburger { background: transparent; border: none; cursor: pointer; padding: 8px; display: flex; flex-direction: column; gap: 5px; }
     .hamburger span { width: 26px; height: 3px; background: #fff; border-radius: 2px; }
 
     /* Slide-in menu */
-    .slide-menu {
-      position: fixed; top: 0; right: -300px;
-      width: 280px; height: 100vh;
-      background: #0a1a3a;
-      z-index: 200;
-      transition: right 0.3s ease;
-      padding: 24px 20px;
-      box-shadow: -4px 0 20px rgba(0,0,0,0.4);
-      overflow-y: auto;
-      border-left: 1px solid rgba(168,85,247,0.3);
-    }
+    .slide-menu { position: fixed; top: 0; right: -300px; width: 280px; height: 100vh; background: #0a1a3a; z-index: 200; transition: right 0.3s ease; padding: 24px 20px; box-shadow: -4px 0 20px rgba(0,0,0,0.4); overflow-y: auto; border-left: 1px solid rgba(168,85,247,0.3); }
     .slide-menu.open { right: 0; }
     .slide-menu .close-btn { background: transparent; border: none; color: #fff; font-size: 1.6em; cursor: pointer; float: right; line-height: 1; padding: 4px 8px; }
     .slide-menu h3 { color: #c084fc; font-size: 0.75em; letter-spacing: 2px; margin: 20px 0 8px 0; text-transform: uppercase; clear: both; }
@@ -59,29 +46,14 @@
 
     /* ==================== STATUS BANNERS ==================== */
     #liveStatus { padding: 10px 18px; text-align: center; font-size: 0.88em; font-weight: 600; color: #fff; }
-    .weekly-banner {
-      background: linear-gradient(135deg,#1e3a8a,#7c3aed);
-      color: #fff; padding: 8px 18px; text-align: center; font-size: 0.8em;
-      border-bottom: 1px solid rgba(168,85,247,0.3);
-    }
+    .weekly-banner { background: linear-gradient(135deg,#1e3a8a,#7c3aed); color: #fff; padding: 8px 18px; text-align: center; font-size: 0.8em; border-bottom: 1px solid rgba(168,85,247,0.3); }
 
     /* ==================== PAGES ==================== */
     .page { display: none; }
     .page.active { display: block; }
     .page-inner { max-width: 900px; margin: 0 auto; padding: 20px 16px 60px 16px; }
-    .page-header {
-      display: flex; align-items: center; gap: 12px;
-      padding: 14px 18px;
-      background: linear-gradient(135deg,#7c3aed,#6d28d9);
-      color: #fff; border-radius: 14px; margin-bottom: 20px;
-      box-shadow: 0 4px 20px rgba(124,58,237,0.35);
-    }
-    .page-header button {
-      background: rgba(255,255,255,0.22); border: none; color: #fff;
-      padding: 8px 16px; border-radius: 20px;
-      font-weight: 700; cursor: pointer; font-size: 0.88em;
-      font-family: inherit;
-    }
+    .page-header { display: flex; align-items: center; gap: 12px; padding: 14px 18px; background: linear-gradient(135deg,#7c3aed,#6d28d9); color: #fff; border-radius: 14px; margin-bottom: 20px; box-shadow: 0 4px 20px rgba(124,58,237,0.35); }
+    .page-header button { background: rgba(255,255,255,0.22); border: none; color: #fff; padding: 8px 16px; border-radius: 20px; font-weight: 700; cursor: pointer; font-size: 0.88em; font-family: inherit; }
     .page-header h2 { margin: 0; font-size: 1.05em; flex: 1; text-align: center; padding-right: 60px; color: #fff; }
 
     /* ==================== LIVE MATCHES TOP ==================== */
@@ -90,19 +62,11 @@
     .live-top-header h2 { font-size: 1.3em; font-weight: 900; color: #fff; display: flex; align-items: center; gap: 8px; letter-spacing: 0.5px; }
     .live-top-header .live-dot { display: inline-block; width: 10px; height: 10px; background: #10b981; border-radius: 50%; box-shadow: 0 0 12px #10b981; animation: pulse 1.5s infinite; }
     @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(1.2); } }
-    .live-top-header a { color: #c084fc; font-weight: 700; font-size: 0.85em; cursor: pointer; text-decoration: none; }
     .live-top .live-empty { text-align: center; padding: 24px 20px; background: linear-gradient(135deg, rgba(124,58,237,0.15), rgba(59,30,110,0.15)); border: 1px solid rgba(168,85,247,0.3); border-radius: 14px; margin-bottom: 12px; }
     .live-top .live-empty p { color: #c7d2fe; margin: 4px 0; }
 
     /* ==================== HERO ==================== */
-    .hero {
-      background:
-        linear-gradient(135deg, rgba(10,26,58,0.92) 0%, rgba(10,26,58,0.85) 45%, rgba(10,26,58,0.55) 100%),
-        linear-gradient(180deg, #0a1a3a 0%, #16295c 50%, #3b1e6e 100%);
-      padding: 40px 24px 44px 24px;
-      color: #fff; position: relative; overflow: hidden; min-height: 480px;
-      border-bottom: 1px solid rgba(168,85,247,0.2);
-    }
+    .hero { background: linear-gradient(135deg, rgba(10,26,58,0.92) 0%, rgba(10,26,58,0.85) 45%, rgba(10,26,58,0.55) 100%), linear-gradient(180deg, #0a1a3a 0%, #16295c 50%, #3b1e6e 100%); padding: 40px 24px 44px 24px; color: #fff; position: relative; overflow: hidden; min-height: 480px; border-bottom: 1px solid rgba(168,85,247,0.2); }
     .hero::before { content: '🏓'; position: absolute; top: 15%; right: -3%; font-size: 22em; opacity: 0.15; transform: rotate(-20deg); pointer-events: none; filter: blur(2px); }
     .hero::after { content: '🥎'; position: absolute; bottom: 12%; right: 15%; font-size: 6em; opacity: 0.25; transform: rotate(15deg); pointer-events: none; filter: drop-shadow(0 10px 20px rgba(0,0,0,0.5)); }
     .hero-inner { max-width: 900px; margin: 0 auto; position: relative; z-index: 2; }
@@ -190,19 +154,17 @@
     .card .booking-item div[style*="color:#666"] { color: #6b7280 !important; }
     .card span[style*="color:#666"] { color: #6b7280 !important; }
 
-    /* ==================== ADMIN PANEL TEXT FIX ==================== */
+    /* ==================== ADMIN PANEL TEXT VISIBILITY FIX ==================== */
     #adminData { color: #1f2937; }
-    #adminData h3 { color: #7c3aed; }
-    #adminData h4 { color: #1f2937; }
-    #adminData strong { color: #1f2937; }
-    #adminData b { color: #1f2937; }
-    #adminData p { color: #374151; }
-    #adminData small { color: #6b7280; }
-    #adminData div { color: inherit; }
-    #adminData span:not([style*="color:#fff"]) { color: inherit; }
-    /* Preserve white text inside badges */
+    #adminData h3 { color: #7c3aed !important; }
+    #adminData h4 { color: #1f2937 !important; }
+    #adminData strong, #adminData b { color: #111827 !important; }
+    #adminData p { color: #374151 !important; }
+    #adminData small { color: #6b7280 !important; }
+    /* Preserve white text inside colored badges */
     #adminData span[style*="color:#fff"] { color: #fff !important; }
-    /* Preserve explicit color overrides */
+    #adminData button[style*="color:#fff"] { color: #fff !important; }
+    /* Preserve explicit color overrides from JS */
     #adminData [style*="color:#92400e"] { color: #92400e !important; }
     #adminData [style*="color:#78350f"] { color: #78350f !important; }
     #adminData [style*="color:#1e40af"] { color: #1e40af !important; }
@@ -311,9 +273,7 @@
     📢 <strong>Weekly Schedule:</strong> Courts and Open Play are closed every <strong>Friday 5:00 PM to Saturday 5:00 PM</strong> (Philippine Time).
   </div>
 
-  <!-- ==================== HOME ==================== -->
   <section id="page-home" class="page active">
-
     <div class="live-top">
       <div class="live-top-header">
         <h2><span class="live-dot"></span> Live Matches</h2>
@@ -334,7 +294,6 @@
         <div class="location">📍 Malusay, Guihulngan City, Negros Oriental</div>
         <p class="tagline">Play. Connect. Stay Active.</p>
         <p class="description">A community for all skill levels — where fun, fitness, and friendship meet on the court.</p>
-
         <div class="hero-actions">
           <button class="hero-btn primary" onclick="showPage('booking')">📅 Book a Court &nbsp; →</button>
           <button class="hero-btn secondary" onclick="showPage('openplay')">👥 Join Open Play &nbsp; →</button>
@@ -373,43 +332,36 @@
           <p class="title">Book a Court</p>
           <p class="desc">Reserve your preferred date and time.</p>
         </div>
-
         <div class="feature-card" onclick="showPage('openplay')">
           <div class="feature-icon green">👥</div>
           <p class="title">Join Open Play</p>
           <p class="desc">Meet and play with the community.</p>
         </div>
-
         <div class="feature-card" onclick="showPage('players')">
           <div class="feature-icon purple">📋</div>
           <p class="title">Open Play Players</p>
           <p class="desc">Registered players list by date.</p>
         </div>
-
         <div class="feature-card" onclick="showPage('chat')">
           <div class="feature-icon pink">💬</div>
           <p class="title">Club Chat</p>
           <p class="desc">Connect with other players.</p>
         </div>
-
         <div class="feature-card" onclick="scrollToSchedule()">
           <div class="feature-icon yellow">📅</div>
           <p class="title">Weekly Schedule</p>
           <p class="desc">View court and open play hours.</p>
         </div>
-
         <div class="feature-card" onclick="showPage('download')">
           <div class="feature-icon teal">📱</div>
           <p class="title">Get the ZINJA App</p>
           <p class="desc">Download APK · Free · No ads.</p>
         </div>
-
         <div class="feature-card" onclick="showPage('admin')">
           <div class="feature-icon orange">🔐</div>
           <p class="title">Admin Panel</p>
           <p class="desc">Manage tournaments &amp; bookings.</p>
         </div>
-
         <div class="feature-card" onclick="showPage('contact')">
           <div class="feature-icon teal">ℹ️</div>
           <p class="title">Contact &amp; Info</p>
@@ -436,15 +388,12 @@
           <h2>WEEKLY SCHEDULE</h2>
           <a onclick="showPage('contact')">View Full Schedule →</a>
         </div>
-
         <div class="day-tabs" id="dayTabs"></div>
         <div class="schedule-panel" id="schedulePanel"></div>
       </div>
     </div>
-
   </section>
 
-  <!-- ==================== BOOK A COURT ==================== -->
   <section id="page-booking" class="page">
     <div class="page-inner">
       <div class="page-header">
@@ -502,7 +451,6 @@
     </div>
   </section>
 
-  <!-- ==================== JOIN OPEN PLAY ==================== -->
   <section id="page-openplay" class="page">
     <div class="page-inner">
       <div class="page-header">
@@ -531,7 +479,6 @@
     </div>
   </section>
 
-  <!-- ==================== OPEN PLAY PLAYERS ==================== -->
   <section id="page-players" class="page">
     <div class="page-inner">
       <div class="page-header">
@@ -548,7 +495,6 @@
     </div>
   </section>
 
-  <!-- ==================== CHAT ==================== -->
   <section id="page-chat" class="page">
     <div class="chat-wrap">
       <div class="chat-top">
@@ -607,7 +553,6 @@
     </div>
   </section>
 
-  <!-- ==================== DOWNLOAD ==================== -->
   <section id="page-download" class="page">
     <div class="page-inner">
       <div class="page-header">
@@ -631,7 +576,6 @@
     </div>
   </section>
 
-  <!-- ==================== ADMIN ==================== -->
   <section id="page-admin" class="page">
     <div class="page-inner">
       <div class="page-header">
@@ -657,7 +601,6 @@
     </div>
   </section>
 
-  <!-- ==================== CONTACT ==================== -->
   <section id="page-contact" class="page">
     <div class="page-inner">
       <div class="page-header">
@@ -681,7 +624,7 @@
     © <span id="year"></span> ZINJA Pickleball Club · Malusay, Guihulngan City
   </footer>
 
-  <script src="zinja-app.js?v=46"></script>
+  <script src="zinja-app.js?v=47"></script>
   <script>
     document.getElementById('year').textContent = new Date().getFullYear();
 
