@@ -892,7 +892,7 @@ async function cancelMatch(matchId) {
 }
 
 // ====================
-// SMART SUGGEST
+// SMART SUGGEST — FAIR ROTATION
 // ====================
 
 function computePlayerStats(playerNames, matches) {
@@ -936,6 +936,11 @@ function getMaxMatchInfo(checkInMap, matches) {
   return { maxMatches, currentCount, activeCount, queuedCount, canCreateMore, availableSlots, activeCheckedInCount };
 }
 
+// Fair rotation:
+// 1. Fewest games played (so everyone gets equal turns)
+// 2. Then highest win-loss score (so winners eventually face winners)
+// 3. Random tiebreak
+// 4. Balanced teams: strongest + weakest vs middle two
 function smartSuggest(availablePlayers, matches) {
   if (availablePlayers.length < 4) return null;
   const stats = computePlayerStats(availablePlayers, matches);
@@ -944,9 +949,11 @@ function smartSuggest(availablePlayers, matches) {
     const ga = stats[a].games;
     const gb = stats[b].games;
     if (ga !== gb) return ga - gb;
+
     const wa = stats[a].wins - stats[a].losses;
     const wb = stats[b].wins - stats[b].losses;
     if (wb !== wa) return wb - wa;
+
     return Math.random() - 0.5;
   });
 
@@ -1143,8 +1150,9 @@ async function renderAdminTournament() {
     const limit = getMaxMatchInfo(checkInMap, matches);
     const { maxMatches, currentCount, canCreateMore, availableSlots, activeCheckedInCount } = limit;
 
+    // ============== PLAYER LIST (visible names) ==============
     const playerListHTML = allPlayers.length === 0
-      ? '<p style="color:#888;">No players yet for this date. Players who registered via Open Play appear here automatically. Tap "➕ Add Walk-In" to add one manually.</p>'
+      ? '<p style="color:#6b7280;">No players yet for this date. Players who registered via Open Play appear here automatically. Tap "➕ Add Walk-In" to add one manually.</p>'
       : allPlayers.map(name => {
           const ci = checkInMap[name];
           const inPending = playersInPending.has(name);
@@ -1174,7 +1182,7 @@ async function renderAdminTournament() {
           if (!ci) {
             actions = `<button type="button" onclick="toggleCheckIn('${safeName}', false)" style="padding:6px 14px;background:#10b981;color:#fff;border:none;border-radius:6px;font-size:0.8em;font-weight:600;cursor:pointer;">✓ Check In</button>`;
           } else if (inPending) {
-            actions = `<span style="font-size:0.75em;color:#666;font-style:italic;">In active/queued match</span>`;
+            actions = `<span style="font-size:0.75em;color:#6b7280;font-style:italic;">In active/queued match</span>`;
           } else if (ci.status === 'left') {
             actions = `<button type="button" onclick="togglePlayerLeft('${safeName}', false)" style="padding:6px 12px;background:#6b7280;color:#fff;border:none;border-radius:6px;font-size:0.8em;font-weight:600;cursor:pointer;">↺ Back Active</button>
               <button type="button" onclick="toggleCheckIn('${safeName}', true)" style="padding:6px 12px;background:#dc2626;color:#fff;border:none;border-radius:6px;font-size:0.8em;font-weight:600;cursor:pointer;margin-left:4px;">✕ Remove</button>`;
@@ -1185,24 +1193,25 @@ async function renderAdminTournament() {
 
           return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:${bg};border-radius:8px;margin-bottom:6px;flex-wrap:wrap;gap:8px;">
             <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-              <strong>${safeName}</strong>
+              <strong style="color:#111827;font-weight:800;">${safeName}</strong>
               ${badge}
-              <span style="font-size:0.8em;color:#666;">Games: ${s.games} · Record: ${recStr}</span>
+              <span style="font-size:0.8em;color:#6b7280;">Games: ${s.games} · Record: ${recStr}</span>
             </div>
             <div>${actions}</div>
           </div>`;
         }).join('');
 
+    // ============== ACTIVE MATCHES (visible names) ==============
     const activeHTML = activeMatches.length === 0
-      ? '<p style="color:#888;">No active matches.</p>'
+      ? '<p style="color:#6b7280;">No active matches.</p>'
       : activeMatches.map(m => `
           <div style="padding:12px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px;">
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
-              <strong>Court ${m.court}</strong>
-              <small style="color:#666;">Started ${formatClockTime(m.started_at)}</small>
+              <strong style="color:#111827;font-weight:800;">Court ${m.court}</strong>
+              <small style="color:#6b7280;">Started ${formatClockTime(m.started_at)}</small>
             </div>
-            <p style="margin:4px 0;font-size:0.9em;"><strong>A:</strong> ${escapeHtml(m.team_a_1)} & ${escapeHtml(m.team_a_2)}</p>
-            <p style="margin:4px 0;font-size:0.9em;"><strong>B:</strong> ${escapeHtml(m.team_b_1)} & ${escapeHtml(m.team_b_2)}</p>
+            <p style="margin:4px 0;font-size:0.9em;color:#1f2937;"><strong style="color:#10b981;">A:</strong> ${escapeHtml(m.team_a_1)} & ${escapeHtml(m.team_a_2)}</p>
+            <p style="margin:4px 0;font-size:0.9em;color:#1f2937;"><strong style="color:#f59e0b;">B:</strong> ${escapeHtml(m.team_b_1)} & ${escapeHtml(m.team_b_2)}</p>
             <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
               <button type="button" onclick="adminDeclareWinner(${m.id}, 'A')" style="padding:6px 12px;background:#10b981;color:#fff;border:none;border-radius:6px;font-size:0.8em;font-weight:600;cursor:pointer;">🏆 A Won</button>
               <button type="button" onclick="adminDeclareWinner(${m.id}, 'B')" style="padding:6px 12px;background:#f59e0b;color:#fff;border:none;border-radius:6px;font-size:0.8em;font-weight:600;cursor:pointer;">🏆 B Won</button>
@@ -1211,16 +1220,17 @@ async function renderAdminTournament() {
           </div>
         `).join('');
 
+    // ============== QUEUE ==============
     const queueHTML = queuedMatches.length === 0
-      ? '<p style="color:#888;">No matches in queue.</p>'
+      ? '<p style="color:#6b7280;">No matches in queue.</p>'
       : queuedMatches.map((m, idx) => `
           <div style="padding:12px;background:#faf5ff;border:1px solid #a78bfa;border-radius:8px;margin-bottom:8px;">
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
               <strong style="color:#7c3aed;">⏳ Queue #${idx + 1}</strong>
-              <small style="color:#666;">Auto-starts when a court frees up</small>
+              <small style="color:#6b7280;">Auto-starts when a court frees up</small>
             </div>
-            <p style="margin:4px 0;font-size:0.9em;"><strong>A:</strong> ${escapeHtml(m.team_a_1)} & ${escapeHtml(m.team_a_2)}</p>
-            <p style="margin:4px 0;font-size:0.9em;"><strong>B:</strong> ${escapeHtml(m.team_b_1)} & ${escapeHtml(m.team_b_2)}</p>
+            <p style="margin:4px 0;font-size:0.9em;color:#1f2937;"><strong style="color:#10b981;">A:</strong> ${escapeHtml(m.team_a_1)} & ${escapeHtml(m.team_a_2)}</p>
+            <p style="margin:4px 0;font-size:0.9em;color:#1f2937;"><strong style="color:#f59e0b;">B:</strong> ${escapeHtml(m.team_b_1)} & ${escapeHtml(m.team_b_2)}</p>
             <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
               <button type="button" onclick="adminStartNow(${m.id})" style="padding:6px 12px;background:#10b981;color:#fff;border:none;border-radius:6px;font-size:0.8em;font-weight:600;cursor:pointer;">▶ Start Now</button>
               <button type="button" onclick="adminCancelMatch(${m.id})" style="padding:6px 12px;background:#dc2626;color:#fff;border:none;border-radius:6px;font-size:0.8em;font-weight:600;cursor:pointer;">✕ Remove from Queue</button>
@@ -1228,6 +1238,7 @@ async function renderAdminTournament() {
           </div>
         `).join('');
 
+    // ============== CREATE MATCH ==============
     const playerOptions = availablePlayers.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
     const courtOptionsHTML = `
       <option value="0">📋 Queue — auto-assign when a court frees up</option>
@@ -1244,16 +1255,15 @@ async function renderAdminTournament() {
       createHTML = `
         <div style="background:#fef3c7;padding:16px;border-radius:8px;border-left:4px solid #f59e0b;">
           <p style="color:#92400e;font-weight:700;margin:0 0 8px 0;">🛑 Match limit reached (${currentCount} / ${maxMatches})</p>
-          <p style="color:#78350f;font-size:0.9em;margin:0 0 6px 0;">All ${activeCheckedInCount} checked-in players are already in an active or queued match.</p>
-          <p style="color:#78350f;font-size:0.85em;margin:0;">⏭️ Finish a match to free up a slot. The next round will auto-open with <strong>winner vs winner</strong> and <strong>loser vs loser</strong> pairing.</p>
+          <p style="color:#78350f;font-size:0.9em;margin:0;">All ${activeCheckedInCount} checked-in players are already in an active or queued match. Finish a match to free up a slot.</p>
         </div>`;
     } else if (availablePlayers.length < 4) {
-      createHTML = `<p style="color:#f59e0b;font-weight:600;">Need at least 4 available players. Currently: ${availablePlayers.length}.</p>`;
+      createHTML = `<p style="color:#b45309;font-weight:600;">Need at least 4 available players. Currently: ${availablePlayers.length}.</p>`;
     } else {
       createHTML = `
         <div style="background:#f9fafb;padding:12px;border-radius:8px;margin-bottom:12px;">
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
-            <label style="font-weight:600;display:flex;gap:6px;align-items:center;">
+            <label style="font-weight:600;display:flex;gap:6px;align-items:center;color:#1f2937;">
               Court:
               <select id="newMatchCourt" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd;">
                 ${courtOptionsHTML}
@@ -1274,15 +1284,16 @@ async function renderAdminTournament() {
             </div>
           </div>
           <button type="button" onclick="doCreateMatch()" style="margin-top:12px;padding:12px 24px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;width:100%;">▶ Create Match</button>
-          <p style="font-size:0.8em;color:#666;margin:8px 0 0 0;text-align:center;">${availableSlots} slot${availableSlots === 1 ? '' : 's'} remaining in this round.</p>
+          <p style="font-size:0.8em;color:#6b7280;margin:8px 0 0 0;text-align:center;">${availableSlots} slot${availableSlots === 1 ? '' : 's'} remaining in this round.</p>
         </div>`;
     }
 
+    // ============== COMPLETED ==============
     const completedHTML = doneMatches.length === 0
-      ? '<p style="color:#888;">No completed matches yet.</p>'
+      ? '<p style="color:#6b7280;">No completed matches yet.</p>'
       : doneMatches.map(m => `
           <div style="padding:8px 12px;background:#f9fafb;border-radius:6px;margin-bottom:6px;font-size:0.9em;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-            <span>Court ${m.court} · ${escapeHtml(m.team_a_1)} & ${escapeHtml(m.team_a_2)} vs ${escapeHtml(m.team_b_1)} & ${escapeHtml(m.team_b_2)}</span>
+            <span style="color:#1f2937;">Court ${m.court} · ${escapeHtml(m.team_a_1)} & ${escapeHtml(m.team_a_2)} vs ${escapeHtml(m.team_b_1)} & ${escapeHtml(m.team_b_2)}</span>
             <strong style="color:#10b981;">🏆 Team ${m.winning_team}</strong>
           </div>
         `).join('');
@@ -1303,7 +1314,7 @@ async function renderAdminTournament() {
           <button type="button" onclick="doSetAdminDate()" style="padding:10px 20px;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;">🔄 Load Date</button>
           <button type="button" onclick="doTodayDate()" style="padding:10px 20px;background:#6b7280;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;">📌 Jump to Today</button>
         </div>
-        <p style="color:#666;font-size:0.85em;margin:10px 0 0 0;">Pick any date to prepare lineups in advance. Players who registered for Open Play on that date appear automatically.</p>
+        <p style="color:#6b7280;font-size:0.85em;margin:10px 0 0 0;">Pick any date to prepare lineups in advance. Players who registered for Open Play on that date appear automatically.</p>
       </div>
 
       <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:16px;">
@@ -1315,15 +1326,15 @@ async function renderAdminTournament() {
             <button type="button" onclick="doClearOldData()" style="padding:8px 16px;background:#6b7280;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:0.85em;">🧹 Clean Old Data</button>
           </div>
         </div>
-        <p style="color:#666;font-size:0.9em;margin-bottom:12px;">Tap ✓ Check In for arrivals, ⏸ Mark as Left for departures.</p>
+        <p style="color:#6b7280;font-size:0.9em;margin-bottom:12px;">Tap ✓ Check In for arrivals, ⏸ Mark as Left for departures.</p>
 
         <div style="background:${limitBg};padding:12px 16px;border-radius:8px;border-left:4px solid ${limitColor};margin-bottom:12px;">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
             <div>
-              <span style="font-weight:700;color:#111;">📊 Match Slots</span>
+              <span style="font-weight:700;color:#111827;">📊 Match Slots</span>
               <span style="font-weight:900;font-size:1.3em;color:${limitColor};margin-left:10px;">${currentCount} / ${maxMatches}</span>
             </div>
-            <span style="font-size:0.85em;color:#555;">${activeCheckedInCount} players ÷ 4 = ${maxMatches} matches${canCreateMore ? ` · ${availableSlots} slot${availableSlots === 1 ? '' : 's'} open` : ' · FULL'}</span>
+            <span style="font-size:0.85em;color:#4b5563;">${activeCheckedInCount} players ÷ 4 = ${maxMatches} matches${canCreateMore ? ` · ${availableSlots} slot${availableSlots === 1 ? '' : 's'} open` : ' · FULL'}</span>
           </div>
         </div>
 
@@ -1337,7 +1348,7 @@ async function renderAdminTournament() {
 
       <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:16px;">
         <h3 style="color:#a78bfa;margin-top:0;">⏳ Up Next — Queue (${queuedMatches.length})</h3>
-        <p style="color:#666;font-size:0.9em;margin-top:0;">These matches auto-start when a court frees up.</p>
+        <p style="color:#6b7280;font-size:0.9em;margin-top:0;">These matches auto-start when a court frees up.</p>
         ${queueHTML}
       </div>
 
@@ -1689,30 +1700,30 @@ function renderAdminContent() {
   let html = '';
   if (currentAdminTab === 'bookings') {
     if (adminData.bookings.length === 0) {
-      html = '<p style="color: #888;">No court bookings yet.</p>';
+      html = '<p style="color:#6b7280;">No court bookings yet.</p>';
     } else {
       html = adminData.bookings.map(b => `
         <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; margin-bottom:12px; box-shadow:0 2px 8px rgba(0,0,0,0.06); position:relative;">
           <button onclick="deleteBooking('${b.id}')" style="position:absolute; top:12px; right:12px; background:#ef4444; color:#fff; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:0.85em; font-weight:600;">🗑 Delete</button>
           <h4 style="margin:0 0 8px 0; color:#7c3aed;">🏓 ${escapeHtml(b.customer_name || 'Unknown')}</h4>
-          <p style="margin:4px 0; font-size:0.92em; color:#444;">📱 ${escapeHtml(b.mobile || 'No phone')}</p>
-          <p style="margin:4px 0; font-size:0.92em; color:#444;">📅 ${escapeHtml(b.booking_date || 'No date')} at ${escapeHtml(b.start_time || 'No time')}</p>
-          <p style="margin:4px 0; font-size:0.92em; color:#444;">🏟️ Court ${escapeHtml(b.court || '?')} • ⏱️ ${escapeHtml(b.duration_hours || '?')} hour(s)</p>
-          <p style="margin:4px 0; font-size:0.92em; color:#444;">💰 ₱${Number(b.price || 0).toLocaleString()}</p>
+          <p style="margin:4px 0; font-size:0.92em; color:#374151;">📱 ${escapeHtml(b.mobile || 'No phone')}</p>
+          <p style="margin:4px 0; font-size:0.92em; color:#374151;">📅 ${escapeHtml(b.booking_date || 'No date')} at ${escapeHtml(b.start_time || 'No time')}</p>
+          <p style="margin:4px 0; font-size:0.92em; color:#374151;">🏟️ Court ${escapeHtml(b.court || '?')} • ⏱️ ${escapeHtml(b.duration_hours || '?')} hour(s)</p>
+          <p style="margin:4px 0; font-size:0.92em; color:#374151;">💰 ₱${Number(b.price || 0).toLocaleString()}</p>
         </div>
       `).join('');
     }
   } else if (currentAdminTab === 'openplay') {
     if (adminData.openplay.length === 0) {
-      html = '<p style="color: #888;">No Open Play registrations yet.</p>';
+      html = '<p style="color:#6b7280;">No Open Play registrations yet.</p>';
     } else {
       html = adminData.openplay.map(o => `
         <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; margin-bottom:12px; box-shadow:0 2px 8px rgba(0,0,0,0.06); position:relative;">
           <button onclick="deleteOpenPlay('${o.id}')" style="position:absolute; top:12px; right:12px; background:#ef4444; color:#fff; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:0.85em; font-weight:600;">🗑 Delete</button>
           <h4 style="margin:0 0 8px 0; color:#7c3aed;">🏓 ${escapeHtml(o.player_name || 'Unknown')}</h4>
-          <p style="margin:4px 0; font-size:0.92em; color:#444;">📱 ${escapeHtml(o.mobile || 'No phone')}</p>
-          <p style="margin:4px 0; font-size:0.92em; color:#444;">📅 ${escapeHtml(o.play_date || 'No date')}</p>
-          <p style="margin:4px 0; font-size:0.92em; color:#444;">🎯 Skill Level: ${escapeHtml(o.skill_level || 'Not specified')}</p>
+          <p style="margin:4px 0; font-size:0.92em; color:#374151;">📱 ${escapeHtml(o.mobile || 'No phone')}</p>
+          <p style="margin:4px 0; font-size:0.92em; color:#374151;">📅 ${escapeHtml(o.play_date || 'No date')}</p>
+          <p style="margin:4px 0; font-size:0.92em; color:#374151;">🎯 Skill Level: ${escapeHtml(o.skill_level || 'Not specified')}</p>
         </div>
       `).join('');
     }
