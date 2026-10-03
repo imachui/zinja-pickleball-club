@@ -136,7 +136,7 @@
   <section id="openplay" class="dark">
     <h2>Join Open Play</h2>
     <p>Open Play is ₱50 per player. Sessions run <strong>6:00 PM to 12:00 AM</strong> daily.</p>
-    <p style="font-size: 0.9em; opacity: 0.85;">🎯 Mixed Mode — All skill levels play together (beginners, intermediate, advanced).</p>
+    <p style="font-size: 0.9em; opacity: 0.85;">🎯 Tournament Mode — Winners play winners. Losers play losers. Every match reshuffles the brackets.</p>
     <form id="playForm">
       <input id="player" placeholder="Full Name" required>
       <input id="playerPhone" placeholder="Mobile Number" required>
@@ -161,7 +161,8 @@
 
     <div id="matchupsSection" style="margin-top: 40px; padding-top: 30px; border-top: 2px solid #444;">
       <h2 style="text-align: center;">🎯 Matchups & Schedule</h2>
-      <p style="text-align: center; font-size: 0.95em; opacity: 0.9;">Auto-generated schedule — 20 minutes per match to 11 points. All players are mixed together.</p>
+      <p style="text-align: center; font-size: 0.95em; opacity: 0.9;">Winners play winners. Losers play losers. Every result re-pairs the next round.</p>
+      <p style="text-align: center; font-size: 0.9em; opacity: 0.75;">20 minutes per match · Target: 11 points · After your game, tap the winning team on the card.</p>
       <div style="max-width: 500px; margin: 20px auto;">
         <label style="display: block; margin-bottom: 8px; font-size: 0.9em; opacity: 0.9;">Select date:</label>
         <input id="matchDate" type="date" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #444; background: #1a1a2e; color: #fff;">
@@ -258,7 +259,7 @@
 
   <footer>© <span id="year"></span> ZINJA Pickleball Club</footer>
 
-  <script src="zinja-app.js?v=26"></script>
+  <script src="zinja-app.js?v=27"></script>
   <script>
     document.getElementById('year').textContent = new Date().getFullYear();
   </script>
