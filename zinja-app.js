@@ -36,6 +36,14 @@ const ADMIN_PASSWORD = "zinja2026";
 let adminData = { bookings: [], openplay: [] };
 let currentAdminTab = 'tournament';
 
+// 🆕 Admin can pick any date (defaults to today)
+let adminSelectedDate = null;
+
+function getAdminDate() {
+  if (!adminSelectedDate) adminSelectedDate = getTodayStr();
+  return adminSelectedDate;
+}
+
 function getPHTNow() {
   const now = new Date();
   const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
@@ -781,9 +789,13 @@ async function createMatch(dateStr, court, teamA, teamB) {
 async function declareWinner(matchId, winningTeam) {
   const today = getTodayStr();
   let freedCourt = null;
+  let matchDate = today;
   try {
-    const info = await supabaseFetch(`/rest/v1/matches?id=eq.${matchId}&select=court,status`);
-    if (info && info[0] && info[0].status === 'active') freedCourt = info[0].court;
+    const info = await supabaseFetch(`/rest/v1/matches?id=eq.${matchId}&select=court,status,play_date`);
+    if (info && info[0]) {
+      if (info[0].status === 'active') freedCourt = info[0].court;
+      if (info[0].play_date) matchDate = info[0].play_date;
+    }
   } catch (e) { console.warn("Could not fetch match info:", e); }
 
   await supabaseFetch(`/rest/v1/matches?id=eq.${matchId}`, {
@@ -796,7 +808,7 @@ async function declareWinner(matchId, winningTeam) {
     })
   });
 
-  if (freedCourt) await promoteNextFromQueue(today, freedCourt);
+  if (freedCourt) await promoteNextFromQueue(matchDate, freedCourt);
 }
 
 async function promoteNextFromQueue(dateStr, court) {
@@ -846,7 +858,7 @@ async function autoPromoteQueues() {
 
 window.adminStartNow = async function (matchId) {
   try {
-    const today = getTodayStr();
+    const today = getAdminDate();
     const freeCourts = await getPhysicalFreeCourts(today);
     if (freeCourts.length === 0) {
       alert("No free court available. Finish an active match first.");
@@ -867,14 +879,17 @@ window.adminStartNow = async function (matchId) {
 };
 
 async function cancelMatch(matchId) {
-  const today = getTodayStr();
   let freedCourt = null;
+  let matchDate = getTodayStr();
   try {
-    const info = await supabaseFetch(`/rest/v1/matches?id=eq.${matchId}&select=court,status`);
-    if (info && info[0] && info[0].status === 'active') freedCourt = info[0].court;
+    const info = await supabaseFetch(`/rest/v1/matches?id=eq.${matchId}&select=court,status,play_date`);
+    if (info && info[0]) {
+      if (info[0].status === 'active') freedCourt = info[0].court;
+      if (info[0].play_date) matchDate = info[0].play_date;
+    }
   } catch (e) {}
   await supabaseFetch(`/rest/v1/matches?id=eq.${matchId}`, { method: "DELETE" });
-  if (freedCourt) await promoteNextFromQueue(today, freedCourt);
+  if (freedCourt) await promoteNextFromQueue(matchDate, freedCourt);
 }
 
 // ====================
@@ -1097,7 +1112,8 @@ window.reportMatchWin = async function (matchId, winningTeam) {
 async function renderAdminTournament() {
   const container = document.getElementById('adminContent');
   if (!container) return;
-  const today = getTodayStr();
+  const today = getAdminDate();
+  const isToday = today === getTodayStr();
 
   try {
     await autoPromoteQueues();
@@ -1129,7 +1145,7 @@ async function renderAdminTournament() {
     const { maxMatches, currentCount, canCreateMore, availableSlots, activeCheckedInCount } = limit;
 
     const playerListHTML = allPlayers.length === 0
-      ? '<p style="color:#888;">No players yet today. Tap "➕ Add Walk-In" to add one.</p>'
+      ? '<p style="color:#888;">No players yet for this date. Players who registered via Open Play appear here automatically. Tap "➕ Add Walk-In" to add one manually.</p>'
       : allPlayers.map(name => {
           const ci = checkInMap[name];
           const inPending = playersInPending.has(name);
@@ -1276,13 +1292,27 @@ async function renderAdminTournament() {
     const limitColor = canCreateMore ? '#10b981' : '#f59e0b';
     const limitBg = canCreateMore ? '#ecfdf5' : '#fef3c7';
 
+    const dateBadge = isToday
+      ? '<span style="background:#10b981;color:#fff;padding:4px 12px;border-radius:20px;font-size:0.75em;font-weight:700;margin-left:8px;">TODAY</span>'
+      : `<span style="background:#7c3aed;color:#fff;padding:4px 12px;border-radius:20px;font-size:0.75em;font-weight:700;margin-left:8px;">${formatDate(today)}</span>`;
+
     container.innerHTML = `
+      <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:16px;border:2px solid #7c3aed;">
+        <h3 style="color:#7c3aed;margin:0 0 12px 0;">📅 Session Date ${dateBadge}</h3>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+          <input type="date" id="adminDatePicker" value="${today}" style="padding:10px;border-radius:8px;border:1px solid #ddd;font-size:1em;">
+          <button type="button" onclick="doSetAdminDate()" style="padding:10px 20px;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;">🔄 Load Date</button>
+          <button type="button" onclick="doTodayDate()" style="padding:10px 20px;background:#6b7280;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;">📌 Jump to Today</button>
+        </div>
+        <p style="color:#666;font-size:0.85em;margin:10px 0 0 0;">Pick any date to prepare lineups in advance. Players who registered for Open Play on that date appear automatically.</p>
+      </div>
+
       <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:16px;">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
           <h3 style="color:#7c3aed;margin:0;">👥 Check-In & Player Management (${checkedInCount} active)</h3>
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
             <button type="button" onclick="doAddWalkIn()" style="padding:8px 16px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:0.85em;">➕ Add Walk-In</button>
-            <button type="button" onclick="doResetToday()" style="padding:8px 16px;background:linear-gradient(135deg,#dc2626,#b91c1c);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:0.85em;">🗑 Reset Today</button>
+            <button type="button" onclick="doResetToday()" style="padding:8px 16px;background:linear-gradient(135deg,#dc2626,#b91c1c);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:0.85em;">🗑 Reset This Date</button>
             <button type="button" onclick="doClearOldData()" style="padding:8px 16px;background:#6b7280;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:0.85em;">🧹 Clean Old Data</button>
           </div>
         </div>
@@ -1318,7 +1348,7 @@ async function renderAdminTournament() {
       </div>
 
       <div style="background:#fff;border-radius:12px;padding:16px;">
-        <h3 style="color:#7c3aed;margin-top:0;">✅ Completed Today (${doneMatches.length})</h3>
+        <h3 style="color:#7c3aed;margin-top:0;">✅ Completed (${doneMatches.length})</h3>
         ${completedHTML}
       </div>
     `;
@@ -1328,8 +1358,20 @@ async function renderAdminTournament() {
   }
 }
 
+window.doSetAdminDate = async function () {
+  const picker = document.getElementById('adminDatePicker');
+  if (!picker || !picker.value) return;
+  adminSelectedDate = picker.value;
+  await renderAdminTournament();
+};
+
+window.doTodayDate = async function () {
+  adminSelectedDate = getTodayStr();
+  await renderAdminTournament();
+};
+
 window.toggleCheckIn = async function (playerName, isCurrentlyIn) {
-  const today = getTodayStr();
+  const today = getAdminDate();
   try {
     if (isCurrentlyIn) await removeCheckIn(today, playerName);
     else await addCheckIn(today, playerName, false);
@@ -1338,7 +1380,7 @@ window.toggleCheckIn = async function (playerName, isCurrentlyIn) {
 };
 
 window.togglePlayerLeft = async function (playerName, markLeft) {
-  const today = getTodayStr();
+  const today = getAdminDate();
   const action = markLeft ? 'mark as LEFT' : 'mark as ACTIVE again';
   if (!confirm(`Are you sure you want to ${action} "${playerName}"?`)) return;
   try {
@@ -1348,26 +1390,25 @@ window.togglePlayerLeft = async function (playerName, markLeft) {
 };
 
 window.doAddWalkIn = async function () {
-  const today = getTodayStr();
+  const today = getAdminDate();
   const name = prompt("Enter walk-in player's full name:");
   if (!name || !name.trim()) return;
   const trimmed = name.trim();
   try {
     const checkInMap = await loadCheckIns(today);
-    if (checkInMap[trimmed]) { alert(`"${trimmed}" is already on today's list.`); return; }
+    if (checkInMap[trimmed]) { alert(`"${trimmed}" is already on this date's list.`); return; }
     await addCheckIn(today, trimmed, true);
     await renderAdminTournament();
   } catch (error) { alert("Failed to add walk-in: " + error.message); }
 };
 
 window.doResetToday = async function () {
-  const today = getTodayStr();
-  if (!confirm(`🗑 Reset Today's Session\n\nThis will delete ALL matches and check-ins for TODAY (${today}).\n\nContinue?`)) return;
+  const today = getAdminDate();
+  if (!confirm(`🗑 Reset Session\n\nThis will delete ALL matches and check-ins for ${today}.\n\nContinue?`)) return;
   try {
     await supabaseFetch(`/rest/v1/matches?play_date=eq.${today}`, { method: "DELETE" });
     await supabaseFetch(`/rest/v1/check_ins?play_date=eq.${today}`, { method: "DELETE" });
-    try { localStorage.removeItem("zinja_last_cleanup_date"); } catch {}
-    alert("✅ Today's session has been reset.");
+    alert("✅ Session has been reset.");
     await renderAdminTournament();
     await renderLiveBoard();
   } catch (error) { alert("❌ Reset failed: " + error.message); }
@@ -1375,7 +1416,7 @@ window.doResetToday = async function () {
 
 window.doClearOldData = async function () {
   const today = getTodayStr();
-  if (!confirm(`🧹 Clean Old Data\n\nDeletes ALL matches and check-ins from PREVIOUS days.\n\nToday (${today}) is safe. Continue?`)) return;
+  if (!confirm(`🧹 Clean Old Data\n\nDeletes ALL matches and check-ins from PREVIOUS days (before ${today}).\n\nContinue?`)) return;
   try {
     await supabaseFetch(`/rest/v1/matches?play_date=lt.${today}`, { method: "DELETE" });
     await supabaseFetch(`/rest/v1/check_ins?play_date=lt.${today}`, { method: "DELETE" });
@@ -1387,7 +1428,7 @@ window.doClearOldData = async function () {
 };
 
 window.doSmartSuggest = async function () {
-  const today = getTodayStr();
+  const today = getAdminDate();
   try {
     const [regs, checkInMap, matches] = await Promise.all([
       supabaseFetch(`/rest/v1/open_play?select=player_name&play_date=eq.${encodeURIComponent(today)}`),
@@ -1413,7 +1454,7 @@ window.doSmartSuggest = async function () {
 };
 
 window.doCreateMatch = async function () {
-  const today = getTodayStr();
+  const today = getAdminDate();
   const court = Number(document.getElementById('newMatchCourt')?.value);
   const a1 = document.getElementById('teamAP1')?.value;
   const a2 = document.getElementById('teamAP2')?.value;
@@ -1447,7 +1488,7 @@ window.doCreateMatch = async function () {
 };
 
 window.adminDeclareWinner = async function (matchId, team) {
-  if (!confirm(`Declare Team ${team} as winner?\n\nIf a court frees up, the next queued match will auto-start.`)) return;
+  if (!confirm(`Declare Team ${team} as winner?`)) return;
   try {
     await declareWinner(matchId, team);
     await renderAdminTournament();
