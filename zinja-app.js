@@ -9,6 +9,7 @@ const headers = {
 const CHAT_POLL_MS = 60000;
 const DATA_POLL_MS = 300000;
 const STATUS_POLL_MS = 300000;
+const MATCHUPS_POLL_MS = 180000;
 
 const BOOKING_DISPLAY_DAYS = 30;
 const OPENPLAY_DISPLAY_DAYS = 7;
@@ -677,7 +678,9 @@ async function cancelOpenPlay() {
       showResult(result, "No matching Open Play registration was found.", false);
     }
   } catch (error) { showResult(result, `Cancellation failed. ${error.message || "Please try again."}`, false); }
-}// ====================
+}
+
+// ====================
 // SWISS-STYLE TOURNAMENT (WINNERS vs WINNERS, LOSERS vs LOSERS)
 // ====================
 
@@ -809,7 +812,6 @@ function generateAutoSchedule(players, startTime, availableCourts, resultsMap, d
   while (allMatches.length < maxMatches && round <= MAX_ROUNDS) {
     if (timeToMinutes(currentTime) >= sessionEndMin) break;
 
-    // Build pairs for this round
     let pairs;
     if (round === 1) {
       const shuffled = seededShuffle(players, seed);
@@ -823,7 +825,6 @@ function generateAutoSchedule(players, startTime, availableCourts, resultsMap, d
 
     if (pairs.length === 0) break;
 
-    // Check if the full round can fit in the remaining time
     const wavesNeeded = Math.ceil(pairs.length / numCourts);
     const roundEndMin = timeToMinutes(currentTime) + wavesNeeded * MATCH_DURATION_MIN;
     if (roundEndMin > sessionEndMin) break;
@@ -845,7 +846,6 @@ function generateAutoSchedule(players, startTime, availableCourts, resultsMap, d
           startTime: waveTime,
           endTime: addMinutesToTime(waveTime, MATCH_DURATION_MIN)
         };
-        // Bracket label uses records BEFORE this round is played
         const recA = records[p.teamA[0].player_name];
         match.bracket = getBracketLabel(recA);
         allMatches.push(match);
@@ -857,7 +857,6 @@ function generateAutoSchedule(players, startTime, availableCourts, resultsMap, d
 
     if (matchesThisRound.length === 0) break;
 
-    // Apply any known results for this round to update records for the next round
     matchesThisRound.forEach(m => {
       const key = matchKey(dateStr, m.court, m.startTime);
       const result = resultsMap[key];
@@ -1403,12 +1402,13 @@ document.addEventListener("DOMContentLoaded", () => {
     loadAutoMatchups(today);
   }
 
+  // Auto-refresh matchups every 3 minutes (updates countdown + brackets)
   setInterval(async () => {
     const matchDateInput = document.getElementById("matchDate");
     if (matchDateInput?.value && document.visibilityState === 'visible') {
       await loadAutoMatchups(matchDateInput.value);
     }
-  }, 60000);
+  }, MATCHUPS_POLL_MS);
 
   let lastChatLoad = 0;
   let lastDataLoad = 0;
