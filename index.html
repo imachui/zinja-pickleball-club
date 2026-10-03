@@ -6,287 +6,496 @@
   <title>ZINJA Pickleball Club</title>
   <link rel="stylesheet" href="style.css">
   <style>
-    * { box-sizing: border-box; }
-    html, body { margin: 0; padding: 0; }
-    body {
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      /* 🎨 Background matches ZINJA logo — deep purple → blue gradient */
-      background: linear-gradient(180deg, #0d0530 0%, #1a0b3d 25%, #2d1b69 60%, #1e3a8a 100%);
-      background-attachment: fixed;
-      background-size: cover;
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; color: #111; }
+
+    /* ==================== NAVBAR ==================== */
+    .navbar {
+      position: sticky; top: 0; z-index: 100;
+      background: #0a1a3a;
+      padding: 10px 20px;
+      display: flex; align-items: center; justify-content: space-between;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    .nav-logo { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+    .nav-logo img { height: 52px; width: auto; display: block; }
+    .nav-logo-text {
+      display: flex; flex-direction: column; line-height: 1;
       color: #fff;
-      min-height: 100vh;
+    }
+    .nav-logo-text strong {
+      font-size: 1.35em; font-weight: 900; letter-spacing: 1px;
+      color: #fff;
+    }
+    .nav-logo-text small {
+      font-size: 0.62em; letter-spacing: 3px;
+      color: #e5e7eb; font-weight: 700; margin-top: 2px;
+    }
+    .hamburger {
+      background: transparent; border: none; cursor: pointer;
+      padding: 8px; display: flex; flex-direction: column; gap: 5px;
+    }
+    .hamburger span {
+      width: 26px; height: 3px; background: #fff; border-radius: 2px;
+      transition: 0.3s;
     }
 
-    /* TOP BAR */
-    .topbar {
-      position: sticky; top: 0; z-index: 60;
-      background: rgba(13, 5, 48, 0.85);
-      backdrop-filter: blur(10px);
-      padding: 10px 18px;
-      display: flex; align-items: center; gap: 12px;
-      border-bottom: 1px solid rgba(168, 85, 247, 0.25);
+    /* Slide-in menu */
+    .slide-menu {
+      position: fixed; top: 0; right: -300px;
+      width: 280px; height: 100vh;
+      background: #0a1a3a;
+      z-index: 200;
+      transition: right 0.3s ease;
+      padding: 24px 20px;
+      box-shadow: -4px 0 20px rgba(0,0,0,0.3);
+      overflow-y: auto;
     }
-    .topbar a {
-      display: flex; align-items: center; gap: 10px;
+    .slide-menu.open { right: 0; }
+    .slide-menu .close-btn {
+      background: transparent; border: none; color: #fff;
+      font-size: 1.6em; cursor: pointer; float: right; line-height: 1;
+      padding: 4px 8px;
+    }
+    .slide-menu h3 {
+      color: #c084fc; font-size: 0.75em;
+      letter-spacing: 2px; margin: 20px 0 8px 0;
+      text-transform: uppercase; clear: both;
+    }
+    .slide-menu a {
+      display: block; padding: 12px 14px;
       color: #fff; text-decoration: none;
+      border-radius: 8px; margin-bottom: 4px;
+      font-weight: 600; font-size: 0.95em;
+      cursor: pointer;
+      transition: background 0.15s;
     }
-    .topbar img { height: 42px; }
-    .topbar .brand-text { display: flex; flex-direction: column; line-height: 1.1; }
-    .topbar .brand-text strong {
-      font-size: 1.05em;
-      color: #fff;
-      letter-spacing: 1px;
-      background: linear-gradient(90deg, #c084fc, #60a5fa);
-      -webkit-background-clip: text;
-      background-clip: text;
-      -webkit-text-fill-color: transparent;
+    .slide-menu a:hover { background: rgba(168,85,247,0.25); }
+    .slide-menu a .icon { margin-right: 10px; font-size: 1.1em; }
+    .menu-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+      z-index: 150; display: none;
     }
-    .topbar .brand-text small {
-      font-size: 0.65em; color: #a5b4fc; letter-spacing: 2px; font-weight: 700;
-    }
+    .menu-overlay.open { display: block; }
 
-    /* STATUS BANNERS */
-    #liveStatus { padding: 10px 18px; text-align: center; font-size: 0.9em; font-weight: 600; color: #fff; }
+    /* ==================== STATUS BANNERS ==================== */
+    #liveStatus { padding: 10px 18px; text-align: center; font-size: 0.88em; font-weight: 600; color: #fff; }
     .weekly-banner {
-      background: linear-gradient(135deg, #1e3a8a, #7c3aed);
-      color: #fff; padding: 8px 18px;
-      text-align: center; font-size: 0.82em;
-      border-bottom: 1px solid rgba(168, 85, 247, 0.3);
+      background: linear-gradient(135deg,#1e3a8a,#7c3aed);
+      color: #fff; padding: 8px 18px; text-align: center; font-size: 0.8em;
     }
 
-    /* PAGES */
-    .page { display: none; padding: 20px 16px 60px 16px; max-width: 720px; margin: 0 auto; }
+    /* ==================== PAGES ==================== */
+    .page { display: none; }
     .page.active { display: block; }
-
+    .page-inner { max-width: 900px; margin: 0 auto; padding: 20px 16px 60px 16px; }
     .page-header {
       display: flex; align-items: center; gap: 12px;
-      padding: 12px 16px;
-      background: linear-gradient(135deg, #7c3aed, #6d28d9);
-      color: #fff;
-      border-radius: 14px;
-      margin: 0 0 20px 0;
-      box-shadow: 0 4px 20px rgba(124, 58, 237, 0.4);
+      padding: 14px 18px;
+      background: linear-gradient(135deg,#7c3aed,#6d28d9);
+      color: #fff; border-radius: 14px; margin-bottom: 20px;
+      box-shadow: 0 4px 20px rgba(124,58,237,0.35);
     }
     .page-header button {
-      background: rgba(255, 255, 255, 0.22);
-      border: none; color: #fff;
-      padding: 8px 14px; border-radius: 20px;
+      background: rgba(255,255,255,0.22); border: none; color: #fff;
+      padding: 8px 16px; border-radius: 20px;
       font-weight: 700; cursor: pointer; font-size: 0.88em;
       font-family: inherit;
     }
-    .page-header h2 {
-      margin: 0; font-size: 1.05em; flex: 1;
-      text-align: center; padding-right: 60px;
-    }
+    .page-header h2 { margin: 0; font-size: 1.05em; flex: 1; text-align: center; padding-right: 60px; }
 
-    /* HERO (LOGO ONLY) */
+    /* ==================== HERO ==================== */
     .hero {
-      text-align: center;
-      padding: 20px 0 10px 0;
-      margin-bottom: 20px;
+      background:
+        linear-gradient(135deg, rgba(10,26,58,0.92) 0%, rgba(10,26,58,0.85) 45%, rgba(10,26,58,0.55) 100%),
+        linear-gradient(180deg, #0a1a3a 0%, #16295c 50%, #3b1e6e 100%);
+      padding: 40px 24px 44px 24px;
+      color: #fff;
+      position: relative;
+      overflow: hidden;
+      min-height: 480px;
     }
-    .hero-logo {
-      width: 200px;
-      max-width: 60vw;
-      height: auto;
-      display: block;
+    .hero::before {
+      content: '🏓';
+      position: absolute;
+      top: 15%; right: -3%;
+      font-size: 22em; opacity: 0.15;
+      transform: rotate(-20deg);
+      pointer-events: none;
+      filter: blur(2px);
+    }
+    .hero::after {
+      content: '🥎';
+      position: absolute;
+      bottom: 12%; right: 15%;
+      font-size: 6em; opacity: 0.25;
+      transform: rotate(15deg);
+      pointer-events: none;
+      filter: drop-shadow(0 10px 20px rgba(0,0,0,0.5));
+    }
+    .hero-inner {
+      max-width: 900px;
       margin: 0 auto;
-      filter: drop-shadow(0 8px 32px rgba(168, 85, 247, 0.65)) drop-shadow(0 0 60px rgba(59, 130, 246, 0.4));
-      animation: glow 4s ease-in-out infinite alternate;
+      position: relative;
+      z-index: 2;
     }
-    @keyframes glow {
-      from { filter: drop-shadow(0 8px 24px rgba(168, 85, 247, 0.55)) drop-shadow(0 0 40px rgba(59, 130, 246, 0.35)); }
-      to   { filter: drop-shadow(0 8px 36px rgba(192, 132, 252, 0.75)) drop-shadow(0 0 80px rgba(96, 165, 250, 0.5)); }
+    .hero .welcome {
+      font-size: 0.85em;
+      letter-spacing: 5px;
+      color: #fff;
+      font-weight: 700;
+      margin-bottom: 6px;
+      opacity: 0.95;
+    }
+    .hero h1 {
+      font-size: 3.2em;
+      font-weight: 900;
+      letter-spacing: 2px;
+      line-height: 1;
+      color: #fff;
+      margin-bottom: 6px;
+      text-shadow: 0 4px 24px rgba(0,0,0,0.4);
+    }
+    .hero h1 .ball-icon {
+      display: inline-block;
+      font-size: 0.55em;
+      vertical-align: middle;
+      margin-left: 4px;
+      filter: drop-shadow(0 4px 12px rgba(190,240,50,0.5));
+    }
+    .hero .subtitle {
+      font-size: 1.6em;
+      font-weight: 800;
+      letter-spacing: 4px;
+      color: #fff;
+      margin-bottom: 18px;
+      opacity: 0.98;
     }
     .hero .location {
-      display: inline-block;
+      display: inline-flex; align-items: center; gap: 6px;
       padding: 8px 18px;
-      margin-top: 12px;
-      background: rgba(168, 85, 247, 0.15);
-      border: 1px solid rgba(168, 85, 247, 0.4);
-      border-radius: 20px;
-      font-size: 0.82em;
-      color: #e9d5ff;
-      font-weight: 500;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 24px;
+      font-size: 0.85em;
+      margin-bottom: 26px;
+      backdrop-filter: blur(8px);
     }
-    .hero-actions { display: flex; flex-direction: column; gap: 12px; margin-top: 22px; max-width: 420px; margin-left: auto; margin-right: auto; }
+    .hero .tagline {
+      font-size: 1.35em;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 10px;
+    }
+    .hero .description {
+      font-size: 0.98em;
+      color: #e5e7eb;
+      max-width: 480px;
+      line-height: 1.55;
+      margin-bottom: 26px;
+      opacity: 0.95;
+    }
+    .hero-actions {
+      display: flex; flex-wrap: wrap; gap: 12px;
+      margin-bottom: 40px;
+    }
     .hero-btn {
-      display: flex; align-items: center; justify-content: center; gap: 10px;
-      padding: 16px 22px;
-      border-radius: 14px;
-      font-weight: 800; font-size: 1.02em;
+      display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+      padding: 16px 32px;
+      border-radius: 50px;
+      font-weight: 800; font-size: 1.05em;
       cursor: pointer;
-      border: none;
-      font-family: inherit;
+      border: none; font-family: inherit;
       transition: transform 0.15s, box-shadow 0.15s;
     }
     .hero-btn:active { transform: scale(0.98); }
     .hero-btn.primary {
-      background: linear-gradient(135deg, #10b981, #059669);
+      background: linear-gradient(135deg,#10b981,#059669);
       color: #fff;
-      box-shadow: 0 6px 24px rgba(16, 185, 129, 0.4);
+      box-shadow: 0 8px 28px rgba(16,185,129,0.45);
+      flex: 1; min-width: 200px; max-width: 320px;
     }
-    .hero-btn.primary:hover { box-shadow: 0 8px 32px rgba(16, 185, 129, 0.55); }
+    .hero-btn.primary:hover { box-shadow: 0 10px 36px rgba(16,185,129,0.6); transform: translateY(-2px); }
     .hero-btn.secondary {
-      background: linear-gradient(135deg, #a855f7, #7c3aed);
+      background: rgba(255,255,255,0.08);
       color: #fff;
-      box-shadow: 0 6px 24px rgba(168, 85, 247, 0.4);
+      border: 2px solid rgba(255,255,255,0.55);
+      backdrop-filter: blur(8px);
+      flex: 1; min-width: 200px; max-width: 320px;
     }
-    .hero-btn.secondary:hover { box-shadow: 0 8px 32px rgba(168, 85, 247, 0.55); }
+    .hero-btn.secondary:hover { background: rgba(255,255,255,0.15); transform: translateY(-2px); }
 
-    /* QUICK STATS */
-    .quick-stats {
+    /* ==================== STAT CARDS ==================== */
+    .stat-cards {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 10px;
-      margin-bottom: 20px;
+      gap: 12px;
+      max-width: 900px;
+      margin: -30px auto 30px auto;
+      padding: 0 16px;
+      position: relative;
+      z-index: 5;
     }
     .stat-card {
-      background: rgba(30, 20, 80, 0.55);
-      backdrop-filter: blur(8px);
-      border: 1px solid rgba(168, 85, 247, 0.28);
       border-radius: 14px;
-      padding: 14px 8px;
-      text-align: center;
-      transition: border-color 0.2s;
-    }
-    .stat-card:hover { border-color: rgba(168, 85, 247, 0.6); }
-    .stat-card .icon { font-size: 1.6em; display: block; margin-bottom: 6px; }
-    .stat-card .num {
-      font-size: 1.05em; font-weight: 800;
-      background: linear-gradient(90deg, #c084fc, #60a5fa);
-      -webkit-background-clip: text;
-      background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-    .stat-card .lbl { font-size: 0.7em; color: #c7d2fe; margin-top: 3px; }
-
-    /* SECTION TITLES */
-    .section-title {
-      font-size: 0.78em; font-weight: 800;
-      letter-spacing: 2px;
-      color: #c084fc;
-      margin: 24px 4px 12px 4px;
-      text-transform: uppercase;
-      text-align: center;
-    }
-
-    /* MENU CARDS */
-    .menu-card {
+      padding: 18px 16px;
       display: flex; align-items: center; gap: 14px;
-      padding: 15px 16px;
-      background: rgba(255, 255, 255, 0.96);
-      border-radius: 14px;
-      margin-bottom: 10px;
-      color: #111;
-      cursor: pointer;
-      border: 1px solid rgba(168, 85, 247, 0.15);
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
-      transition: all 0.15s;
-      user-select: none;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+      color: #fff;
     }
-    .menu-card:hover, .menu-card:active {
-      transform: translateX(3px);
-      border-color: #a855f7;
-      box-shadow: 0 6px 22px rgba(168, 85, 247, 0.35);
+    .stat-card.green { background: linear-gradient(135deg,#047857,#10b981); }
+    .stat-card.blue  { background: linear-gradient(135deg,#1e3a8a,#2563eb); }
+    .stat-card.purple { background: linear-gradient(135deg,#6d28d9,#a855f7); }
+    .stat-card .ico {
+      font-size: 1.9em; flex-shrink: 0;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
     }
-    .menu-card .icon { font-size: 1.7em; }
-    .menu-card .info { flex: 1; }
-    .menu-card .title { font-weight: 800; font-size: 1em; margin: 0 0 3px 0; color: #1a0b3d; }
-    .menu-card .subtitle { font-size: 0.82em; color: #6b7280; margin: 0; }
-    .menu-card .arrow { font-size: 1.4em; opacity: 0.45; color: #a855f7; }
+    .stat-card .txt { display: flex; flex-direction: column; }
+    .stat-card .num { font-size: 1.15em; font-weight: 900; line-height: 1.1; }
+    .stat-card .lbl { font-size: 0.78em; opacity: 0.9; margin-top: 3px; }
 
-    /* FORM ELEMENTS (LIGHT) */
+    /* ==================== FEATURE GRID ==================== */
+    .features-wrap {
+      background: #ffffff;
+      padding: 40px 16px 50px 16px;
+    }
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .feature-card {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      padding: 22px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-decoration: none;
+      color: inherit;
+      display: flex; flex-direction: column; align-items: center;
+    }
+    .feature-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 12px 30px rgba(124,58,237,0.14);
+      border-color: #a855f7;
+    }
+    .feature-icon {
+      width: 60px; height: 60px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.5em;
+      margin-bottom: 12px;
+    }
+    .feature-icon.green { background: #d1fae5; color: #047857; }
+    .feature-icon.blue  { background: #dbeafe; color: #1e40af; }
+    .feature-icon.purple { background: #ede9fe; color: #6d28d9; }
+    .feature-icon.orange { background: #fed7aa; color: #c2410c; }
+    .feature-icon.pink { background: #fce7f3; color: #be185d; }
+    .feature-icon.teal { background: #ccfbf1; color: #0f766e; }
+    .feature-card .title {
+      font-size: 1em; font-weight: 800; color: #0a1a3a;
+      margin-bottom: 6px;
+    }
+    .feature-card .desc {
+      font-size: 0.83em; color: #6b7280; line-height: 1.45;
+    }
+
+    /* ==================== FACILITY SECTION ==================== */
+    .facility {
+      max-width: 900px;
+      margin: 30px auto;
+      padding: 0 16px;
+    }
+    .facility-inner {
+      background:
+        linear-gradient(135deg, rgba(10,26,58,0.92), rgba(59,30,110,0.88)),
+        linear-gradient(180deg, #0a1a3a, #3b1e6e);
+      border-radius: 18px;
+      padding: 28px 24px;
+      color: #fff;
+      position: relative;
+      overflow: hidden;
+    }
+    .facility-inner::before {
+      content: '🏓';
+      position: absolute;
+      right: -30px; bottom: -40px;
+      font-size: 12em;
+      opacity: 0.1;
+      transform: rotate(-15deg);
+    }
+    .facility .label {
+      color: #4ade80;
+      font-size: 0.75em;
+      font-weight: 800;
+      letter-spacing: 3px;
+      margin-bottom: 8px;
+      position: relative;
+    }
+    .facility h2 {
+      font-size: 1.7em;
+      font-weight: 900;
+      letter-spacing: 1px;
+      color: #fff;
+      margin-bottom: 20px;
+      position: relative;
+    }
+    .facility-bullets {
+      display: flex; flex-wrap: wrap; gap: 24px;
+      position: relative;
+    }
+    .facility-bullets .item {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 0.9em;
+      color: #e5e7eb;
+    }
+    .facility-bullets .item .ico {
+      font-size: 1.3em;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+    }
+
+    /* ==================== WEEKLY SCHEDULE ==================== */
+    .schedule-wrap {
+      background: #ffffff;
+      padding: 40px 16px 60px 16px;
+    }
+    .schedule-inner {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .schedule-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 20px; flex-wrap: wrap; gap: 10px;
+    }
+    .schedule-header h2 {
+      font-size: 1.5em; font-weight: 900; color: #0a1a3a;
+      letter-spacing: 1px;
+    }
+    .schedule-header a {
+      color: #7c3aed; font-weight: 700; font-size: 0.9em;
+      text-decoration: none; cursor: pointer;
+    }
+    .day-tabs {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 6px;
+      margin-bottom: 20px;
+    }
+    .day-tab {
+      padding: 12px 4px;
+      border-radius: 10px;
+      background: #f3f4f6;
+      color: #6b7280;
+      font-weight: 800;
+      font-size: 0.82em;
+      text-align: center;
+      cursor: pointer;
+      border: none; font-family: inherit;
+      transition: all 0.15s;
+      letter-spacing: 0.5px;
+    }
+    .day-tab:hover { background: #ede9fe; color: #6d28d9; }
+    .day-tab.active {
+      background: linear-gradient(135deg,#7c3aed,#6d28d9);
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(124,58,237,0.4);
+    }
+    .day-tab.closed { color: #dc2626; }
+    .day-tab.active.closed { color: #fff; background: linear-gradient(135deg,#dc2626,#991b1b); box-shadow: 0 4px 14px rgba(220,38,38,0.4); }
+    .schedule-panel {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      padding: 20px;
+    }
+    .schedule-panel h4 {
+      font-size: 1.1em; color: #0a1a3a; margin-bottom: 12px;
+      font-weight: 800;
+    }
+    .schedule-row {
+      display: flex; justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid #e5e7eb;
+      font-size: 0.92em;
+    }
+    .schedule-row:last-child { border-bottom: none; }
+    .schedule-row .label { color: #6b7280; font-weight: 600; }
+    .schedule-row .value { color: #0a1a3a; font-weight: 700; }
+    .schedule-row .value.closed { color: #dc2626; }
+
+    /* ==================== CARD (Forms) ==================== */
+    .card {
+      background: #fff;
+      border-radius: 14px;
+      padding: 20px;
+      margin-bottom: 16px;
+      border: 1px solid #e5e7eb;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.05);
+    }
     input, select, textarea {
-      width: 100%;
-      padding: 12px 14px;
+      width: 100%; padding: 12px 14px;
       border-radius: 10px;
       border: 1.5px solid #d1d5db;
-      background: #ffffff;
-      color: #111;
-      margin-bottom: 10px;
-      font-size: 1em;
+      background: #fff; color: #111;
+      margin-bottom: 10px; font-size: 1em;
       font-family: inherit;
       transition: border-color 0.15s, box-shadow 0.15s;
     }
     input:focus, select:focus, textarea:focus {
-      outline: none;
-      border-color: #7c3aed;
-      box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+      outline: none; border-color: #7c3aed;
+      box-shadow: 0 0 0 3px rgba(124,58,237,0.15);
     }
     input::placeholder { color: #9ca3af; }
     input[type="date"]::-webkit-calendar-picker-indicator,
     input[type="time"]::-webkit-calendar-picker-indicator {
-      filter: none;
-      opacity: 0.75;
-      cursor: pointer;
-      font-size: 1.15em;
+      filter: none; opacity: 0.75; cursor: pointer; font-size: 1.15em;
     }
-
-    .btn, button.primary {
+    .btn {
       display: inline-block;
       padding: 12px 22px;
-      background: linear-gradient(135deg, #7c3aed, #6d28d9);
+      background: linear-gradient(135deg,#7c3aed,#6d28d9);
       color: #fff; border: none; border-radius: 10px;
       font-weight: 700; cursor: pointer; font-size: 1em;
       font-family: inherit;
-      transition: transform 0.15s, box-shadow 0.15s;
-      box-shadow: 0 4px 12px rgba(124, 58, 237, 0.35);
+      box-shadow: 0 4px 12px rgba(124,58,237,0.35);
+      transition: transform 0.15s;
     }
-    .btn:hover, button.primary:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(124, 58, 237, 0.45); }
-    .btn.alt {
-      background: linear-gradient(135deg, #10b981, #059669);
-      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
-    }
-    .btn.alt:hover { box-shadow: 0 6px 18px rgba(16, 185, 129, 0.45); }
+    .btn:hover { transform: translateY(-1px); }
+    .btn.alt { background: linear-gradient(135deg,#10b981,#059669); box-shadow: 0 4px 12px rgba(16,185,129,0.35); }
     .btn:disabled { opacity: 0.6; cursor: not-allowed; }
-
-    h2 { font-size: 1.25em; margin: 4px 0 12px 0; color: #fff; }
-    h3 { font-size: 1.05em; margin: 16px 0 8px 0; color: #e9d5ff; }
+    h2 { font-size: 1.25em; margin-bottom: 12px; color: #fff; }
+    h3 { font-size: 1.05em; margin: 16px 0 10px 0; color: #0a1a3a; }
+    .card h3 { color: #0a1a3a; }
     p { line-height: 1.5; color: #d1d5db; }
-
-    /* CARD (WHITE CONTENT BOXES) */
-    .card {
-      background: #ffffff;
-      border-radius: 14px;
-      padding: 18px;
-      margin-bottom: 16px;
-      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.22);
-    }
-    .card h2, .card h3 { color: #1a0b3d; }
     .card p { color: #374151; }
-    .card.dark-section { background: #ffffff; }
 
-    /* CHAT FULL SCREEN */
-    #page-chat { padding: 0; max-width: none; }
-    #page-chat.active { display: flex; flex-direction: column; height: calc(100vh - 70px); }
+    /* ==================== CHAT ==================== */
+    #page-chat { padding: 0; }
+    #page-chat.active { display: flex; flex-direction: column; height: calc(100vh - 76px); }
     #page-chat .chat-wrap {
-      display: flex; flex-direction: column;
-      height: 100%; max-width: 720px; margin: 0 auto; width: 100%;
+      display: flex; flex-direction: column; height: 100%;
+      max-width: 900px; margin: 0 auto; width: 100%;
       background: #f5f7fa;
     }
     #page-chat .chat-top {
-      background: linear-gradient(135deg, #7c3aed, #6d28d9);
-      color: #fff;
-      display: flex; align-items: center; gap: 12px;
+      background: linear-gradient(135deg,#7c3aed,#6d28d9);
+      color: #fff; display: flex; align-items: center; gap: 12px;
       padding: 12px 16px;
-      box-shadow: 0 4px 16px rgba(124, 58, 237, 0.4);
     }
     #page-chat .chat-top button {
-      background: rgba(255, 255, 255, 0.22); border: none; color: #fff;
+      background: rgba(255,255,255,0.22); border: none; color: #fff;
       padding: 8px 14px; border-radius: 20px;
       font-weight: 700; cursor: pointer; font-size: 0.88em;
     }
     #page-chat .chat-top h2 { margin: 0; color: #fff; font-size: 1.05em; flex: 1; }
-    #chatMessages {
-      flex: 1; overflow-y: auto;
-      padding: 16px;
-      background: #f5f7fa;
-    }
+    #chatMessages { flex: 1; overflow-y: auto; padding: 16px; background: #f5f7fa; }
     .chat-input-row {
       display: flex; gap: 8px; padding: 10px 12px;
-      background: #ffffff; border-top: 1px solid #e5e7eb;
+      background: #fff; border-top: 1px solid #e5e7eb;
     }
     .chat-input-row input { margin: 0; }
     .emoji-btn {
@@ -295,31 +504,74 @@
       font-size: 1.2em; cursor: pointer; color: #111;
     }
 
-    /* ADMIN PANEL */
-    #page-admin { max-width: none; }
-    #page-admin .admin-wrap { max-width: 900px; margin: 0 auto; }
-    #page-admin .card h2, #page-admin .card h3 { color: #1a0b3d; }
-    #page-admin .card p { color: #374151; }
+    /* ==================== ADMIN ==================== */
+    #page-admin { background: #f5f7fa; }
 
-    /* FOOTER */
+    /* ==================== FOOTER ==================== */
     footer {
       text-align: center; padding: 30px 24px;
-      color: #a5b4fc; font-size: 0.82em;
-      border-top: 1px solid rgba(168, 85, 247, 0.2);
-      margin-top: 30px;
+      color: #9ca3af; font-size: 0.85em;
+      background: #0a1a3a;
+      color: #c7d2fe;
+    }
+    footer a { color: #c7d2fe; text-decoration: none; }
+
+    /* ==================== RESPONSIVE ==================== */
+    @media (max-width: 640px) {
+      .hero h1 { font-size: 2.4em; }
+      .hero .subtitle { font-size: 1.1em; letter-spacing: 2.5px; }
+      .hero .tagline { font-size: 1.15em; }
+      .hero { padding: 30px 18px 40px 18px; min-height: auto; }
+      .hero-btn { padding: 14px 22px; font-size: 0.98em; }
+      .hero-actions { flex-direction: column; }
+      .hero-btn { flex: 1 1 auto; max-width: none; }
+      .stat-cards { grid-template-columns: 1fr; margin-top: -20px; }
+      .stat-card { padding: 16px 14px; }
+      .features-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+      .feature-card { padding: 18px 10px; }
+      .feature-icon { width: 52px; height: 52px; font-size: 1.3em; }
+      .feature-card .title { font-size: 0.92em; }
+      .feature-card .desc { font-size: 0.78em; }
+      .facility h2 { font-size: 1.3em; }
+      .facility-bullets { flex-direction: column; gap: 12px; }
+      .day-tab { padding: 10px 2px; font-size: 0.72em; }
+      .nav-logo img { height: 44px; }
+      .nav-logo-text strong { font-size: 1.1em; }
+      .nav-logo-text small { font-size: 0.55em; letter-spacing: 2px; }
+      .page-inner { padding: 16px 12px 50px 12px; }
     }
   </style>
 </head>
 <body>
 
-  <div class="topbar">
-    <a href="#" onclick="showPage('home'); return false;">
+  <!-- ==================== NAVBAR ==================== -->
+  <nav class="navbar">
+    <a class="nav-logo" href="#" onclick="showPage('home'); return false;">
       <img src="logo.png" alt="ZINJA">
-      <div class="brand-text">
+      <div class="nav-logo-text">
         <strong>ZINJA</strong>
         <small>PICKLEBALL CLUB</small>
       </div>
     </a>
+    <button class="hamburger" onclick="openMenu()" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+  </nav>
+
+  <!-- ==================== SLIDE MENU ==================== -->
+  <div class="menu-overlay" id="menuOverlay" onclick="closeMenu()"></div>
+  <div class="slide-menu" id="slideMenu">
+    <button class="close-btn" onclick="closeMenu()">✕</button>
+    <h3>Menu</h3>
+    <a onclick="menuGo('home')"><span class="icon">🏠</span>Home</a>
+    <a onclick="menuGo('booking')"><span class="icon">🏓</span>Book a Court</a>
+    <a onclick="menuGo('openplay')"><span class="icon">🎯</span>Join Open Play</a>
+    <a onclick="menuGo('live')"><span class="icon">🏆</span>Live Matches</a>
+    <a onclick="menuGo('players')"><span class="icon">📋</span>Open Play Players</a>
+    <a onclick="menuGo('chat')"><span class="icon">💬</span>Club Chat</a>
+    <a onclick="menuGo('download')"><span class="icon">📱</span>Get the App</a>
+    <a onclick="menuGo('admin')"><span class="icon">🔐</span>Admin Panel</a>
+    <a onclick="menuGo('contact')"><span class="icon">📞</span>Contact & Info</a>
   </div>
 
   <div id="liveStatus" style="background: linear-gradient(135deg,#059669,#047857);">
@@ -330,231 +582,239 @@
     📢 <strong>Weekly Schedule:</strong> Courts and Open Play are closed every <strong>Friday 5:00 PM to Saturday 5:00 PM</strong> (Philippine Time).
   </div>
 
-  <!-- ==================== HOME (LOGO + MENU) ==================== -->
+  <!-- ==================== HOME ==================== -->
   <section id="page-home" class="page active">
 
-    <!-- HERO — LOGO ONLY -->
+    <!-- HERO -->
     <div class="hero">
-      <img class="hero-logo" src="logo.png" alt="ZINJA Logo">
-      <div class="location">📍 Malusay, Guihulngan City, Negros Oriental</div>
+      <div class="hero-inner">
+        <p class="welcome">WELCOME TO</p>
+        <h1>ZINJA<span class="ball-icon">🥎</span></h1>
+        <p class="subtitle">PICKLEBALL CLUB</p>
+        <div class="location">📍 Malusay, Guihulngan City, Negros Oriental</div>
+        <p class="tagline">Play. Connect. Stay Active.</p>
+        <p class="description">A community for all skill levels — where fun, fitness, and friendship meet on the court.</p>
 
-      <div class="hero-actions">
-        <button class="hero-btn primary" onclick="showPage('booking')">📅 Book a Court &nbsp;→</button>
-        <button class="hero-btn secondary" onclick="showPage('openplay')">👥 Join Open Play &nbsp;→</button>
+        <div class="hero-actions">
+          <button class="hero-btn primary" onclick="showPage('booking')">📅 Book a Court &nbsp; →</button>
+          <button class="hero-btn secondary" onclick="showPage('openplay')">👥 Join Open Play &nbsp; →</button>
+        </div>
       </div>
     </div>
 
-    <div class="quick-stats">
-      <div class="stat-card">
-        <span class="icon">🏓</span>
-        <div class="num">2 Courts</div>
-        <div class="lbl">Available for booking</div>
+    <!-- STAT CARDS -->
+    <div class="stat-cards">
+      <div class="stat-card green">
+        <span class="ico">🎾</span>
+        <div class="txt">
+          <span class="num">2 Courts</span>
+          <span class="lbl">Available for booking</span>
+        </div>
       </div>
-      <div class="stat-card">
-        <span class="icon">💰</span>
-        <div class="num">₱150/hr</div>
-        <div class="lbl">Court rental</div>
+      <div class="stat-card blue">
+        <span class="ico">🏓</span>
+        <div class="txt">
+          <span class="num">₱150 / hour</span>
+          <span class="lbl">Court Rental</span>
+        </div>
       </div>
-      <div class="stat-card">
-        <span class="icon">🎯</span>
-        <div class="num">₱50</div>
-        <div class="lbl">Open Play fee</div>
+      <div class="stat-card purple">
+        <span class="ico">👥</span>
+        <div class="txt">
+          <span class="num">₱50</span>
+          <span class="lbl">Open Play</span>
+        </div>
       </div>
     </div>
 
-    <p class="section-title">What Would You Like to Do?</p>
+    <!-- FEATURE GRID -->
+    <div class="features-wrap">
+      <div class="features-grid">
+        <div class="feature-card" onclick="showPage('booking')">
+          <div class="feature-icon blue">📅</div>
+          <p class="title">Book a Court</p>
+          <p class="desc">Reserve your preferred date and time.</p>
+        </div>
 
-    <div class="menu-card" onclick="showPage('booking')">
-      <span class="icon">🏓</span>
-      <div class="info">
-        <p class="title">Book a Court</p>
-        <p class="subtitle">Reserve your preferred date and time</p>
+        <div class="feature-card" onclick="showPage('openplay')">
+          <div class="feature-icon green">👥</div>
+          <p class="title">Join Open Play</p>
+          <p class="desc">Meet and play with the community.</p>
+        </div>
+
+        <div class="feature-card" onclick="showPage('live')">
+          <div class="feature-icon orange">🏆</div>
+          <p class="title">Live Matches</p>
+          <p class="desc">Check ongoing games and results.</p>
+        </div>
+
+        <div class="feature-card" onclick="scrollToSchedule()">
+          <div class="feature-icon purple">📅</div>
+          <p class="title">Weekly Schedule</p>
+          <p class="desc">View court schedule and open play hours.</p>
+        </div>
+
+        <div class="feature-card" onclick="showPage('chat')">
+          <div class="feature-icon pink">💬</div>
+          <p class="title">Club Chat</p>
+          <p class="desc">Connect with other players.</p>
+        </div>
+
+        <div class="feature-card" onclick="showPage('contact')">
+          <div class="feature-icon teal">ℹ️</div>
+          <p class="title">Contact & Info</p>
+          <p class="desc">Location, rates, and more details.</p>
+        </div>
       </div>
-      <span class="arrow">›</span>
     </div>
 
-    <div class="menu-card" onclick="showPage('openplay')">
-      <span class="icon">🎯</span>
-      <div class="info">
-        <p class="title">Join Open Play</p>
-        <p class="subtitle">₱50 per player · 6PM–12AM daily</p>
+    <!-- FACILITY -->
+    <div class="facility">
+      <div class="facility-inner">
+        <p class="label">▬ OUR FACILITY</p>
+        <h2>2 PICKLEBALL COURTS</h2>
+        <div class="facility-bullets">
+          <div class="item"><span class="ico">🛡️</span> Clean &amp; Well-Maintained</div>
+          <div class="item"><span class="ico">👥</span> Friendly Community</div>
+          <div class="item"><span class="ico">☀️</span> Evening Play Available</div>
+        </div>
       </div>
-      <span class="arrow">›</span>
     </div>
 
-    <div class="menu-card" onclick="showPage('live')">
-      <span class="icon">🏆</span>
-      <div class="info">
-        <p class="title">Live Matches</p>
-        <p class="subtitle">Active games, queue & results</p>
-      </div>
-      <span class="arrow">›</span>
-    </div>
+    <!-- WEEKLY SCHEDULE -->
+    <div class="schedule-wrap" id="scheduleSection">
+      <div class="schedule-inner">
+        <div class="schedule-header">
+          <h2>WEEKLY SCHEDULE</h2>
+          <a onclick="showPage('contact')">View Full Schedule →</a>
+        </div>
 
-    <div class="menu-card" onclick="showPage('players')">
-      <span class="icon">📋</span>
-      <div class="info">
-        <p class="title">Open Play Players</p>
-        <p class="subtitle">Registered list by date</p>
+        <div class="day-tabs" id="dayTabs"></div>
+        <div class="schedule-panel" id="schedulePanel"></div>
       </div>
-      <span class="arrow">›</span>
-    </div>
-
-    <div class="menu-card" onclick="showPage('chat')">
-      <span class="icon">💬</span>
-      <div class="info">
-        <p class="title">Club Chat</p>
-        <p class="subtitle">Connect with other players</p>
-      </div>
-      <span class="arrow">›</span>
-    </div>
-
-    <div class="menu-card" onclick="showPage('download')">
-      <span class="icon">📱</span>
-      <div class="info">
-        <p class="title">Get the ZINJA App</p>
-        <p class="subtitle">Download APK · Free · No ads</p>
-      </div>
-      <span class="arrow">›</span>
-    </div>
-
-    <div class="menu-card" onclick="showPage('admin')">
-      <span class="icon">🔐</span>
-      <div class="info">
-        <p class="title">Admin Panel</p>
-        <p class="subtitle">Manage tournaments & bookings</p>
-      </div>
-      <span class="arrow">›</span>
-    </div>
-
-    <div class="menu-card" onclick="showPage('contact')">
-      <span class="icon">📞</span>
-      <div class="info">
-        <p class="title">Contact & Info</p>
-        <p class="subtitle">Location, rates, and hours</p>
-      </div>
-      <span class="arrow">›</span>
     </div>
 
   </section>
 
   <!-- ==================== BOOK A COURT ==================== -->
   <section id="page-booking" class="page">
-    <div class="page-header">
-      <button onclick="showPage('home')">← Back</button>
-      <h2>🏓 Book a Court</h2>
-    </div>
-
-    <div class="card">
-      <p style="margin:0 0 14px 0; text-align:center; color:#666; font-size:0.92em;">
-        <strong>₱100/hour</strong> (6AM–4PM) · <strong>₱150/hour</strong> (5PM–12AM)
-      </p>
-
-      <form id="bookingForm">
-        <input id="name" placeholder="Full Name" required>
-        <input id="phone" placeholder="Mobile Number" required>
-        <input id="date" type="date" required>
-        <input id="time" type="time" required>
-        <select id="court" required>
-          <option value="">Select Court</option>
-          <option value="1">Court 1</option>
-          <option value="2">Court 2</option>
-        </select>
-        <select id="duration" required>
-          <option value="">Select Duration</option>
-          <option value="1">1 hour</option>
-          <option value="2">2 hours</option>
-          <option value="3">3 hours</option>
-          <option value="4">4 hours</option>
-          <option value="5">5 hours</option>
-          <option value="6">6 hours</option>
-          <option value="7">7 hours</option>
-          <option value="8">8 hours</option>
-          <option value="9">9 hours</option>
-          <option value="10">10 hours</option>
-        </select>
-        <div id="priceDisplay" style="display:none; margin:12px 0; padding:14px 18px; background:linear-gradient(135deg,#7c3aed,#06b6d4); border-radius:12px; color:#fff;">
-          <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-            <span style="opacity:0.9;">📊 Rate per hour</span>
-            <strong id="ratePerHour">₱0</strong>
+    <div class="page-inner">
+      <div class="page-header">
+        <button onclick="showPage('home')">← Back</button>
+        <h2>🏓 Book a Court</h2>
+      </div>
+      <div class="card">
+        <p style="text-align:center; color:#666; font-size:0.92em; margin:0 0 14px 0;">
+          <strong>₱100/hour</strong> (6AM–4PM) · <strong>₱150/hour</strong> (5PM–12AM)
+        </p>
+        <form id="bookingForm">
+          <input id="name" placeholder="Full Name" required>
+          <input id="phone" placeholder="Mobile Number" required>
+          <input id="date" type="date" required>
+          <input id="time" type="time" required>
+          <select id="court" required>
+            <option value="">Select Court</option>
+            <option value="1">Court 1</option>
+            <option value="2">Court 2</option>
+          </select>
+          <select id="duration" required>
+            <option value="">Select Duration</option>
+            <option value="1">1 hour</option>
+            <option value="2">2 hours</option>
+            <option value="3">3 hours</option>
+            <option value="4">4 hours</option>
+            <option value="5">5 hours</option>
+            <option value="6">6 hours</option>
+            <option value="7">7 hours</option>
+            <option value="8">8 hours</option>
+            <option value="9">9 hours</option>
+            <option value="10">10 hours</option>
+          </select>
+          <div id="priceDisplay" style="display:none; margin:12px 0; padding:14px 18px; background:linear-gradient(135deg,#7c3aed,#06b6d4); border-radius:12px; color:#fff;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+              <span style="opacity:0.9;">📊 Rate per hour</span>
+              <strong id="ratePerHour">₱0</strong>
+            </div>
+            <div style="display:flex; justify-content:space-between; padding-top:8px; border-top:1px solid rgba(255,255,255,0.3);">
+              <span style="font-weight:600;">💰 TOTAL</span>
+              <strong id="totalPrice" style="font-size:1.3em;">₱0</strong>
+            </div>
+            <div id="rateNote" style="font-size:0.8em; opacity:0.85; margin-top:6px; text-align:right;"></div>
           </div>
-          <div style="display:flex; justify-content:space-between; padding-top:8px; border-top:1px solid rgba(255,255,255,0.3);">
-            <span style="font-weight:600;">💰 TOTAL</span>
-            <strong id="totalPrice" style="font-size:1.3em;">₱0</strong>
-          </div>
-          <div id="rateNote" style="font-size:0.8em; opacity:0.85; margin-top:6px; text-align:right;"></div>
-        </div>
-        <div id="availabilityInfo" style="margin:10px 0;"></div>
-        <button class="btn" type="submit" style="width:100%;">Prepare Booking</button>
-      </form>
-      <div id="bookingResult"></div>
+          <div id="availabilityInfo" style="margin:10px 0;"></div>
+          <button class="btn" type="submit" style="width:100%;">Prepare Booking</button>
+        </form>
+        <div id="bookingResult"></div>
+      </div>
+      <div style="text-align:center; margin-bottom:20px;">
+        <button type="button" id="refreshBookingsBtn" class="btn alt">🔄 Refresh Bookings</button>
+      </div>
+      <h3 style="color:#0a1a3a;">📅 Recent Bookings</h3>
+      <div id="bookingsList"></div>
     </div>
-
-    <div style="text-align:center; margin-bottom:20px;">
-      <button type="button" id="refreshBookingsBtn" class="btn alt">🔄 Refresh Bookings</button>
-    </div>
-
-    <h3>📅 Recent Bookings</h3>
-    <div id="bookingsList"></div>
   </section>
 
   <!-- ==================== JOIN OPEN PLAY ==================== -->
   <section id="page-openplay" class="page">
-    <div class="page-header">
-      <button onclick="showPage('home')">← Back</button>
-      <h2>🎯 Join Open Play</h2>
-    </div>
-
-    <div class="card">
-      <p style="margin:0 0 6px 0; text-align:center; color:#1a0b3d;"><strong>₱50 per player</strong> · 6:00 PM to 12:00 AM daily</p>
-      <p style="font-size:0.85em; text-align:center; color:#666;">Admin picks teams each night. Walk-ins welcome on-site.</p>
-
-      <form id="playForm" style="margin-top:14px;">
-        <input id="player" placeholder="Full Name" required>
-        <input id="playerPhone" placeholder="Mobile Number" required>
-        <input id="playDate" type="date" required>
-        <select id="level" required>
-          <option value="">Skill Level</option>
-          <option value="Beginner">Beginner</option>
-          <option value="Intermediate">Intermediate</option>
-          <option value="Advanced">Advanced</option>
-          <option value="Any level">Any level</option>
-        </select>
-        <div id="openPlayInfo" style="margin:10px 0;"></div>
-        <button class="btn" type="submit" style="width:100%;">Join Open Play</button>
-      </form>
-      <div id="playResult"></div>
+    <div class="page-inner">
+      <div class="page-header">
+        <button onclick="showPage('home')">← Back</button>
+        <h2>🎯 Join Open Play</h2>
+      </div>
+      <div class="card">
+        <p style="text-align:center; color:#0a1a3a;"><strong>₱50 per player</strong> · 6:00 PM to 12:00 AM daily</p>
+        <p style="font-size:0.85em; text-align:center; color:#666;">Admin picks teams each night. Walk-ins welcome on-site.</p>
+        <form id="playForm" style="margin-top:14px;">
+          <input id="player" placeholder="Full Name" required>
+          <input id="playerPhone" placeholder="Mobile Number" required>
+          <input id="playDate" type="date" required>
+          <select id="level" required>
+            <option value="">Skill Level</option>
+            <option value="Beginner">Beginner</option>
+            <option value="Intermediate">Intermediate</option>
+            <option value="Advanced">Advanced</option>
+            <option value="Any level">Any level</option>
+          </select>
+          <div id="openPlayInfo" style="margin:10px 0;"></div>
+          <button class="btn" type="submit" style="width:100%;">Join Open Play</button>
+        </form>
+        <div id="playResult"></div>
+      </div>
     </div>
   </section>
 
   <!-- ==================== LIVE MATCHES ==================== -->
   <section id="page-live" class="page">
-    <div class="page-header">
-      <button onclick="showPage('home')">← Back</button>
-      <h2>🏆 Live Matches</h2>
-    </div>
-    <p style="font-size:0.9em; text-align:center; color:#c7d2fe;">Courts 1 & 2 · Tap the winning team on each card.</p>
-    <div id="matchupsContainer">
-      <p style="text-align:center; color:#a5b4fc;">Loading live board...</p>
+    <div class="page-inner">
+      <div class="page-header">
+        <button onclick="showPage('home')">← Back</button>
+        <h2>🏆 Live Matches</h2>
+      </div>
+      <p style="text-align:center; color:#666; margin-bottom:16px;">Courts 1 &amp; 2 · Tap the winning team on each card.</p>
+      <div id="matchupsContainer">
+        <p style="text-align:center; color:#888;">Loading live board...</p>
+      </div>
     </div>
   </section>
 
   <!-- ==================== OPEN PLAY PLAYERS ==================== -->
   <section id="page-players" class="page">
-    <div class="page-header">
-      <button onclick="showPage('home')">← Back</button>
-      <h2>📋 Open Play Players</h2>
-    </div>
-    <div style="text-align:center; margin-bottom:16px;">
-      <button type="button" id="refreshOpenPlayBtn" class="btn alt">🔄 Refresh List</button>
-    </div>
-    <div class="card">
-      <h3>Registered Players</h3>
-      <div id="openPlayList"></div>
+    <div class="page-inner">
+      <div class="page-header">
+        <button onclick="showPage('home')">← Back</button>
+        <h2>📋 Open Play Players</h2>
+      </div>
+      <div style="text-align:center; margin-bottom:16px;">
+        <button type="button" id="refreshOpenPlayBtn" class="btn alt">🔄 Refresh List</button>
+      </div>
+      <div class="card">
+        <h3>Registered Players</h3>
+        <div id="openPlayList"></div>
+      </div>
     </div>
   </section>
 
-  <!-- ==================== CHAT (FULL SCREEN) ==================== -->
+  <!-- ==================== CHAT ==================== -->
   <section id="page-chat" class="page">
     <div class="chat-wrap">
       <div class="chat-top">
@@ -562,7 +822,7 @@
         <h2>💬 Club Chat</h2>
       </div>
       <div style="padding:8px 12px; font-size:0.8em; color:#666; background:#f9fafb; text-align:center; border-bottom:1px solid #e5e7eb;">
-        Text & emojis only · Resets daily at 3:00 AM
+        Text &amp; emojis only · Resets daily at 3:00 AM
       </div>
       <div style="padding:8px 12px; background:#fff; border-bottom:1px solid #e5e7eb;">
         <input id="chatName" placeholder="Your Name" maxlength="30" style="margin:0;">
@@ -615,34 +875,35 @@
 
   <!-- ==================== DOWNLOAD ==================== -->
   <section id="page-download" class="page">
-    <div class="page-header">
-      <button onclick="showPage('home')">← Back</button>
-      <h2>📱 Get the ZINJA App</h2>
-    </div>
-    <div class="card" style="text-align:center;">
-      <p style="font-size:1.05em;">Book courts, join Open Play — all in one app!</p>
-      <a href="ZINJA-Pickleball.apk" download class="btn" style="margin-top:14px; text-decoration:none; display:inline-block;">⬇ Download APK</a>
-      <p style="margin-top:20px; color:#888; font-size:0.88em;">Version 1.0 · Free · No ads · Android 7.0+</p>
-      <div style="margin-top:20px; padding:14px; background:#f9fafb; border-radius:12px; text-align:left; font-size:0.9em; border:1px solid #e5e7eb;">
-        <p style="margin:0 0 8px 0; font-weight:700; color:#111;">⚠️ How to install:</p>
-        <ol style="margin:0; padding-left:20px; line-height:1.7; color:#374151;">
-          <li>Tap "Download APK"</li>
-          <li>Allow "Install from unknown sources"</li>
-          <li>Open the downloaded file</li>
-          <li>Tap "Install" and open!</li>
-        </ol>
+    <div class="page-inner">
+      <div class="page-header">
+        <button onclick="showPage('home')">← Back</button>
+        <h2>📱 Get the ZINJA App</h2>
+      </div>
+      <div class="card" style="text-align:center;">
+        <p style="font-size:1.05em; color:#0a1a3a;">Book courts, join Open Play — all in one app!</p>
+        <a href="ZINJA-Pickleball.apk" download class="btn" style="margin-top:14px; text-decoration:none; display:inline-block;">⬇ Download APK</a>
+        <p style="margin-top:20px; color:#888; font-size:0.88em;">Version 1.0 · Free · No ads · Android 7.0+</p>
+        <div style="margin-top:20px; padding:14px; background:#f9fafb; border-radius:12px; text-align:left; font-size:0.9em; border:1px solid #e5e7eb;">
+          <p style="margin:0 0 8px 0; font-weight:700; color:#111;">⚠️ How to install:</p>
+          <ol style="margin:0; padding-left:20px; line-height:1.7; color:#374151;">
+            <li>Tap "Download APK"</li>
+            <li>Allow "Install from unknown sources"</li>
+            <li>Open the downloaded file</li>
+            <li>Tap "Install" and open!</li>
+          </ol>
+        </div>
       </div>
     </div>
   </section>
 
   <!-- ==================== ADMIN ==================== -->
   <section id="page-admin" class="page">
-    <div class="admin-wrap">
+    <div class="page-inner">
       <div class="page-header">
         <button onclick="showPage('home')">← Back</button>
         <h2>🔐 Admin Panel</h2>
       </div>
-
       <div class="card" style="text-align:center;">
         <p style="color:#666; margin-top:0;">Enter password to manage bookings, players, and matchups.</p>
         <div style="max-width:500px; margin:0 auto; display:flex; gap:8px;">
@@ -650,7 +911,6 @@
           <button class="btn" type="button" onclick="loadAdminData()">View Data</button>
         </div>
       </div>
-
       <div id="adminResult"></div>
       <div id="adminData" style="display:none;">
         <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
@@ -665,32 +925,104 @@
 
   <!-- ==================== CONTACT ==================== -->
   <section id="page-contact" class="page">
-    <div class="page-header">
-      <button onclick="showPage('home')">← Back</button>
-      <h2>📞 Contact & Info</h2>
-    </div>
-
-    <div class="card">
-      <h3 style="margin-top:0;">ZINJA Pickleball Club</h3>
-      <p style="color:#374151;">📍 Malusay, Guihulngan City, Negros Oriental</p>
-
-      <h3>Court Rental Rates</h3>
-      <p style="color:#374151;">💵 ₱100/hour (6:00 AM – 4:00 PM)<br>
-         💵 ₱150/hour (5:00 PM – 12:00 AM)</p>
-
-      <h3>Open Play</h3>
-      <p style="color:#374151;">🎯 ₱50 per player · 6:00 PM – 12:00 AM</p>
-
-      <h3>Weekly Rest Period</h3>
-      <p style="color:#374151;">🔴 Closed Friday 5:00 PM to Saturday 5:00 PM (PHT)</p>
+    <div class="page-inner">
+      <div class="page-header">
+        <button onclick="showPage('home')">← Back</button>
+        <h2>📞 Contact & Info</h2>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0;">ZINJA Pickleball Club</h3>
+        <p>📍 Malusay, Guihulngan City, Negros Oriental</p>
+        <h3>Court Rental Rates</h3>
+        <p>💵 ₱100/hour (6:00 AM – 4:00 PM)<br>💵 ₱150/hour (5:00 PM – 12:00 AM)</p>
+        <h3>Open Play</h3>
+        <p>🎯 ₱50 per player · 6:00 PM – 12:00 AM</p>
+        <h3>Weekly Rest Period</h3>
+        <p>🔴 Closed Friday 5:00 PM to Saturday 5:00 PM (PHT)</p>
+      </div>
     </div>
   </section>
 
-  <footer>© <span id="year"></span> ZINJA Pickleball Club</footer>
+  <footer>
+    © <span id="year"></span> ZINJA Pickleball Club · Malusay, Guihulngan City
+  </footer>
 
-  <script src="zinja-app.js?v=40"></script>
+  <script src="zinja-app.js?v=41"></script>
   <script>
     document.getElementById('year').textContent = new Date().getFullYear();
+
+    /* ==================== HAMBURGER MENU ==================== */
+    function openMenu() {
+      document.getElementById('slideMenu').classList.add('open');
+      document.getElementById('menuOverlay').classList.add('open');
+    }
+    function closeMenu() {
+      document.getElementById('slideMenu').classList.remove('open');
+      document.getElementById('menuOverlay').classList.remove('open');
+    }
+    function menuGo(page) {
+      closeMenu();
+      setTimeout(() => showPage(page), 200);
+    }
+    function scrollToSchedule() {
+      const el = document.getElementById('scheduleSection');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    /* ==================== WEEKLY SCHEDULE ==================== */
+    const scheduleData = {
+      MON: { title: 'Monday', hours: '6:00 AM – 12:00 AM', morning: 'Available (6AM–4PM)', evening: 'Available (5PM–12AM)', status: 'open' },
+      TUE: { title: 'Tuesday', hours: '6:00 AM – 12:00 AM', morning: 'Available (6AM–4PM)', evening: 'Available (5PM–12AM)', status: 'open' },
+      WED: { title: 'Wednesday', hours: '6:00 AM – 12:00 AM', morning: 'Available (6AM–4PM)', evening: 'Available (5PM–12AM)', status: 'open' },
+      THU: { title: 'Thursday', hours: '6:00 AM – 12:00 AM', morning: 'Available (6AM–4PM)', evening: 'Available (5PM–12AM)', status: 'open' },
+      FRI: { title: 'Friday', hours: '6:00 AM – 5:00 PM', morning: 'Available (6AM–4PM)', evening: '🔴 Closed from 5:00 PM', status: 'partial' },
+      SAT: { title: 'Saturday', hours: '5:00 PM – 12:00 AM', morning: '🔴 Closed until 5:00 PM', evening: 'Available (5PM–12AM)', status: 'partial' },
+      SUN: { title: 'Sunday', hours: '6:00 AM – 12:00 AM', morning: 'Available (6AM–4PM)', evening: 'Available (5PM–12AM)', status: 'open' }
+    };
+
+    const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    const todayDay = dayNames[new Date().getDay()];
+
+    function renderDayTabs() {
+      const tabsEl = document.getElementById('dayTabs');
+      const order = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+      tabsEl.innerHTML = order.map(d => {
+        const isClosed = d === 'FRI' || d === 'SAT';
+        const cls = ['day-tab'];
+        if (d === todayDay) cls.push('active');
+        if (isClosed) cls.push('closed');
+        return `<button class="${cls.join(' ')}" onclick="selectDay('${d}')">${d}</button>`;
+      }).join('');
+    }
+
+    function renderSchedulePanel(day) {
+      const d = scheduleData[day];
+      const panel = document.getElementById('schedulePanel');
+      const isToday = day === todayDay;
+      panel.innerHTML = `
+        <h4>${d.title}${isToday ? ' <span style="color:#10b981; font-size:0.7em;">● TODAY</span>' : ''}</h4>
+        <div class="schedule-row"><span class="label">🕐 Operating Hours</span><span class="value">${d.hours}</span></div>
+        <div class="schedule-row"><span class="label">☀️ Day Rate (6AM–4PM)</span><span class="value ${d.morning.includes('Closed') ? 'closed' : ''}">${d.morning}</span></div>
+        <div class="schedule-row"><span class="label">🌙 Evening Rate (5PM–12AM)</span><span class="value ${d.evening.includes('Closed') ? 'closed' : ''}">${d.evening}</span></div>
+        <div class="schedule-row"><span class="label">🎯 Open Play (6PM–12AM)</span><span class="value ${d.status === 'open' ? '' : 'closed'}">${d.status === 'open' ? '₱50 per player' : 'See above'}</span></div>
+      `;
+    }
+
+    function selectDay(day) {
+      document.querySelectorAll('.day-tab').forEach(t => t.classList.remove('active'));
+      const allTabs = document.querySelectorAll('.day-tab');
+      const order = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+      const idx = order.indexOf(day);
+      if (allTabs[idx]) {
+        allTabs[idx].classList.add('active');
+        if (day === 'FRI' || day === 'SAT') allTabs[idx].classList.add('closed');
+      }
+      renderSchedulePanel(day);
+    }
+
+    // Initialize
+    renderDayTabs();
+    renderSchedulePanel(todayDay);
   </script>
 </body>
 </html>
