@@ -40,7 +40,7 @@ const CLOSURE_END_HOUR = 17;
 const PHT_OFFSET_HOURS = 8;
 
 const ADMIN_PASSWORD = "zinja2026";
-let adminData = { bookings: [], openplay: [] };
+let adminData = { bookings: [], openplay: [], playerStatus: [] };
 let currentAdminTab = 'bookings';
 
 function getPHTNow() {
@@ -678,7 +678,108 @@ async function cancelOpenPlay() {
       showResult(result, "No matching Open Play registration was found.", false);
     }
   } catch (error) { showResult(result, `Cancellation failed. ${error.message || "Please try again."}`, false); }
+}// ====================
+// PLAYER STATUS (LEFT / SUBSTITUTED)
+// ====================
+
+async function loadPlayerStatus(dateStr) {
+  try {
+    const rows = await supabaseFetch(`/rest/v1/player_status?select=player_name,status,substitute_name&play_date=eq.${encodeURIComponent(dateStr)}`);
+    const map = {};
+    (rows || []).forEach(r => {
+      map[r.player_name] = { status: r.status, substitute: r.substitute_name };
+    });
+    return map;
+  } catch (error) {
+    console.warn("Could not load player status:", error);
+    return {};
+  }
 }
+
+async function markPlayerLeft(playDate, playerName) {
+  const filter = `play_date=eq.${encodeURIComponent(playDate)}&player_name=eq.${encodeURIComponent(playerName)}`;
+  try { await supabaseFetch(`/rest/v1/player_status?${filter}`, { method: "DELETE" }); } catch (e) {}
+  await supabaseFetch("/rest/v1/player_status", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({ play_date: playDate, player_name: playerName, status: "left" })
+  });
+}
+
+async function markPlayerSubstituted(playDate, originalName, substituteName) {
+  const filter = `play_date=eq.${encodeURIComponent(playDate)}&player_name=eq.${encodeURIComponent(originalName)}`;
+  try { await supabaseFetch(`/rest/v1/player_status?${filter}`, { method: "DELETE" }); } catch (e) {}
+  await supabaseFetch("/rest/v1/player_status", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({ play_date: playDate, player_name: originalName, status: "replaced", substitute_name: substituteName })
+  });
+}
+
+async function clearPlayerStatus(playDate, playerName) {
+  const filter = `play_date=eq.${encodeURIComponent(playDate)}&player_name=eq.${encodeURIComponent(playerName)}`;
+  try { await supabaseFetch(`/rest/v1/player_status?${filter}`, { method: "DELETE" }); } catch (e) {}
+}
+
+// Public: Player taps the ✕ next to their name
+window.handleMarkLeftClick = async function (playDate, playerName) {
+  if (!confirm(`Mark ${playerName} as LEFT?\n\nThey will not play any more matches today.`)) return;
+  try {
+    await markPlayerLeft(playDate, playerName);
+    await loadAutoMatchups(playDate);
+  } catch (error) {
+    alert("Failed to mark player: " + error.message);
+  }
+};
+
+// Admin: Assign substitute
+window.handleSubstituteClick = async function (playDate, originalName) {
+  const substituteName = prompt(`Enter substitute name for "${originalName}":`);
+  if (!substituteName || !substituteName.trim()) return;
+  try {
+    await markPlayerSubstituted(playDate, originalName, substituteName.trim());
+    await loadAutoMatchups(playDate);
+    if (typeof renderAdminMatchups === "function") {
+      const el = document.getElementById("adminMatchupsContainer");
+      if (el) el.innerHTML = '<p style="color:#10b981;">✅ Substitute assigned. Reload the list to see updated status.</p>';
+    }
+  } catch (error) {
+    alert("Failed to assign substitute: " + error.message);
+  }
+};
+
+// Admin: Undo mark/left/substitute
+window.handleClearStatusClick = async function (playDate, playerName) {
+  if (!confirm(`Reset status for "${playerName}" back to Active?`)) return;
+  try {
+    await clearPlayerStatus(playDate, playerName);
+    await loadAutoMatchups(playDate);
+  } catch (error) {
+    alert("Failed to reset: " + error.message);
+  }
+};
+
+// Event delegation for the public ✕ buttons
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest(".mark-left-btn");
+  if (btn) {
+    const date = btn.dataset.date;
+    const name = btn.dataset.name;
+    if (date && name) window.handleMarkLeftClick(date, name);
+  }
+  const subBtn = e.target.closest(".admin-sub-btn");
+  if (subBtn) {
+    const date = subBtn.dataset.date;
+    const name = subBtn.dataset.name;
+    if (date && name) window.handleSubstituteClick(date, name);
+  }
+  const clearBtn = e.target.closest(".admin-clear-btn");
+  if (clearBtn) {
+    const date = clearBtn.dataset.date;
+    const name = clearBtn.dataset.name;
+    if (date && name) window.handleClearStatusClick(date, name);
+  }
+});
 
 // ====================
 // SWISS-STYLE TOURNAMENT (WINNERS vs WINNERS, LOSERS vs LOSERS)
@@ -721,7 +822,7 @@ async function saveMatchResult(playDate, court, startTime, winningTeam) {
   const filter = `play_date=eq.${encodeURIComponent(playDate)}&court=eq.${court}&start_time=eq.${encodeURIComponent(startTime)}`;
   try {
     await supabaseFetch(`/rest/v1/match_results?${filter}`, { method: "DELETE" });
-  } catch (e) { /* ignore if none */ }
+  } catch (e) { /* ignore */ }
   await supabaseFetch("/rest/v1/match_results", {
     method: "POST",
     headers: { Prefer: "return=representation" },
@@ -876,10 +977,33 @@ function generateAutoSchedule(players, startTime, availableCourts, resultsMap, d
   return allMatches;
 }
 
-function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts, matchResults) {
+function renderPlayerWithStatus(player, statusMap, dateStr, opts = {}) {
+  const status = statusMap[player.player_name];
+  const allowActions = opts.allowActions !== false;
+
+  // Substituted: show new name
+  if (status && status.status === 'replaced' && status.substitute) {
+    return `<span style="color:#a78bfa;font-weight:700;">${escapeHtml(status.substitute)}</span><em style="font-size:0.75em;opacity:0.65;margin-left:4px;">(sub for ${escapeHtml(player.player_name)})</em>`;
+  }
+
+  // Left: show dimmed with strikethrough
+  if (status && status.status === 'left') {
+    return `<span style="text-decoration:line-through;opacity:0.5;">${escapeHtml(player.player_name)}</span><span style="font-size:0.7em;background:#dc2626;color:#fff;padding:2px 6px;border-radius:4px;margin-left:6px;">LEFT</span>`;
+  }
+
+  // Active player
+  const safeName = escapeHtml(player.player_name);
+  const actions = allowActions
+    ? `<button type="button" class="mark-left-btn" data-date="${escapeHtml(dateStr)}" data-name="${safeName}" title="Mark as Left" style="margin-left:6px;background:transparent;border:1px solid rgba(255,255,255,0.3);color:#fff;width:22px;height:22px;border-radius:50%;font-size:0.7em;cursor:pointer;padding:0;line-height:1;">✕</button>`
+    : '';
+  return `<span>${safeName}</span>${actions}`;
+}
+
+function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts, matchResults, statusMap) {
   const container = document.getElementById("matchupsContainer");
   if (!container) return;
   matchResults = matchResults || {};
+  statusMap = statusMap || {};
 
   if (schedule.length === 0) {
     container.innerHTML = `<p style="text-align:center;color:#f59e0b;">⚠️ No matchups for ${formatDate(dateStr)}. Need at least 4 players.</p>`;
@@ -942,7 +1066,7 @@ function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts, mat
       <p style="font-size: 0.85em; margin: 4px 0; opacity: 0.75;">20 min per match · Target: 11 points</p>
       <p style="font-size: 0.85em; margin: 8px 0 0 0; opacity: 0.85;">🏆 Winners play winners · 💪 Losers play losers</p>
       ${completedCount > 0 ? `<p style="font-size: 0.8em; margin: 8px 0 0 0; opacity: 0.6;">✅ ${completedCount} match${completedCount === 1 ? '' : 'es'} completed (auto-hidden)</p>` : ''}
-      <p style="font-size: 0.8em; margin: 6px 0 0 0; opacity: 0.6;">After your match, tap the winning team on the card</p>
+      <p style="font-size: 0.8em; margin: 6px 0 0 0; opacity: 0.6;">Tap ✕ next to your name if you need to leave · Tap 🏆 after each match</p>
     </div>
     ${countdownBanner}
   `;
@@ -1003,17 +1127,17 @@ function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts, mat
         </div>
         <div class="team-block" style="${nameStyleA}">
           <strong style="color: #10b981;">Team A:</strong>
-          <span>${escapeHtml(m.teamA[0].player_name)}</span>
+          ${renderPlayerWithStatus(m.teamA[0], statusMap, dateStr)}
           <span style="opacity: 0.5;">&</span>
-          <span>${escapeHtml(m.teamA[1].player_name)}</span>
+          ${renderPlayerWithStatus(m.teamA[1], statusMap, dateStr)}
           <span style="margin-left: auto;">${markA}</span>
         </div>
         <div class="vs-badge">— VS — (to 11 pts)</div>
         <div class="team-block" style="${nameStyleB}">
           <strong style="color: #f59e0b;">Team B:</strong>
-          <span>${escapeHtml(m.teamB[0].player_name)}</span>
+          ${renderPlayerWithStatus(m.teamB[0], statusMap, dateStr)}
           <span style="opacity: 0.5;">&</span>
-          <span>${escapeHtml(m.teamB[1].player_name)}</span>
+          ${renderPlayerWithStatus(m.teamB[1], statusMap, dateStr)}
           <span style="margin-left: auto;">${markB}</span>
         </div>
         ${resultBanner}
@@ -1022,7 +1146,7 @@ function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts, mat
     `;
   });
 
-  html += `<p style="text-align: center; font-size: 0.85em; opacity: 0.7; margin-top: 24px;">💡 Winners play winners. Losers play losers. Tap 🏆 after each match to update the brackets.</p>`;
+  html += `<p style="text-align: center; font-size: 0.85em; opacity: 0.7; margin-top: 24px;">💡 Winners play winners. Losers play losers. Tap ✕ to mark a player as left.</p>`;
   container.innerHTML = html;
 }
 
@@ -1045,9 +1169,12 @@ async function loadAutoMatchups(dateStr) {
       container.innerHTML = `<p style="text-align:center;color:#ef4444;">⚠️ Both courts are booked for Open Play hours on ${formatDate(dateStr)}. No matchups to generate.</p>`;
       return;
     }
-    const matchResults = await loadMatchResults(dateStr);
+    const [matchResults, statusMap] = await Promise.all([
+      loadMatchResults(dateStr),
+      loadPlayerStatus(dateStr)
+    ]);
     const schedule = generateAutoSchedule(players, SESSION_START_TIME, availableCourts, matchResults, dateStr);
-    renderAutoSchedule(schedule, dateStr, players.length, availableCourts, matchResults);
+    renderAutoSchedule(schedule, dateStr, players.length, availableCourts, matchResults, statusMap);
   } catch (error) {
     console.error("Matchups error:", error);
     container.innerHTML = `<p style="text-align:center;color:#ef4444;">❌ ${error.message}</p>`;
@@ -1060,9 +1187,10 @@ async function adminRerollMatchups() {
   const dateInput = document.getElementById("adminMatchDate");
   const dateStr = dateInput?.value;
   if (!dateStr) { alert("Please select a date first."); return; }
-  if (!confirm("This will delete all match results for this date and start fresh. Continue?")) return;
+  if (!confirm("This will delete all match results AND player status for this date. Continue?")) return;
   try {
     await supabaseFetch(`/rest/v1/match_results?play_date=eq.${encodeURIComponent(dateStr)}`, { method: "DELETE" });
+    await supabaseFetch(`/rest/v1/player_status?play_date=eq.${encodeURIComponent(dateStr)}`, { method: "DELETE" });
   } catch (e) { /* ignore */ }
   const newSeed = Math.random().toString(36).substring(2, 10);
   localStorage.setItem(`zinja_matchup_seed_${dateStr}`, newSeed);
@@ -1085,15 +1213,50 @@ async function renderAdminMatchups(dateStr) {
       container.innerHTML = `<p style="color:#ef4444;">⚠️ No courts available on ${formatDate(dateStr)}.</p>`;
       return;
     }
-    const matchResults = await loadMatchResults(dateStr);
+    const [matchResults, statusMap] = await Promise.all([
+      loadMatchResults(dateStr),
+      loadPlayerStatus(dateStr)
+    ]);
     const schedule = generateAutoSchedule(players, SESSION_START_TIME, availableCourts, matchResults, dateStr);
     const numCourts = availableCourts.length;
     const courtsLabel = numCourts === 2 ? "Courts 1 & 2" : `Court ${availableCourts[0]}`;
     const lastMatch = schedule[schedule.length - 1];
     const endTime = lastMatch ? formatTime12(lastMatch.endTime) : "N/A";
     const totalRounds = schedule.length > 0 ? schedule[schedule.length - 1].round : 0;
-    container.innerHTML = `<p style="color:#10b981; font-weight:600;">✅ ${courtsLabel} · ${players.length} players · ${schedule.length} matches across ${totalRounds} round(s) · Ends ${endTime}</p>
-      <p style="color:#888; font-size:0.85em; margin-top:4px;">🏆 Winners play winners · 💪 Losers play losers</p>`;
+
+    const playerRows = players.map(p => {
+      const st = statusMap[p.player_name];
+      let badge = '';
+      let actions = '';
+      const safeName = escapeHtml(p.player_name);
+
+      if (!st) {
+        badge = '<span style="background:#10b981;color:#fff;padding:3px 8px;border-radius:12px;font-size:0.7em;font-weight:700;">ACTIVE</span>';
+        actions = `<button type="button" class="admin-sub-btn" data-date="${escapeHtml(dateStr)}" data-name="${safeName}" style="padding:5px 10px;background:#7c3aed;color:#fff;border:none;border-radius:6px;font-size:0.75em;font-weight:600;cursor:pointer;">🔄 Assign Substitute</button>`;
+      } else if (st.status === 'left') {
+        badge = '<span style="background:#dc2626;color:#fff;padding:3px 8px;border-radius:12px;font-size:0.7em;font-weight:700;">LEFT</span>';
+        actions = `<button type="button" class="admin-sub-btn" data-date="${escapeHtml(dateStr)}" data-name="${safeName}" style="padding:5px 10px;background:#7c3aed;color:#fff;border:none;border-radius:6px;font-size:0.75em;font-weight:600;cursor:pointer;">➕ Assign Substitute</button>
+          <button type="button" class="admin-clear-btn" data-date="${escapeHtml(dateStr)}" data-name="${safeName}" style="padding:5px 10px;background:#6b7280;color:#fff;border:none;border-radius:6px;font-size:0.75em;font-weight:600;cursor:pointer;">↺ Undo</button>`;
+      } else if (st.status === 'replaced') {
+        badge = `<span style="background:#7c3aed;color:#fff;padding:3px 8px;border-radius:12px;font-size:0.7em;font-weight:700;">SUB: ${escapeHtml(st.substitute || '?')}</span>`;
+        actions = `<button type="button" class="admin-clear-btn" data-date="${escapeHtml(dateStr)}" data-name="${safeName}" style="padding:5px 10px;background:#6b7280;color:#fff;border:none;border-radius:6px;font-size:0.75em;font-weight:600;cursor:pointer;">↺ Undo</button>`;
+      }
+
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#f9fafb;border-radius:8px;margin-bottom:6px;flex-wrap:wrap;gap:8px;">
+        <div style="display:flex;gap:8px;align-items:center;">
+          <strong>${safeName}</strong>
+          ${badge}
+        </div>
+        <div style="display:flex;gap:6px;">${actions}</div>
+      </div>`;
+    }).join('');
+
+    container.innerHTML = `
+      <p style="color:#10b981; font-weight:600; margin-bottom:8px;">✅ ${courtsLabel} · ${players.length} players · ${schedule.length} matches across ${totalRounds} round(s) · Ends ${endTime}</p>
+      <p style="color:#888; font-size:0.85em; margin-bottom:16px;">🏆 Winners play winners · 💪 Losers play losers</p>
+      <h4 style="color:#7c3aed; margin:16px 0 8px 0;">👥 Manage Players (${players.length})</h4>
+      <div>${playerRows}</div>
+    `;
   } catch (error) {
     container.innerHTML = `<p style="color:red;">❌ ${error.message}</p>`;
   }
@@ -1402,7 +1565,7 @@ document.addEventListener("DOMContentLoaded", () => {
     loadAutoMatchups(today);
   }
 
-  // Auto-refresh matchups every 3 minutes (updates countdown + brackets)
+  // Auto-refresh matchups every 3 minutes
   setInterval(async () => {
     const matchDateInput = document.getElementById("matchDate");
     if (matchDateInput?.value && document.visibilityState === 'visible') {
