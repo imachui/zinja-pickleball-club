@@ -267,8 +267,8 @@
       margin: 0 auto;
     }
     .feature-card {
-      background: #f9fafb;
-      border: 1px solid #e5e7eb;
+      background: #fdf2f8;
+      border: 1.5px solid #fbcfe8;
       border-radius: 14px;
       padding: 22px 16px;
       text-align: center;
@@ -280,8 +280,9 @@
     }
     .feature-card:hover {
       transform: translateY(-3px);
-      box-shadow: 0 12px 30px rgba(124,58,237,0.14);
-      border-color: #a855f7;
+      box-shadow: 0 12px 30px rgba(236,72,153,0.2);
+      border-color: #ec4899;
+      background: #fce7f3;
     }
     .feature-icon {
       width: 60px; height: 60px;
@@ -297,11 +298,11 @@
     .feature-icon.pink { background: #fce7f3; color: #be185d; }
     .feature-icon.teal { background: #ccfbf1; color: #0f766e; }
     .feature-card .title {
-      font-size: 1em; font-weight: 800; color: #0a1a3a;
+      font-size: 1em; font-weight: 800; color: #831843;
       margin-bottom: 6px;
     }
     .feature-card .desc {
-      font-size: 0.83em; color: #6b7280; line-height: 1.45;
+      font-size: 0.83em; color: #9d174d; line-height: 1.45; opacity: 0.85;
     }
 
     /* ==================== FACILITY SECTION ==================== */
@@ -398,7 +399,7 @@
       transition: all 0.15s;
       letter-spacing: 0.5px;
     }
-    .day-tab:hover { background: #ede9fe; color: #6d28d9; }
+    .day-tab:hover { background: #fce7f3; color: #be185d; }
     .day-tab.active {
       background: linear-gradient(135deg,#7c3aed,#6d28d9);
       color: #fff;
@@ -407,53 +408,58 @@
     .day-tab.closed { color: #dc2626; }
     .day-tab.active.closed { color: #fff; background: linear-gradient(135deg,#dc2626,#991b1b); box-shadow: 0 4px 14px rgba(220,38,38,0.4); }
     .schedule-panel {
-      background: #f9fafb;
-      border: 1px solid #e5e7eb;
+      background: #fdf2f8;
+      border: 1.5px solid #fbcfe8;
       border-radius: 14px;
       padding: 20px;
     }
     .schedule-panel h4 {
-      font-size: 1.1em; color: #0a1a3a; margin-bottom: 12px;
+      font-size: 1.1em; color: #831843; margin-bottom: 12px;
       font-weight: 800;
     }
     .schedule-row {
       display: flex; justify-content: space-between;
       padding: 10px 0;
-      border-bottom: 1px solid #e5e7eb;
+      border-bottom: 1px solid #fbcfe8;
       font-size: 0.92em;
     }
     .schedule-row:last-child { border-bottom: none; }
-    .schedule-row .label { color: #6b7280; font-weight: 600; }
-    .schedule-row .value { color: #0a1a3a; font-weight: 700; }
+    .schedule-row .label { color: #9d174d; font-weight: 600; }
+    .schedule-row .value { color: #831843; font-weight: 700; }
     .schedule-row .value.closed { color: #dc2626; }
 
-    /* ==================== CARD (Forms) ==================== */
+    /* ==================== CARD (Pink Forms) ==================== */
     .card {
-      background: #fff;
+      background: linear-gradient(135deg, #fdf2f8, #fce7f3);
       border-radius: 14px;
       padding: 20px;
       margin-bottom: 16px;
-      border: 1px solid #e5e7eb;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.05);
+      border: 1.5px solid #fbcfe8;
+      box-shadow: 0 4px 20px rgba(236,72,153,0.1);
     }
+    .card h3 { color: #831843; }
+
+    /* Inputs stay WHITE for clarity */
     input, select, textarea {
       width: 100%; padding: 12px 14px;
       border-radius: 10px;
-      border: 1.5px solid #d1d5db;
-      background: #fff; color: #111;
+      border: 1.5px solid #f9a8d4;
+      background: #ffffff;
+      color: #111;
       margin-bottom: 10px; font-size: 1em;
       font-family: inherit;
       transition: border-color 0.15s, box-shadow 0.15s;
     }
     input:focus, select:focus, textarea:focus {
-      outline: none; border-color: #7c3aed;
-      box-shadow: 0 0 0 3px rgba(124,58,237,0.15);
+      outline: none; border-color: #ec4899;
+      box-shadow: 0 0 0 3px rgba(236,72,153,0.18);
     }
     input::placeholder { color: #9ca3af; }
     input[type="date"]::-webkit-calendar-picker-indicator,
     input[type="time"]::-webkit-calendar-picker-indicator {
-      filter: none; opacity: 0.75; cursor: pointer; font-size: 1.15em;
+      filter: none; opacity: 0.85; cursor: pointer; font-size: 1.15em;
     }
+
     .btn {
       display: inline-block;
       padding: 12px 22px;
@@ -467,11 +473,11 @@
     .btn:hover { transform: translateY(-1px); }
     .btn.alt { background: linear-gradient(135deg,#10b981,#059669); box-shadow: 0 4px 12px rgba(16,185,129,0.35); }
     .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
     h2 { font-size: 1.25em; margin-bottom: 12px; color: #fff; }
-    h3 { font-size: 1.05em; margin: 16px 0 10px 0; color: #0a1a3a; }
-    .card h3 { color: #0a1a3a; }
+    h3 { font-size: 1.05em; margin: 16px 0 10px 0; color: #831843; }
     p { line-height: 1.5; color: #d1d5db; }
-    .card p { color: #374151; }
+    .card p { color: #4b5563; }
 
     /* ==================== CHAT ==================== */
     #page-chat { padding: 0; }
@@ -479,7 +485,7 @@
     #page-chat .chat-wrap {
       display: flex; flex-direction: column; height: 100%;
       max-width: 900px; margin: 0 auto; width: 100%;
-      background: #f5f7fa;
+      background: #fdf2f8;
     }
     #page-chat .chat-top {
       background: linear-gradient(135deg,#7c3aed,#6d28d9);
@@ -492,14 +498,14 @@
       font-weight: 700; cursor: pointer; font-size: 0.88em;
     }
     #page-chat .chat-top h2 { margin: 0; color: #fff; font-size: 1.05em; flex: 1; }
-    #chatMessages { flex: 1; overflow-y: auto; padding: 16px; background: #f5f7fa; }
+    #chatMessages { flex: 1; overflow-y: auto; padding: 16px; background: #fdf2f8; }
     .chat-input-row {
       display: flex; gap: 8px; padding: 10px 12px;
-      background: #fff; border-top: 1px solid #e5e7eb;
+      background: #fff; border-top: 1px solid #fbcfe8;
     }
     .chat-input-row input { margin: 0; }
     .emoji-btn {
-      background: #f3f4f6; border: 1.5px solid #e5e7eb;
+      background: #fce7f3; border: 1.5px solid #fbcfe8;
       border-radius: 10px; padding: 8px 12px;
       font-size: 1.2em; cursor: pointer; color: #111;
     }
@@ -510,9 +516,8 @@
     /* ==================== FOOTER ==================== */
     footer {
       text-align: center; padding: 30px 24px;
-      color: #9ca3af; font-size: 0.85em;
+      color: #c7d2fe; font-size: 0.85em;
       background: #0a1a3a;
-      color: #c7d2fe;
     }
     footer a { color: #c7d2fe; text-decoration: none; }
 
@@ -544,7 +549,6 @@
 </head>
 <body>
 
-  <!-- ==================== NAVBAR ==================== -->
   <nav class="navbar">
     <a class="nav-logo" href="#" onclick="showPage('home'); return false;">
       <img src="logo.png" alt="ZINJA">
@@ -558,7 +562,6 @@
     </button>
   </nav>
 
-  <!-- ==================== SLIDE MENU ==================== -->
   <div class="menu-overlay" id="menuOverlay" onclick="closeMenu()"></div>
   <div class="slide-menu" id="slideMenu">
     <button class="close-btn" onclick="closeMenu()">✕</button>
@@ -585,7 +588,6 @@
   <!-- ==================== HOME ==================== -->
   <section id="page-home" class="page active">
 
-    <!-- HERO -->
     <div class="hero">
       <div class="hero-inner">
         <p class="welcome">WELCOME TO</p>
@@ -602,7 +604,6 @@
       </div>
     </div>
 
-    <!-- STAT CARDS -->
     <div class="stat-cards">
       <div class="stat-card green">
         <span class="ico">🎾</span>
@@ -627,7 +628,6 @@
       </div>
     </div>
 
-    <!-- FEATURE GRID -->
     <div class="features-wrap">
       <div class="features-grid">
         <div class="feature-card" onclick="showPage('booking')">
@@ -668,7 +668,6 @@
       </div>
     </div>
 
-    <!-- FACILITY -->
     <div class="facility">
       <div class="facility-inner">
         <p class="label">▬ OUR FACILITY</p>
@@ -681,7 +680,6 @@
       </div>
     </div>
 
-    <!-- WEEKLY SCHEDULE -->
     <div class="schedule-wrap" id="scheduleSection">
       <div class="schedule-inner">
         <div class="schedule-header">
@@ -704,7 +702,7 @@
         <h2>🏓 Book a Court</h2>
       </div>
       <div class="card">
-        <p style="text-align:center; color:#666; font-size:0.92em; margin:0 0 14px 0;">
+        <p style="text-align:center; color:#831843; font-size:0.92em; margin:0 0 14px 0;">
           <strong>₱100/hour</strong> (6AM–4PM) · <strong>₱150/hour</strong> (5PM–12AM)
         </p>
         <form id="bookingForm">
@@ -749,7 +747,7 @@
       <div style="text-align:center; margin-bottom:20px;">
         <button type="button" id="refreshBookingsBtn" class="btn alt">🔄 Refresh Bookings</button>
       </div>
-      <h3 style="color:#0a1a3a;">📅 Recent Bookings</h3>
+      <h3 style="color:#831843;">📅 Recent Bookings</h3>
       <div id="bookingsList"></div>
     </div>
   </section>
@@ -762,8 +760,8 @@
         <h2>🎯 Join Open Play</h2>
       </div>
       <div class="card">
-        <p style="text-align:center; color:#0a1a3a;"><strong>₱50 per player</strong> · 6:00 PM to 12:00 AM daily</p>
-        <p style="font-size:0.85em; text-align:center; color:#666;">Admin picks teams each night. Walk-ins welcome on-site.</p>
+        <p style="text-align:center; color:#831843;"><strong>₱50 per player</strong> · 6:00 PM to 12:00 AM daily</p>
+        <p style="font-size:0.85em; text-align:center; color:#9d174d;">Admin picks teams each night. Walk-ins welcome on-site.</p>
         <form id="playForm" style="margin-top:14px;">
           <input id="player" placeholder="Full Name" required>
           <input id="playerPhone" placeholder="Mobile Number" required>
@@ -790,9 +788,9 @@
         <button onclick="showPage('home')">← Back</button>
         <h2>🏆 Live Matches</h2>
       </div>
-      <p style="text-align:center; color:#666; margin-bottom:16px;">Courts 1 &amp; 2 · Tap the winning team on each card.</p>
+      <p style="text-align:center; color:#c7d2fe; margin-bottom:16px;">Courts 1 &amp; 2 · Tap the winning team on each card.</p>
       <div id="matchupsContainer">
-        <p style="text-align:center; color:#888;">Loading live board...</p>
+        <p style="text-align:center; color:#a5b4fc;">Loading live board...</p>
       </div>
     </div>
   </section>
@@ -821,16 +819,16 @@
         <button onclick="showPage('home')">← Back</button>
         <h2>💬 Club Chat</h2>
       </div>
-      <div style="padding:8px 12px; font-size:0.8em; color:#666; background:#f9fafb; text-align:center; border-bottom:1px solid #e5e7eb;">
+      <div style="padding:8px 12px; font-size:0.8em; color:#9d174d; background:#fce7f3; text-align:center; border-bottom:1px solid #fbcfe8;">
         Text &amp; emojis only · Resets daily at 3:00 AM
       </div>
-      <div style="padding:8px 12px; background:#fff; border-bottom:1px solid #e5e7eb;">
+      <div style="padding:8px 12px; background:#fff; border-bottom:1px solid #fbcfe8;">
         <input id="chatName" placeholder="Your Name" maxlength="30" style="margin:0;">
       </div>
       <div id="chatMessages">
-        <p style="text-align:center; color:#888;">Loading chat...</p>
+        <p style="text-align:center; color:#9d174d;">Loading chat...</p>
       </div>
-      <div id="emojiPicker" style="display:none; background:#fff; border-top:1px solid #e5e7eb; padding:10px; max-height:180px; overflow-y:auto;">
+      <div id="emojiPicker" style="display:none; background:#fff; border-top:1px solid #fbcfe8; padding:10px; max-height:180px; overflow-y:auto;">
         <div style="display:grid; grid-template-columns:repeat(8, 1fr); gap:5px;">
           <button class="emoji-btn" onclick="insertEmoji('🏓')">🏓</button>
           <button class="emoji-btn" onclick="insertEmoji('🏆')">🏆</button>
@@ -881,12 +879,12 @@
         <h2>📱 Get the ZINJA App</h2>
       </div>
       <div class="card" style="text-align:center;">
-        <p style="font-size:1.05em; color:#0a1a3a;">Book courts, join Open Play — all in one app!</p>
+        <p style="font-size:1.05em; color:#831843;">Book courts, join Open Play — all in one app!</p>
         <a href="ZINJA-Pickleball.apk" download class="btn" style="margin-top:14px; text-decoration:none; display:inline-block;">⬇ Download APK</a>
-        <p style="margin-top:20px; color:#888; font-size:0.88em;">Version 1.0 · Free · No ads · Android 7.0+</p>
-        <div style="margin-top:20px; padding:14px; background:#f9fafb; border-radius:12px; text-align:left; font-size:0.9em; border:1px solid #e5e7eb;">
-          <p style="margin:0 0 8px 0; font-weight:700; color:#111;">⚠️ How to install:</p>
-          <ol style="margin:0; padding-left:20px; line-height:1.7; color:#374151;">
+        <p style="margin-top:20px; color:#9d174d; font-size:0.88em;">Version 1.0 · Free · No ads · Android 7.0+</p>
+        <div style="margin-top:20px; padding:14px; background:#ffffff; border-radius:12px; text-align:left; font-size:0.9em; border:1px solid #fbcfe8;">
+          <p style="margin:0 0 8px 0; font-weight:700; color:#831843;">⚠️ How to install:</p>
+          <ol style="margin:0; padding-left:20px; line-height:1.7; color:#4b5563;">
             <li>Tap "Download APK"</li>
             <li>Allow "Install from unknown sources"</li>
             <li>Open the downloaded file</li>
@@ -905,7 +903,7 @@
         <h2>🔐 Admin Panel</h2>
       </div>
       <div class="card" style="text-align:center;">
-        <p style="color:#666; margin-top:0;">Enter password to manage bookings, players, and matchups.</p>
+        <p style="color:#831843; margin-top:0;">Enter password to manage bookings, players, and matchups.</p>
         <div style="max-width:500px; margin:0 auto; display:flex; gap:8px;">
           <input id="adminPassword" type="password" placeholder="Admin Password" style="flex:1; margin:0;">
           <button class="btn" type="button" onclick="loadAdminData()">View Data</button>
@@ -915,8 +913,8 @@
       <div id="adminData" style="display:none;">
         <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
           <button type="button" onclick="switchAdminTab('tournament')" id="tabTournament" class="admin-tab-btn" style="padding:10px 18px; border-radius:8px; border:2px solid #6d28d9; background:linear-gradient(135deg,#7c3aed,#6d28d9); color:#fff; font-weight:700; cursor:pointer;">🎯 Tournament</button>
-          <button type="button" onclick="switchAdminTab('bookings')" id="tabBookings" class="admin-tab-btn" style="padding:10px 18px; border-radius:8px; border:2px solid #e5e7eb; background:#fff; color:#333; font-weight:700; cursor:pointer;">📋 Court Bookings</button>
-          <button type="button" onclick="switchAdminTab('openplay')" id="tabOpenPlay" class="admin-tab-btn" style="padding:10px 18px; border-radius:8px; border:2px solid #e5e7eb; background:#fff; color:#333; font-weight:700; cursor:pointer;">🏓 Open Play</button>
+          <button type="button" onclick="switchAdminTab('bookings')" id="tabBookings" class="admin-tab-btn" style="padding:10px 18px; border-radius:8px; border:2px solid #fbcfe8; background:#fff; color:#333; font-weight:700; cursor:pointer;">📋 Court Bookings</button>
+          <button type="button" onclick="switchAdminTab('openplay')" id="tabOpenPlay" class="admin-tab-btn" style="padding:10px 18px; border-radius:8px; border:2px solid #fbcfe8; background:#fff; color:#333; font-weight:700; cursor:pointer;">🏓 Open Play</button>
         </div>
         <div id="adminContent"></div>
       </div>
@@ -947,11 +945,10 @@
     © <span id="year"></span> ZINJA Pickleball Club · Malusay, Guihulngan City
   </footer>
 
-  <script src="zinja-app.js?v=41"></script>
+  <script src="zinja-app.js?v=42"></script>
   <script>
     document.getElementById('year').textContent = new Date().getFullYear();
 
-    /* ==================== HAMBURGER MENU ==================== */
     function openMenu() {
       document.getElementById('slideMenu').classList.add('open');
       document.getElementById('menuOverlay').classList.add('open');
@@ -969,7 +966,6 @@
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    /* ==================== WEEKLY SCHEDULE ==================== */
     const scheduleData = {
       MON: { title: 'Monday', hours: '6:00 AM – 12:00 AM', morning: 'Available (6AM–4PM)', evening: 'Available (5PM–12AM)', status: 'open' },
       TUE: { title: 'Tuesday', hours: '6:00 AM – 12:00 AM', morning: 'Available (6AM–4PM)', evening: 'Available (5PM–12AM)', status: 'open' },
@@ -1020,7 +1016,6 @@
       renderSchedulePanel(day);
     }
 
-    // Initialize
     renderDayTabs();
     renderSchedulePanel(todayDay);
   </script>
