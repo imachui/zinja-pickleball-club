@@ -739,7 +739,7 @@ async function cancelMatch(matchId) {
 }
 
 // ====================
-// SMART SUGGEST
+// SMART SUGGEST (Winner vs Winner bias)
 // ====================
 
 function computePlayerStats(playerNames, matches) {
@@ -779,14 +779,25 @@ function smartSuggest(availablePlayers, matches) {
 
   const stats = computePlayerStats(availablePlayers, matches);
 
+  // Sort priority:
+  // 1. Fewest games played (fair rotation)
+  // 2. Highest win-score (winner-vs-winner bias)
+  // 3. Random tiebreak
   const sorted = availablePlayers.slice().sort((a, b) => {
-    const diff = stats[a].games - stats[b].games;
-    if (diff !== 0) return diff;
+    const ga = stats[a].games;
+    const gb = stats[b].games;
+    if (ga !== gb) return ga - gb;
+
+    const wa = stats[a].wins - stats[a].losses;
+    const wb = stats[b].wins - stats[b].losses;
+    if (wb !== wa) return wb - wa;
+
     return Math.random() - 0.5;
   });
 
   const picked = sorted.slice(0, 4);
 
+  // Team balance: strongest + weakest vs middle two
   picked.sort((a, b) => {
     const wa = stats[a].wins - stats[a].losses;
     const wb = stats[b].wins - stats[b].losses;
@@ -1063,7 +1074,10 @@ async function renderAdminTournament() {
       <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:16px;">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
           <h3 style="color:#7c3aed;margin:0;">👥 Check-In & Player Management (${checkedInCount} active)</h3>
-          <button type="button" onclick="doAddWalkIn()" style="padding:8px 16px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:0.85em;">➕ Add Walk-In</button>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button type="button" onclick="doAddWalkIn()" style="padding:8px 16px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:0.85em;">➕ Add Walk-In</button>
+            <button type="button" onclick="doClearOldData()" style="padding:8px 16px;background:#6b7280;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:0.85em;">🧹 Clean Old Data</button>
+          </div>
         </div>
         <p style="color:#666;font-size:0.9em;margin-bottom:12px;">Tap ✓ Check In for arrivals, ⏸ Mark as Left for departures. Walk-ins are added automatically as checked-in.</p>
         ${playerListHTML}
@@ -1133,6 +1147,26 @@ window.doAddWalkIn = async function () {
     await renderAdminTournament();
   } catch (error) {
     alert("Failed to add walk-in: " + error.message);
+  }
+};
+
+window.doClearOldData = async function () {
+  const today = getTodayStr();
+  const ok = confirm(
+    "🧹 Clean Old Data\n\n" +
+    "This will permanently delete ALL matches and check-ins from PREVIOUS days.\n\n" +
+    "Today's data (" + today + ") will NOT be deleted.\n\n" +
+    "Continue?"
+  );
+  if (!ok) return;
+  try {
+    await supabaseFetch(`/rest/v1/matches?play_date=lt.${today}`, { method: "DELETE" });
+    await supabaseFetch(`/rest/v1/check_ins?play_date=lt.${today}`, { method: "DELETE" });
+    alert("✅ Old data cleaned up successfully!");
+    await renderAdminTournament();
+    await renderLiveBoard();
+  } catch (error) {
+    alert("❌ Cleanup failed: " + error.message);
   }
 };
 
