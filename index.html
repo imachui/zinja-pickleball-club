@@ -7,26 +7,46 @@
   <link rel="stylesheet" href="style.css">
   <style>
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #0a0a1e; color: #fff; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: #f5f7fa;
+      color: #111;
+      min-height: 100vh;
+    }
 
     /* TOP BAR */
     .topbar {
       position: sticky; top: 0; z-index: 60;
-      background: #000;
-      padding: 12px 16px;
-      display: flex; align-items: center; gap: 10px;
-      border-bottom: 1px solid #222;
+      background: #ffffff;
+      padding: 10px 18px;
+      display: flex; align-items: center; gap: 12px;
+      border-bottom: 1px solid #e5e7eb;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
     }
-    .topbar a { display: flex; align-items: center; gap: 10px; color: #fff; text-decoration: none; }
-    .topbar img { height: 38px; }
-    .topbar strong { font-size: 1.05em; }
+    .topbar a {
+      display: flex; align-items: center; gap: 12px;
+      color: #111; text-decoration: none;
+    }
+    .topbar img { height: 52px; }
+    .topbar .brand-text { display: flex; flex-direction: column; line-height: 1.1; }
+    .topbar .brand-text strong { font-size: 1.15em; color: #111; letter-spacing: 0.3px; }
+    .topbar .brand-text small { font-size: 0.7em; color: #666; letter-spacing: 1.5px; font-weight: 600; }
 
     /* STATUS BANNERS */
-    #liveStatus { padding: 10px 16px; text-align: center; font-size: 0.9em; font-weight: 500; }
-    .weekly-banner { background: linear-gradient(135deg,#1e3a8a,#7c3aed); color: #fff; padding: 8px 16px; text-align: center; font-size: 0.85em; }
+    #liveStatus {
+      padding: 10px 18px; text-align: center;
+      font-size: 0.9em; font-weight: 600;
+      color: #fff;
+    }
+    .weekly-banner {
+      background: linear-gradient(135deg,#1e3a8a,#7c3aed);
+      color: #fff; padding: 8px 18px;
+      text-align: center; font-size: 0.82em;
+    }
 
     /* PAGES */
-    .page { display: none; padding: 20px 16px; max-width: 720px; margin: 0 auto; }
+    .page { display: none; padding: 20px 16px 40px 16px; max-width: 720px; margin: 0 auto; }
     .page.active { display: block; }
 
     .page-header {
@@ -35,45 +55,168 @@
       background: linear-gradient(135deg,#7c3aed,#6d28d9);
       color: #fff;
       border-radius: 12px;
-      margin: -10px -16px 20px -16px;
-      position: sticky; top: 60px; z-index: 40;
+      margin: 0 0 20px 0;
     }
     .page-header button {
-      background: rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.22);
       border: none; color: #fff;
       padding: 8px 14px; border-radius: 20px;
-      font-weight: 700; cursor: pointer; font-size: 0.9em;
+      font-weight: 700; cursor: pointer; font-size: 0.88em;
+      font-family: inherit;
     }
-    .page-header h2 { margin: 0; font-size: 1.05em; flex: 1; }
+    .page-header h2 { margin: 0; font-size: 1.05em; flex: 1; text-align: center; padding-right: 60px; }
+
+    /* HERO (HOME) */
+    .hero {
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 45%, #7c3aed 140%);
+      border-radius: 18px;
+      padding: 28px 22px 26px 22px;
+      color: #fff;
+      text-align: center;
+      margin-bottom: 18px;
+      box-shadow: 0 10px 30px rgba(15,23,42,0.18);
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -50%; right: -30%;
+      width: 320px; height: 320px;
+      background: radial-gradient(circle, rgba(16,185,129,0.35), transparent 70%);
+      pointer-events: none;
+    }
+    .hero-logo {
+      width: 140px; height: 140px; object-fit: contain;
+      display: block; margin: 0 auto 10px auto;
+      filter: drop-shadow(0 4px 12px rgba(0,0,0,0.35));
+    }
+    .hero .welcome { font-size: 0.78em; letter-spacing: 3px; opacity: 0.85; font-weight: 700; margin: 0; }
+    .hero h1 {
+      margin: 6px 0 4px 0;
+      font-size: 2.1em;
+      letter-spacing: 1px;
+      font-weight: 900;
+      color: #fff;
+      line-height: 1.05;
+    }
+    .hero .tagline {
+      margin: 8px 0 6px 0;
+      font-size: 1.02em;
+      font-weight: 700;
+      color: #a7f3d0;
+    }
+    .hero .subtagline {
+      margin: 0 auto 18px auto;
+      max-width: 420px;
+      font-size: 0.9em;
+      opacity: 0.9;
+      line-height: 1.5;
+    }
+    .hero .location {
+      display: inline-block;
+      padding: 6px 14px;
+      background: rgba(255,255,255,0.12);
+      border-radius: 20px;
+      font-size: 0.8em;
+      margin-bottom: 18px;
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+    .hero-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+    .hero-btn {
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      padding: 15px 20px; border-radius: 12px;
+      font-weight: 800; font-size: 1em;
+      text-decoration: none; cursor: pointer;
+      border: none; font-family: inherit;
+      transition: transform 0.15s;
+    }
+    .hero-btn:active { transform: scale(0.98); }
+    .hero-btn.primary { background: linear-gradient(135deg,#10b981,#059669); color: #fff; }
+    .hero-btn.secondary { background: #ffffff; color: #7c3aed; }
+
+    /* QUICK STATS */
+    .quick-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .stat-card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 14px 8px;
+      text-align: center;
+      border: 1px solid #e5e7eb;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    }
+    .stat-card .icon { font-size: 1.6em; display: block; margin-bottom: 6px; }
+    .stat-card .num { font-size: 1.05em; font-weight: 800; color: #111; }
+    .stat-card .lbl { font-size: 0.72em; color: #666; margin-top: 2px; }
+
+    /* SECTION TITLES */
+    .section-title {
+      font-size: 0.78em;
+      font-weight: 800;
+      letter-spacing: 2px;
+      color: #6b7280;
+      margin: 22px 4px 10px 4px;
+      text-transform: uppercase;
+    }
 
     /* MENU CARDS */
     .menu-card {
       display: flex; align-items: center; gap: 14px;
-      padding: 16px;
-      background: linear-gradient(135deg,#1e293b,#0f172a);
+      padding: 15px 16px;
+      background: #ffffff;
       border-radius: 14px;
       margin-bottom: 10px;
-      color: #fff;
+      color: #111;
       cursor: pointer;
-      transition: transform 0.15s;
-      border-left: 4px solid #7c3aed;
+      border: 1px solid #e5e7eb;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+      transition: all 0.15s;
       user-select: none;
     }
-    .menu-card:hover, .menu-card:active { transform: translateX(4px); }
-    .menu-card .icon { font-size: 1.8em; }
-    .menu-card .info { flex: 1; }
-    .menu-card .title { font-weight: 700; font-size: 1.05em; margin: 0 0 3px 0; }
-    .menu-card .subtitle { font-size: 0.82em; opacity: 0.7; margin: 0; }
-    .menu-card .arrow { font-size: 1.6em; opacity: 0.45; }
-
-    /* FORM ELEMENTS */
-    input, select, textarea {
-      width: 100%; padding: 12px;
-      border-radius: 10px; border: 1px solid #333;
-      background: #1a1a2e; color: #fff;
-      margin-bottom: 10px; font-size: 1em;
-      font-family: inherit;
+    .menu-card:hover, .menu-card:active {
+      transform: translateX(3px);
+      border-color: #7c3aed;
+      box-shadow: 0 4px 12px rgba(124,58,237,0.12);
     }
+    .menu-card .icon { font-size: 1.7em; }
+    .menu-card .info { flex: 1; }
+    .menu-card .title { font-weight: 700; font-size: 1em; margin: 0 0 3px 0; color: #111; }
+    .menu-card .subtitle { font-size: 0.82em; color: #6b7280; margin: 0; }
+    .menu-card .arrow { font-size: 1.4em; opacity: 0.35; color: #7c3aed; }
+
+    /* FORM ELEMENTS (LIGHT THEME) */
+    input, select, textarea {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1.5px solid #d1d5db;
+      background: #ffffff;
+      color: #111;
+      margin-bottom: 10px;
+      font-size: 1em;
+      font-family: inherit;
+      transition: border-color 0.15s;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: #7c3aed;
+      box-shadow: 0 0 0 3px rgba(124,58,237,0.12);
+    }
+    input::placeholder { color: #9ca3af; }
+
+    /* Make calendar & clock icons visible */
+    input[type="date"]::-webkit-calendar-picker-indicator,
+    input[type="time"]::-webkit-calendar-picker-indicator {
+      filter: none;
+      opacity: 0.7;
+      cursor: pointer;
+    }
+
     .btn, button.primary {
       display: inline-block;
       padding: 12px 22px;
@@ -83,28 +226,72 @@
       font-family: inherit;
     }
     .btn.alt { background: linear-gradient(135deg,#10b981,#059669); }
-    h2 { font-size: 1.3em; margin: 4px 0 12px 0; }
-    h3 { font-size: 1em; margin: 16px 0 8px 0; }
-    p { line-height: 1.5; }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    h2 { font-size: 1.25em; margin: 4px 0 12px 0; color: #111; }
+    h3 { font-size: 1em; margin: 16px 0 8px 0; color: #111; }
+    p { line-height: 1.5; color: #374151; }
+
+    /* CARD WRAPPER FOR FORMS */
+    .card {
+      background: #ffffff;
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 16px;
+      border: 1px solid #e5e7eb;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    }
+    .card.dark-section {
+      background: #f9fafb;
+      border-color: #e5e7eb;
+    }
+    .card h3 { margin-top: 0; color: #7c3aed; }
 
     /* CHAT FULL SCREEN */
-    #page-chat { display: none; }
-    #page-chat.active { display: flex; flex-direction: column; height: calc(100vh - 60px); padding: 0; max-width: none; }
+    #page-chat { padding: 0; max-width: none; }
+    #page-chat.active { display: flex; flex-direction: column; height: calc(100vh - 76px); }
     #page-chat .chat-wrap {
       display: flex; flex-direction: column;
       height: 100%; max-width: 720px; margin: 0 auto; width: 100%;
+      background: #f5f7fa;
     }
+    #page-chat .chat-top {
+      background: linear-gradient(135deg,#7c3aed,#6d28d9);
+      color: #fff;
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 16px;
+    }
+    #page-chat .chat-top button {
+      background: rgba(255,255,255,0.22); border: none; color: #fff;
+      padding: 8px 14px; border-radius: 20px;
+      font-weight: 700; cursor: pointer; font-size: 0.88em;
+    }
+    #page-chat .chat-top h2 { margin: 0; color: #fff; font-size: 1.05em; flex: 1; }
     #chatMessages {
       flex: 1; overflow-y: auto;
       padding: 16px;
-      background: #0a0a1e;
+      background: #f5f7fa;
     }
     .chat-input-row {
       display: flex; gap: 8px; padding: 10px 12px;
-      background: #111; border-top: 1px solid #222;
+      background: #ffffff; border-top: 1px solid #e5e7eb;
     }
     .chat-input-row input { margin: 0; }
-    .emoji-btn { background: #1a1a2e; border: 1px solid #333; border-radius: 10px; padding: 8px 12px; font-size: 1.2em; cursor: pointer; color: #fff; }
+    .emoji-btn {
+      background: #f3f4f6; border: 1.5px solid #e5e7eb;
+      border-radius: 10px; padding: 8px 12px;
+      font-size: 1.2em; cursor: pointer; color: #111;
+    }
+
+    /* ADMIN PANEL */
+    #page-admin { background: #f5f7fa; max-width: none; }
+    #page-admin .admin-wrap { max-width: 900px; margin: 0 auto; }
+
+    /* FOOTER */
+    footer {
+      text-align: center; padding: 24px;
+      color: #9ca3af; font-size: 0.82em;
+    }
   </style>
 </head>
 <body>
@@ -112,11 +299,14 @@
   <div class="topbar">
     <a href="#" onclick="showPage('home'); return false;">
       <img src="logo.png" alt="ZINJA">
-      <strong>ZINJA Pickleball Club</strong>
+      <div class="brand-text">
+        <strong>ZINJA</strong>
+        <small>PICKLEBALL CLUB</small>
+      </div>
     </a>
   </div>
 
-  <div id="liveStatus" style="background: linear-gradient(135deg,#059669,#047857); color: white;">
+  <div id="liveStatus" style="background: linear-gradient(135deg,#059669,#047857);">
     <strong>Loading status...</strong>
   </div>
 
@@ -124,14 +314,47 @@
     📢 <strong>Weekly Schedule:</strong> Courts and Open Play are closed every <strong>Friday 5:00 PM to Saturday 5:00 PM</strong> (Philippine Time).
   </div>
 
-  <!-- ==================== HOME (MENU) ==================== -->
+  <!-- ==================== HOME (LANDING) ==================== -->
   <section id="page-home" class="page active">
+
+    <div class="hero">
+      <img class="hero-logo" src="logo.png" alt="ZINJA Logo">
+      <p class="welcome">WELCOME TO</p>
+      <h1>ZINJA PICKLEBALL CLUB</h1>
+      <p class="tagline">Play. Connect. Stay Active.</p>
+      <p class="subtagline">A community for all skill levels — where fun, fitness, and friendship meet on the court.</p>
+      <div class="location">📍 Malusay, Guihulngan City, Negros Oriental</div>
+      <div class="hero-actions">
+        <button class="hero-btn primary" onclick="showPage('booking')">📅 Book a Court &nbsp;→</button>
+        <button class="hero-btn secondary" onclick="showPage('openplay')">👥 Join Open Play &nbsp;→</button>
+      </div>
+    </div>
+
+    <div class="quick-stats">
+      <div class="stat-card">
+        <span class="icon">🏓</span>
+        <div class="num">2 Courts</div>
+        <div class="lbl">Available for booking</div>
+      </div>
+      <div class="stat-card">
+        <span class="icon">💰</span>
+        <div class="num">₱150/hr</div>
+        <div class="lbl">Court rental</div>
+      </div>
+      <div class="stat-card">
+        <span class="icon">🎯</span>
+        <div class="num">₱50</div>
+        <div class="lbl">Open Play fee</div>
+      </div>
+    </div>
+
+    <p class="section-title">What Would You Like to Do?</p>
 
     <div class="menu-card" onclick="showPage('booking')">
       <span class="icon">🏓</span>
       <div class="info">
         <p class="title">Book a Court</p>
-        <p class="subtitle">₱100/hr day · ₱150/hr evening</p>
+        <p class="subtitle">Reserve your preferred date and time</p>
       </div>
       <span class="arrow">›</span>
     </div>
@@ -140,7 +363,7 @@
       <span class="icon">🎯</span>
       <div class="info">
         <p class="title">Join Open Play</p>
-        <p class="subtitle">₱50 per player · 6PM-12AM</p>
+        <p class="subtitle">₱50 per player · 6PM–12AM daily</p>
       </div>
       <span class="arrow">›</span>
     </div>
@@ -167,7 +390,7 @@
       <span class="icon">💬</span>
       <div class="info">
         <p class="title">Club Chat</p>
-        <p class="subtitle">Chat with other players</p>
+        <p class="subtitle">Connect with other players</p>
       </div>
       <span class="arrow">›</span>
     </div>
@@ -194,7 +417,7 @@
       <span class="icon">📞</span>
       <div class="info">
         <p class="title">Contact & Info</p>
-        <p class="subtitle">Location, rates, hours</p>
+        <p class="subtitle">Location, rates, and hours</p>
       </div>
       <span class="arrow">›</span>
     </div>
@@ -208,48 +431,52 @@
       <h2>🏓 Book a Court</h2>
     </div>
 
-    <p>₱100/hour (6AM-4PM) · ₱150/hour (5PM-12AM)</p>
+    <div class="card">
+      <p style="margin:0 0 14px 0; text-align:center; color:#666; font-size:0.92em;">
+        <strong>₱100/hour</strong> (6AM–4PM) · <strong>₱150/hour</strong> (5PM–12AM)
+      </p>
 
-    <form id="bookingForm">
-      <input id="name" placeholder="Full Name" required>
-      <input id="phone" placeholder="Mobile Number" required>
-      <input id="date" type="date" required>
-      <input id="time" type="time" required>
-      <select id="court" required>
-        <option value="">Select Court</option>
-        <option value="1">Court 1</option>
-        <option value="2">Court 2</option>
-      </select>
-      <select id="duration" required>
-        <option value="">Select Duration</option>
-        <option value="1">1 hour</option>
-        <option value="2">2 hours</option>
-        <option value="3">3 hours</option>
-        <option value="4">4 hours</option>
-        <option value="5">5 hours</option>
-        <option value="6">6 hours</option>
-        <option value="7">7 hours</option>
-        <option value="8">8 hours</option>
-        <option value="9">9 hours</option>
-        <option value="10">10 hours</option>
-      </select>
-      <div id="priceDisplay" style="display:none; margin:12px 0; padding:14px 18px; background:linear-gradient(135deg,#7c3aed,#06b6d4); border-radius:12px;">
-        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-          <span style="opacity:0.9;">📊 Rate per hour</span>
-          <strong id="ratePerHour">₱0</strong>
+      <form id="bookingForm">
+        <input id="name" placeholder="Full Name" required>
+        <input id="phone" placeholder="Mobile Number" required>
+        <input id="date" type="date" required>
+        <input id="time" type="time" required>
+        <select id="court" required>
+          <option value="">Select Court</option>
+          <option value="1">Court 1</option>
+          <option value="2">Court 2</option>
+        </select>
+        <select id="duration" required>
+          <option value="">Select Duration</option>
+          <option value="1">1 hour</option>
+          <option value="2">2 hours</option>
+          <option value="3">3 hours</option>
+          <option value="4">4 hours</option>
+          <option value="5">5 hours</option>
+          <option value="6">6 hours</option>
+          <option value="7">7 hours</option>
+          <option value="8">8 hours</option>
+          <option value="9">9 hours</option>
+          <option value="10">10 hours</option>
+        </select>
+        <div id="priceDisplay" style="display:none; margin:12px 0; padding:14px 18px; background:linear-gradient(135deg,#7c3aed,#06b6d4); border-radius:12px; color:#fff;">
+          <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+            <span style="opacity:0.9;">📊 Rate per hour</span>
+            <strong id="ratePerHour">₱0</strong>
+          </div>
+          <div style="display:flex; justify-content:space-between; padding-top:8px; border-top:1px solid rgba(255,255,255,0.3);">
+            <span style="font-weight:600;">💰 TOTAL</span>
+            <strong id="totalPrice" style="font-size:1.3em;">₱0</strong>
+          </div>
+          <div id="rateNote" style="font-size:0.8em; opacity:0.85; margin-top:6px; text-align:right;"></div>
         </div>
-        <div style="display:flex; justify-content:space-between; padding-top:8px; border-top:1px solid rgba(255,255,255,0.3);">
-          <span style="font-weight:600;">💰 TOTAL</span>
-          <strong id="totalPrice" style="font-size:1.3em;">₱0</strong>
-        </div>
-        <div id="rateNote" style="font-size:0.8em; opacity:0.85; margin-top:6px; text-align:right;"></div>
-      </div>
-      <div id="availabilityInfo" style="margin:10px 0;"></div>
-      <button class="btn" type="submit" style="width:100%;">Prepare Booking</button>
-    </form>
-    <div id="bookingResult"></div>
+        <div id="availabilityInfo" style="margin:10px 0;"></div>
+        <button class="btn" type="submit" style="width:100%;">Prepare Booking</button>
+      </form>
+      <div id="bookingResult"></div>
+    </div>
 
-    <div style="margin-top:20px; text-align:center;">
+    <div style="text-align:center; margin-bottom:20px;">
       <button type="button" id="refreshBookingsBtn" class="btn alt">🔄 Refresh Bookings</button>
     </div>
 
@@ -264,24 +491,26 @@
       <h2>🎯 Join Open Play</h2>
     </div>
 
-    <p>₱50 per player · 6:00 PM to 12:00 AM daily.</p>
-    <p style="font-size:0.9em; opacity:0.8;">Admin picks teams each night. Walk-ins welcome on-site.</p>
+    <div class="card">
+      <p style="margin:0 0 6px 0; text-align:center;"><strong>₱50 per player</strong> · 6:00 PM to 12:00 AM daily</p>
+      <p style="font-size:0.85em; text-align:center; color:#666;">Admin picks teams each night. Walk-ins welcome on-site.</p>
 
-    <form id="playForm">
-      <input id="player" placeholder="Full Name" required>
-      <input id="playerPhone" placeholder="Mobile Number" required>
-      <input id="playDate" type="date" required>
-      <select id="level" required>
-        <option value="">Skill Level</option>
-        <option value="Beginner">Beginner</option>
-        <option value="Intermediate">Intermediate</option>
-        <option value="Advanced">Advanced</option>
-        <option value="Any level">Any level</option>
-      </select>
-      <div id="openPlayInfo" style="margin:10px 0;"></div>
-      <button class="btn" type="submit" style="width:100%;">Join Open Play</button>
-    </form>
-    <div id="playResult"></div>
+      <form id="playForm" style="margin-top:14px;">
+        <input id="player" placeholder="Full Name" required>
+        <input id="playerPhone" placeholder="Mobile Number" required>
+        <input id="playDate" type="date" required>
+        <select id="level" required>
+          <option value="">Skill Level</option>
+          <option value="Beginner">Beginner</option>
+          <option value="Intermediate">Intermediate</option>
+          <option value="Advanced">Advanced</option>
+          <option value="Any level">Any level</option>
+        </select>
+        <div id="openPlayInfo" style="margin:10px 0;"></div>
+        <button class="btn" type="submit" style="width:100%;">Join Open Play</button>
+      </form>
+      <div id="playResult"></div>
+    </div>
   </section>
 
   <!-- ==================== LIVE MATCHES ==================== -->
@@ -290,9 +519,9 @@
       <button onclick="showPage('home')">← Back</button>
       <h2>🏆 Live Matches</h2>
     </div>
-    <p style="font-size:0.9em; opacity:0.85;">Courts 1 & 2 · Tap the winning team on each card.</p>
+    <p style="font-size:0.9em; text-align:center; color:#666;">Courts 1 & 2 · Tap the winning team on each card.</p>
     <div id="matchupsContainer">
-      <p style="text-align:center; opacity:0.7;">Loading live board...</p>
+      <p style="text-align:center; color:#888;">Loading live board...</p>
     </div>
   </section>
 
@@ -302,31 +531,33 @@
       <button onclick="showPage('home')">← Back</button>
       <h2>📋 Open Play Players</h2>
     </div>
-    <div style="text-align:center;">
+    <div style="text-align:center; margin-bottom:16px;">
       <button type="button" id="refreshOpenPlayBtn" class="btn alt">🔄 Refresh List</button>
     </div>
-    <h3>Registered Players</h3>
-    <div id="openPlayList"></div>
+    <div class="card">
+      <h3>Registered Players</h3>
+      <div id="openPlayList"></div>
+    </div>
   </section>
 
   <!-- ==================== CHAT (FULL SCREEN) ==================== -->
   <section id="page-chat" class="page">
     <div class="chat-wrap">
-      <div class="page-header" style="position: static; margin: 0; border-radius: 0;">
+      <div class="chat-top">
         <button onclick="showPage('home')">← Back</button>
         <h2>💬 Club Chat</h2>
       </div>
-      <div style="padding: 8px 12px; font-size: 0.8em; opacity: 0.7; background: #111; text-align: center;">
+      <div style="padding:8px 12px; font-size:0.8em; color:#666; background:#f9fafb; text-align:center; border-bottom:1px solid #e5e7eb;">
         Text & emojis only · Resets daily at 3:00 AM
       </div>
-      <div style="padding: 8px 12px; background: #111;">
+      <div style="padding:8px 12px; background:#fff; border-bottom:1px solid #e5e7eb;">
         <input id="chatName" placeholder="Your Name" maxlength="30" style="margin:0;">
       </div>
       <div id="chatMessages">
         <p style="text-align:center; color:#888;">Loading chat...</p>
       </div>
-      <div id="emojiPicker" style="display: none; background: #1a1a2e; border-top: 1px solid #333; padding: 10px; max-height: 180px; overflow-y: auto;">
-        <div style="display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px;">
+      <div id="emojiPicker" style="display:none; background:#fff; border-top:1px solid #e5e7eb; padding:10px; max-height:180px; overflow-y:auto;">
+        <div style="display:grid; grid-template-columns:repeat(8, 1fr); gap:5px;">
           <button class="emoji-btn" onclick="insertEmoji('🏓')">🏓</button>
           <button class="emoji-btn" onclick="insertEmoji('🏆')">🏆</button>
           <button class="emoji-btn" onclick="insertEmoji('💪')">💪</button>
@@ -343,7 +574,6 @@
           <button class="emoji-btn" onclick="insertEmoji('🤔')">🤔</button>
           <button class="emoji-btn" onclick="insertEmoji('😅')">😅</button>
           <button class="emoji-btn" onclick="insertEmoji('😭')">😭</button>
-          <button class="emoji-btn" onclick="insertEmoji('😱')">😱</button>
           <button class="emoji-btn" onclick="insertEmoji('🥳')">🥳</button>
           <button class="emoji-btn" onclick="insertEmoji('🤩')">🤩</button>
           <button class="emoji-btn" onclick="insertEmoji('❤️')">❤️</button>
@@ -375,13 +605,13 @@
       <button onclick="showPage('home')">← Back</button>
       <h2>📱 Get the ZINJA App</h2>
     </div>
-    <div style="text-align:center; padding: 20px;">
-      <p style="font-size: 1.1em;">Book courts, join Open Play — all in one app!</p>
-      <a href="ZINJA-Pickleball.apk" download class="btn" style="margin-top:16px; text-decoration:none;">⬇ Download APK</a>
-      <p style="margin-top:20px; opacity:0.75; font-size:0.9em;">Version 1.0 · Free · No ads · Android 7.0+</p>
-      <div style="margin-top:24px; padding:15px; background:rgba(255,255,255,0.05); border-radius:12px; text-align:left; font-size:0.9em;">
-        <p style="margin:0 0 8px 0; font-weight:bold;">⚠️ How to install:</p>
-        <ol style="margin:0; padding-left:20px; line-height:1.6;">
+    <div class="card" style="text-align:center;">
+      <p style="font-size:1.05em;">Book courts, join Open Play — all in one app!</p>
+      <a href="ZINJA-Pickleball.apk" download class="btn" style="margin-top:14px; text-decoration:none; display:inline-block;">⬇ Download APK</a>
+      <p style="margin-top:20px; color:#888; font-size:0.88em;">Version 1.0 · Free · No ads · Android 7.0+</p>
+      <div style="margin-top:20px; padding:14px; background:#f9fafb; border-radius:12px; text-align:left; font-size:0.9em; border:1px solid #e5e7eb;">
+        <p style="margin:0 0 8px 0; font-weight:700; color:#111;">⚠️ How to install:</p>
+        <ol style="margin:0; padding-left:20px; line-height:1.7; color:#374151;">
           <li>Tap "Download APK"</li>
           <li>Allow "Install from unknown sources"</li>
           <li>Open the downloaded file</li>
@@ -392,24 +622,27 @@
   </section>
 
   <!-- ==================== ADMIN ==================== -->
-  <section id="page-admin" class="page" style="background:#f8fafc; color:#111; max-width:none;">
-    <div style="max-width:900px; margin:0 auto;">
+  <section id="page-admin" class="page">
+    <div class="admin-wrap">
       <div class="page-header">
         <button onclick="showPage('home')">← Back</button>
         <h2>🔐 Admin Panel</h2>
       </div>
 
-      <p style="color:#666; text-align:center;">Enter password to manage bookings, players, and matchups.</p>
-      <div style="max-width:500px; margin:0 auto 20px auto; display:flex; gap:8px;">
-        <input id="adminPassword" type="password" placeholder="Admin Password" style="flex:1;">
-        <button class="btn" type="button" onclick="loadAdminData()">View Data</button>
+      <div class="card" style="text-align:center;">
+        <p style="color:#666; margin-top:0;">Enter password to manage bookings, players, and matchups.</p>
+        <div style="max-width:500px; margin:0 auto; display:flex; gap:8px;">
+          <input id="adminPassword" type="password" placeholder="Admin Password" style="flex:1; margin:0;">
+          <button class="btn" type="button" onclick="loadAdminData()">View Data</button>
+        </div>
       </div>
+
       <div id="adminResult"></div>
       <div id="adminData" style="display:none;">
         <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
           <button type="button" onclick="switchAdminTab('tournament')" id="tabTournament" class="admin-tab-btn" style="padding:10px 18px; border-radius:8px; border:2px solid #6d28d9; background:linear-gradient(135deg,#7c3aed,#6d28d9); color:#fff; font-weight:700; cursor:pointer;">🎯 Tournament</button>
-          <button type="button" onclick="switchAdminTab('bookings')" id="tabBookings" class="admin-tab-btn" style="padding:10px 18px; border-radius:8px; border:2px solid #ddd; background:#fff; color:#333; font-weight:700; cursor:pointer;">📋 Court Bookings</button>
-          <button type="button" onclick="switchAdminTab('openplay')" id="tabOpenPlay" class="admin-tab-btn" style="padding:10px 18px; border-radius:8px; border:2px solid #ddd; background:#fff; color:#333; font-weight:700; cursor:pointer;">🏓 Open Play</button>
+          <button type="button" onclick="switchAdminTab('bookings')" id="tabBookings" class="admin-tab-btn" style="padding:10px 18px; border-radius:8px; border:2px solid #e5e7eb; background:#fff; color:#333; font-weight:700; cursor:pointer;">📋 Court Bookings</button>
+          <button type="button" onclick="switchAdminTab('openplay')" id="tabOpenPlay" class="admin-tab-btn" style="padding:10px 18px; border-radius:8px; border:2px solid #e5e7eb; background:#fff; color:#333; font-weight:700; cursor:pointer;">🏓 Open Play</button>
         </div>
         <div id="adminContent"></div>
       </div>
@@ -422,22 +655,26 @@
       <button onclick="showPage('home')">← Back</button>
       <h2>📞 Contact & Info</h2>
     </div>
-    <h3>ZINJA Pickleball Club</h3>
-    <p>Malusay, Guihulngan City, Negros Oriental</p>
-    <h3>Court Rental Rates</h3>
-    <p>₱100/hour (6:00 AM – 4:00 PM)<br>
-       ₱150/hour (5:00 PM – 12:00 AM)</p>
-    <h3>Open Play</h3>
-    <p>₱50 per player · 6:00 PM – 12:00 AM</p>
-    <h3>Weekly Rest Period</h3>
-    <p>Closed Friday 5:00 PM to Saturday 5:00 PM (PHT)</p>
+
+    <div class="card">
+      <h3>ZINJA Pickleball Club</h3>
+      <p>📍 Malusay, Guihulngan City, Negros Oriental</p>
+
+      <h3>Court Rental Rates</h3>
+      <p>💵 ₱100/hour (6:00 AM – 4:00 PM)<br>
+         💵 ₱150/hour (5:00 PM – 12:00 AM)</p>
+
+      <h3>Open Play</h3>
+      <p>🎯 ₱50 per player · 6:00 PM – 12:00 AM</p>
+
+      <h3>Weekly Rest Period</h3>
+      <p>🔴 Closed Friday 5:00 PM to Saturday 5:00 PM (PHT)</p>
+    </div>
   </section>
 
-  <footer style="text-align:center; padding:24px; opacity:0.6; font-size:0.85em;">
-    © <span id="year"></span> ZINJA Pickleball Club
-  </footer>
+  <footer>© <span id="year"></span> ZINJA Pickleball Club</footer>
 
-  <script src="zinja-app.js?v=38"></script>
+  <script src="zinja-app.js?v=39"></script>
   <script>
     document.getElementById('year').textContent = new Date().getFullYear();
   </script>
