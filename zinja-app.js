@@ -677,9 +677,7 @@ async function cancelOpenPlay() {
       showResult(result, "No matching Open Play registration was found.", false);
     }
   } catch (error) { showResult(result, `Cancellation failed. ${error.message || "Please try again."}`, false); }
-}
-
-// ====================
+}// ====================
 // AUTO MATCH SYSTEM (MIXED MODE)
 // ====================
 
@@ -1000,7 +998,9 @@ async function deleteOpenPlay(id) {
       await loadAutoMatchups(playerDate);
     }
   } catch (error) { alert("❌ Delete failed: " + error.message); }
-}// ====================
+}
+
+// ====================
 // CLUB CHAT
 // ====================
 
@@ -1134,9 +1134,10 @@ async function loadAdminData() {
 
 function switchAdminTab(tab) {
   currentAdminTab = tab;
-  const tabs = ['bookings', 'openplay', 'matchups'];
-  tabs.forEach(t => {
-    const btn = document.getElementById(`tab${t.charAt(0).toUpperCase() + t.slice(1)}`);
+  // FIX: gamit ang eksaktong ID na nasa HTML
+  const tabIds = { bookings: 'tabBookings', openplay: 'tabOpenPlay', matchups: 'tabMatchups' };
+  Object.keys(tabIds).forEach(t => {
+    const btn = document.getElementById(tabIds[t]);
     if (btn) {
       if (t === tab) {
         btn.style.background = 'linear-gradient(135deg, #7c3aed, #6d28d9)';
