@@ -717,7 +717,6 @@ async function loadMatches(dateStr) {
 }
 
 async function createMatch(dateStr, court, teamA, teamB) {
-  // court === null or 0 means queue
   const isQueue = !court || court === 0;
   const payload = {
     play_date: dateStr,
@@ -738,16 +737,12 @@ async function createMatch(dateStr, court, teamA, teamB) {
 
 async function declareWinner(matchId, winningTeam) {
   const today = getTodayStr();
-  // 1. Get the match to know its court
   let freedCourt = null;
   try {
     const info = await supabaseFetch(`/rest/v1/matches?id=eq.${matchId}&select=court,status`);
-    if (info && info[0]) {
-      if (info[0].status === 'active') freedCourt = info[0].court;
-    }
+    if (info && info[0] && info[0].status === 'active') freedCourt = info[0].court;
   } catch (e) { console.warn("Could not fetch match info:", e); }
 
-  // 2. Mark done
   await supabaseFetch(`/rest/v1/matches?id=eq.${matchId}`, {
     method: "PATCH",
     headers: { Prefer: "return=representation" },
@@ -758,10 +753,7 @@ async function declareWinner(matchId, winningTeam) {
     })
   });
 
-  // 3. Auto-promote next queued match to freed court
-  if (freedCourt) {
-    await promoteNextFromQueue(today, freedCourt);
-  }
+  if (freedCourt) await promoteNextFromQueue(today, freedCourt);
 }
 
 async function promoteNextFromQueue(dateStr, court) {
@@ -773,11 +765,7 @@ async function promoteNextFromQueue(dateStr, court) {
     await supabaseFetch(`/rest/v1/matches?id=eq.${queued[0].id}`, {
       method: "PATCH",
       headers: { Prefer: "return=representation" },
-      body: JSON.stringify({
-        court: court,
-        status: 'active',
-        started_at: new Date().toISOString()
-      })
+      body: JSON.stringify({ court: court, status: 'active', started_at: new Date().toISOString() })
     });
     return queued[0];
   } catch (e) { console.warn("Promote from queue failed:", e); return null; }
@@ -828,6 +816,18 @@ function getPlayersInPendingMatches(matches) {
   return set;
 }
 
+// 🆕 Match Limit: 32 players → 8 matches, 16 players → 4 matches
+function getMaxMatchInfo(checkInMap, matches) {
+  const activeCheckedInCount = Object.values(checkInMap).filter(c => c.status === 'active').length;
+  const maxMatches = Math.floor(activeCheckedInCount / 4);
+  const activeCount = matches.filter(m => m.status === 'active').length;
+  const queuedCount = matches.filter(m => m.status === 'queued').length;
+  const currentCount = activeCount + queuedCount;
+  const canCreateMore = currentCount < maxMatches;
+  const availableSlots = Math.max(0, maxMatches - currentCount);
+  return { maxMatches, currentCount, activeCount, queuedCount, canCreateMore, availableSlots, activeCheckedInCount };
+}
+
 function smartSuggest(availablePlayers, matches) {
   if (availablePlayers.length < 4) return null;
   const stats = computePlayerStats(availablePlayers, matches);
@@ -857,7 +857,6 @@ function smartSuggest(availablePlayers, matches) {
 // ====================
 
 function renderMatchCard(m, mode, queueNumber) {
-  // mode: 'active' | 'queued' | 'done'
   const teamALabel = `${escapeHtml(m.team_a_1)} & ${escapeHtml(m.team_a_2)}`;
   const teamBLabel = `${escapeHtml(m.team_b_1)} & ${escapeHtml(m.team_b_2)}`;
 
@@ -887,7 +886,6 @@ function renderMatchCard(m, mode, queueNumber) {
     ? `<div style="margin-top:10px;padding:8px 12px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border-radius:8px;text-align:center;font-weight:700;font-size:0.9em;">🏆 Team ${m.winning_team} Wins!</div>`
     : '';
 
-  // Style per mode
   let bg, borderColor, badge, timeLabel;
   if (mode === 'active') {
     bg = 'linear-gradient(135deg,#064e3b,#065f46)';
@@ -950,7 +948,6 @@ async function renderLiveBoard() {
 
     let html = '';
 
-    // Active matches
     if (activeMatches.length === 0) {
       html += `<div style="text-align:center;padding:24px;background:rgba(124,58,237,0.1);border-radius:12px;border:1px solid rgba(124,58,237,0.3);margin-bottom:16px;">
         <p style="font-size:1.5em;margin:8px 0;">⏳</p>
@@ -961,14 +958,12 @@ async function renderLiveBoard() {
       activeMatches.forEach(m => { html += renderMatchCard(m, 'active'); });
     }
 
-    // Queue
     if (queuedMatches.length > 0) {
       html += `<h3 style="color:#a78bfa;margin:24px 0 8px 0;text-align:center;">⏳ Up Next — Queue (${queuedMatches.length})</h3>`;
       html += `<p style="text-align:center;font-size:0.85em;opacity:0.75;margin:0 0 12px 0;">These matches will auto-start as soon as a court frees up.</p>`;
       queuedMatches.forEach((m, idx) => { html += renderMatchCard(m, 'queued', idx + 1); });
     }
 
-    // Waiting pool
     html += `
       <div style="margin-top:20px;padding:16px;background:rgba(245,158,11,0.1);border-radius:12px;border-left:4px solid #f59e0b;color:#fff;">
         <p style="font-weight:700;margin:0 0 8px 0;">🪑 Waiting Pool (${waitingPlayers.length})</p>
@@ -976,7 +971,6 @@ async function renderLiveBoard() {
       </div>
     `;
 
-    // Completed
     if (doneMatches.length > 0) {
       html += `<h3 style="color:#a78bfa;margin:24px 0 8px 0;text-align:center;">✅ Completed Today (${doneMatches.length})</h3>`;
       doneMatches.forEach(m => { html += renderMatchCard(m, 'done'); });
@@ -1033,7 +1027,9 @@ async function renderAdminTournament() {
     const courtsInUse = new Set(activeMatches.map(m => m.court));
     const freeCourts = [1, 2].filter(c => !courtsInUse.has(c));
 
-    // Player list
+    const limit = getMaxMatchInfo(checkInMap, matches);
+    const { maxMatches, currentCount, canCreateMore, availableSlots, activeCheckedInCount } = limit;
+
     const playerListHTML = allPlayers.length === 0
       ? '<p style="color:#888;">No players yet today. Tap "➕ Add Walk-In" to add one.</p>'
       : allPlayers.map(name => {
@@ -1084,7 +1080,6 @@ async function renderAdminTournament() {
           </div>`;
         }).join('');
 
-    // Active matches admin
     const activeHTML = activeMatches.length === 0
       ? '<p style="color:#888;">No active matches.</p>'
       : activeMatches.map(m => `
@@ -1103,7 +1098,6 @@ async function renderAdminTournament() {
           </div>
         `).join('');
 
-    // Queue admin
     const queueHTML = queuedMatches.length === 0
       ? '<p style="color:#888;">No matches in queue.</p>'
       : queuedMatches.map((m, idx) => `
@@ -1120,16 +1114,29 @@ async function renderAdminTournament() {
           </div>
         `).join('');
 
-    // Create form — with Court dropdown including Queue option
     const playerOptions = availablePlayers.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
     const courtOptionsHTML = `
       <option value="0">📋 Queue — auto-assign when a court frees up</option>
       ${freeCourts.map(c => `<option value="${c}">🏓 Court ${c} — start now</option>`).join('')}
     `;
 
-    const createHTML = availablePlayers.length < 4
-      ? `<p style="color:#f59e0b;font-weight:600;">Need at least 4 available players. Currently: ${availablePlayers.length}.</p>`
-      : `
+    let createHTML;
+    if (maxMatches === 0) {
+      createHTML = `<div style="background:#eff6ff;padding:16px;border-radius:8px;border-left:4px solid #3b82f6;">
+        <p style="color:#1e40af;font-weight:700;margin:0 0 8px 0;">⏳ Waiting for players</p>
+        <p style="color:#1e40af;font-size:0.9em;margin:0;">Need at least 4 checked-in players to create a match.</p>
+      </div>`;
+    } else if (!canCreateMore) {
+      createHTML = `
+        <div style="background:#fef3c7;padding:16px;border-radius:8px;border-left:4px solid #f59e0b;">
+          <p style="color:#92400e;font-weight:700;margin:0 0 8px 0;">🛑 Match limit reached (${currentCount} / ${maxMatches})</p>
+          <p style="color:#78350f;font-size:0.9em;margin:0 0 6px 0;">All ${activeCheckedInCount} checked-in players are already in an active or queued match.</p>
+          <p style="color:#78350f;font-size:0.85em;margin:0;">⏭️ Finish a match to free up a slot. The next round will auto-open with <strong>winner vs winner</strong> and <strong>loser vs loser</strong> pairing.</p>
+        </div>`;
+    } else if (availablePlayers.length < 4) {
+      createHTML = `<p style="color:#f59e0b;font-weight:600;">Need at least 4 available players. Currently: ${availablePlayers.length}.</p>`;
+    } else {
+      createHTML = `
         <div style="background:#f9fafb;padding:12px;border-radius:8px;margin-bottom:12px;">
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
             <label style="font-weight:600;display:flex;gap:6px;align-items:center;">
@@ -1153,9 +1160,9 @@ async function renderAdminTournament() {
             </div>
           </div>
           <button type="button" onclick="doCreateMatch()" style="margin-top:12px;padding:12px 24px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;width:100%;">▶ Create Match</button>
-          <p style="font-size:0.8em;color:#666;margin:8px 0 0 0;text-align:center;">If you pick Queue, the match will auto-start the moment a court is free.</p>
-        </div>
-      `;
+          <p style="font-size:0.8em;color:#666;margin:8px 0 0 0;text-align:center;">${availableSlots} slot${availableSlots === 1 ? '' : 's'} remaining in this round.</p>
+        </div>`;
+    }
 
     const completedHTML = doneMatches.length === 0
       ? '<p style="color:#888;">No completed matches yet.</p>'
@@ -1167,6 +1174,8 @@ async function renderAdminTournament() {
         `).join('');
 
     const checkedInCount = Object.values(checkInMap).filter(c => c.status === 'active').length;
+    const limitColor = canCreateMore ? '#10b981' : '#f59e0b';
+    const limitBg = canCreateMore ? '#ecfdf5' : '#fef3c7';
 
     container.innerHTML = `
       <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:16px;">
@@ -1179,6 +1188,17 @@ async function renderAdminTournament() {
           </div>
         </div>
         <p style="color:#666;font-size:0.9em;margin-bottom:12px;">Tap ✓ Check In for arrivals, ⏸ Mark as Left for departures.</p>
+
+        <div style="background:${limitBg};padding:12px 16px;border-radius:8px;border-left:4px solid ${limitColor};margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <div>
+              <span style="font-weight:700;color:#111;">📊 Match Slots</span>
+              <span style="font-weight:900;font-size:1.3em;color:${limitColor};margin-left:10px;">${currentCount} / ${maxMatches}</span>
+            </div>
+            <span style="font-size:0.85em;color:#555;">${activeCheckedInCount} players ÷ 4 = ${maxMatches} matches${canCreateMore ? ` · ${availableSlots} slot${availableSlots === 1 ? '' : 's'} open` : ' · FULL'}</span>
+          </div>
+        </div>
+
         ${playerListHTML}
       </div>
 
@@ -1189,13 +1209,12 @@ async function renderAdminTournament() {
 
       <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:16px;">
         <h3 style="color:#a78bfa;margin-top:0;">⏳ Up Next — Queue (${queuedMatches.length})</h3>
-        <p style="color:#666;font-size:0.9em;margin-top:0;">These matches will auto-start as soon as a court frees up.</p>
+        <p style="color:#666;font-size:0.9em;margin-top:0;">These matches auto-start when a court frees up.</p>
         ${queueHTML}
       </div>
 
       <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:16px;">
         <h3 style="color:#f59e0b;margin-top:0;">➕ Create New Match</h3>
-        <p style="color:#666;font-size:0.9em;margin-bottom:12px;">Free courts: ${freeCourts.map(c => 'Court ' + c).join(', ') || 'None — use Queue'} · Available players: ${availablePlayers.length}</p>
         ${createHTML}
       </div>
 
@@ -1307,6 +1326,22 @@ window.doCreateMatch = async function () {
   if (new Set(all).size !== 4) { alert("Each player can only appear once."); return; }
 
   try {
+    // Re-validate match limit before creating
+    const [checkInMap, matches] = await Promise.all([
+      loadCheckIns(today),
+      loadMatches(today)
+    ]);
+    const limit = getMaxMatchInfo(checkInMap, matches);
+    if (!limit.canCreateMore) {
+      alert(
+        `🛑 Match limit reached (${limit.currentCount} / ${limit.maxMatches})\n\n` +
+        `All ${limit.activeCheckedInCount} checked-in players are already in a match.\n\n` +
+        `Finish a match first to open a new slot.`
+      );
+      await renderAdminTournament();
+      return;
+    }
+
     await createMatch(today, court, [a1, a2], [b1, b2]);
     await renderAdminTournament();
     await renderLiveBoard();
