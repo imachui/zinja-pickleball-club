@@ -655,24 +655,21 @@ async function cancelOpenPlay() {
 }
 
 // ====================
-// AUTO CLEANUP (runs once per new day)
+// AUTO CLEANUP
 // ====================
 
 async function autoCleanupOldData() {
   const today = getTodayStr();
   let lastCleanup = null;
   try { lastCleanup = localStorage.getItem("zinja_last_cleanup_date"); } catch {}
-
   if (lastCleanup === today) return;
 
   try {
     await supabaseFetch(`/rest/v1/matches?play_date=lt.${today}`, { method: "DELETE" });
     await supabaseFetch(`/rest/v1/check_ins?play_date=lt.${today}`, { method: "DELETE" });
     try { localStorage.setItem("zinja_last_cleanup_date", today); } catch {}
-    console.log("✅ Auto-cleanup complete for " + today + " (removed data before this date)");
-  } catch (error) {
-    console.warn("Auto-cleanup failed:", error);
-  }
+    console.log("✅ Auto-cleanup complete for " + today);
+  } catch (error) { console.warn("Auto-cleanup failed:", error); }
 }
 
 // ====================
@@ -683,14 +680,9 @@ async function loadCheckIns(dateStr) {
   try {
     const rows = await supabaseFetch(`/rest/v1/check_ins?select=player_name,status,is_walkin&play_date=eq.${encodeURIComponent(dateStr)}`);
     const map = {};
-    (rows || []).forEach(r => {
-      map[r.player_name] = { status: r.status, is_walkin: r.is_walkin };
-    });
+    (rows || []).forEach(r => { map[r.player_name] = { status: r.status, is_walkin: r.is_walkin }; });
     return map;
-  } catch (error) {
-    console.warn("Could not load check-ins:", error);
-    return {};
-  }
+  } catch (error) { console.warn("Could not load check-ins:", error); return {}; }
 }
 
 async function addCheckIn(dateStr, playerName, isWalkin = false) {
@@ -719,31 +711,43 @@ async function setPlayerStatus(dateStr, playerName, status) {
 
 async function loadMatches(dateStr) {
   try {
-    const rows = await supabaseFetch(`/rest/v1/matches?play_date=eq.${encodeURIComponent(dateStr)}&order=started_at.desc`);
+    const rows = await supabaseFetch(`/rest/v1/matches?play_date=eq.${encodeURIComponent(dateStr)}&order=created_at.asc`);
     return rows || [];
-  } catch (error) {
-    console.warn("Could not load matches:", error);
-    return [];
-  }
+  } catch (error) { console.warn("Could not load matches:", error); return []; }
 }
 
 async function createMatch(dateStr, court, teamA, teamB) {
+  // court === null or 0 means queue
+  const isQueue = !court || court === 0;
+  const payload = {
+    play_date: dateStr,
+    court: isQueue ? null : court,
+    team_a_1: teamA[0],
+    team_a_2: teamA[1],
+    team_b_1: teamB[0],
+    team_b_2: teamB[1],
+    status: isQueue ? 'queued' : 'active',
+    started_at: isQueue ? null : new Date().toISOString()
+  };
   await supabaseFetch("/rest/v1/matches", {
     method: "POST",
     headers: { Prefer: "return=representation" },
-    body: JSON.stringify({
-      play_date: dateStr,
-      court: court,
-      team_a_1: teamA[0],
-      team_a_2: teamA[1],
-      team_b_1: teamB[0],
-      team_b_2: teamB[1],
-      status: 'active'
-    })
+    body: JSON.stringify(payload)
   });
 }
 
 async function declareWinner(matchId, winningTeam) {
+  const today = getTodayStr();
+  // 1. Get the match to know its court
+  let freedCourt = null;
+  try {
+    const info = await supabaseFetch(`/rest/v1/matches?id=eq.${matchId}&select=court,status`);
+    if (info && info[0]) {
+      if (info[0].status === 'active') freedCourt = info[0].court;
+    }
+  } catch (e) { console.warn("Could not fetch match info:", e); }
+
+  // 2. Mark done
   await supabaseFetch(`/rest/v1/matches?id=eq.${matchId}`, {
     method: "PATCH",
     headers: { Prefer: "return=representation" },
@@ -753,14 +757,45 @@ async function declareWinner(matchId, winningTeam) {
       ended_at: new Date().toISOString()
     })
   });
+
+  // 3. Auto-promote next queued match to freed court
+  if (freedCourt) {
+    await promoteNextFromQueue(today, freedCourt);
+  }
+}
+
+async function promoteNextFromQueue(dateStr, court) {
+  try {
+    const queued = await supabaseFetch(
+      `/rest/v1/matches?play_date=eq.${encodeURIComponent(dateStr)}&status=eq.queued&order=created_at.asc&limit=1`
+    );
+    if (!queued || !queued[0]) return null;
+    await supabaseFetch(`/rest/v1/matches?id=eq.${queued[0].id}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({
+        court: court,
+        status: 'active',
+        started_at: new Date().toISOString()
+      })
+    });
+    return queued[0];
+  } catch (e) { console.warn("Promote from queue failed:", e); return null; }
 }
 
 async function cancelMatch(matchId) {
+  const today = getTodayStr();
+  let freedCourt = null;
+  try {
+    const info = await supabaseFetch(`/rest/v1/matches?id=eq.${matchId}&select=court,status`);
+    if (info && info[0] && info[0].status === 'active') freedCourt = info[0].court;
+  } catch (e) {}
   await supabaseFetch(`/rest/v1/matches?id=eq.${matchId}`, { method: "DELETE" });
+  if (freedCourt) await promoteNextFromQueue(today, freedCourt);
 }
 
 // ====================
-// SMART SUGGEST (Winner vs Winner bias)
+// SMART SUGGEST
 // ====================
 
 function computePlayerStats(playerNames, matches) {
@@ -770,9 +805,7 @@ function computePlayerStats(playerNames, matches) {
   matches.forEach(m => {
     const teamA = [m.team_a_1, m.team_a_2];
     const teamB = [m.team_b_1, m.team_b_2];
-    [...teamA, ...teamB].forEach(n => {
-      if (stats[n]) stats[n].games++;
-    });
+    [...teamA, ...teamB].forEach(n => { if (stats[n]) stats[n].games++; });
     if (m.status === 'done' && m.winning_team) {
       const winners = m.winning_team === 'A' ? teamA : teamB;
       const losers = m.winning_team === 'A' ? teamB : teamA;
@@ -784,9 +817,9 @@ function computePlayerStats(playerNames, matches) {
   return stats;
 }
 
-function getPlayersInActiveMatches(matches) {
+function getPlayersInPendingMatches(matches) {
   const set = new Set();
-  matches.filter(m => m.status === 'active').forEach(m => {
+  matches.filter(m => m.status === 'active' || m.status === 'queued').forEach(m => {
     set.add(m.team_a_1);
     set.add(m.team_a_2);
     set.add(m.team_b_1);
@@ -797,40 +830,34 @@ function getPlayersInActiveMatches(matches) {
 
 function smartSuggest(availablePlayers, matches) {
   if (availablePlayers.length < 4) return null;
-
   const stats = computePlayerStats(availablePlayers, matches);
 
   const sorted = availablePlayers.slice().sort((a, b) => {
     const ga = stats[a].games;
     const gb = stats[b].games;
     if (ga !== gb) return ga - gb;
-
     const wa = stats[a].wins - stats[a].losses;
     const wb = stats[b].wins - stats[b].losses;
     if (wb !== wa) return wb - wa;
-
     return Math.random() - 0.5;
   });
 
   const picked = sorted.slice(0, 4);
-
   picked.sort((a, b) => {
     const wa = stats[a].wins - stats[a].losses;
     const wb = stats[b].wins - stats[b].losses;
     return wb - wa;
   });
 
-  return {
-    teamA: [picked[0], picked[3]],
-    teamB: [picked[1], picked[2]]
-  };
+  return { teamA: [picked[0], picked[3]], teamB: [picked[1], picked[2]] };
 }
 
 // ====================
 // PUBLIC LIVE BOARD
 // ====================
 
-function renderMatchCard(m, isActive) {
+function renderMatchCard(m, mode, queueNumber) {
+  // mode: 'active' | 'queued' | 'done'
   const teamALabel = `${escapeHtml(m.team_a_1)} & ${escapeHtml(m.team_a_2)}`;
   const teamBLabel = `${escapeHtml(m.team_b_1)} & ${escapeHtml(m.team_b_2)}`;
 
@@ -843,7 +870,7 @@ function renderMatchCard(m, isActive) {
   const nameStyleA = bWon ? 'text-decoration:line-through;opacity:0.55;' : '';
   const nameStyleB = aWon ? 'text-decoration:line-through;opacity:0.55;' : '';
 
-  const winButtons = isActive ? `
+  const winButtons = mode === 'active' ? `
     <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
       <button type="button" onclick="reportMatchWin(${m.id}, 'A')"
         style="flex:1;min-width:130px;padding:12px 14px;border:2px solid #10b981;border-radius:8px;background:rgba(16,185,129,0.25);color:#fff;font-weight:700;font-size:0.9em;cursor:pointer;">
@@ -860,11 +887,30 @@ function renderMatchCard(m, isActive) {
     ? `<div style="margin-top:10px;padding:8px 12px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border-radius:8px;text-align:center;font-weight:700;font-size:0.9em;">🏆 Team ${m.winning_team} Wins!</div>`
     : '';
 
+  // Style per mode
+  let bg, borderColor, badge, timeLabel;
+  if (mode === 'active') {
+    bg = 'linear-gradient(135deg,#064e3b,#065f46)';
+    borderColor = '#10b981';
+    badge = '🟢 NOW PLAYING';
+    timeLabel = `🏓 Court ${m.court} · 🕐 ${formatClockTime(m.started_at)}`;
+  } else if (mode === 'queued') {
+    bg = 'linear-gradient(135deg,#4c1d95,#5b21b6)';
+    borderColor = '#a78bfa';
+    badge = `⏳ UP NEXT #${queueNumber}`;
+    timeLabel = '📋 Waiting for a court';
+  } else {
+    bg = 'linear-gradient(135deg,#1e293b,#0f172a)';
+    borderColor = '#7c3aed';
+    badge = '✅ COMPLETED';
+    timeLabel = `🏓 Court ${m.court} · 🕐 ${formatClockTime(m.started_at)}${m.ended_at ? ' - ' + formatClockTime(m.ended_at) : ''}`;
+  }
+
   return `
-    <div style="background:${isActive ? 'linear-gradient(135deg,#064e3b,#065f46)' : 'linear-gradient(135deg,#1e293b,#0f172a)'};border-radius:12px;padding:16px;margin-bottom:12px;border-left:4px solid ${isActive ? '#10b981' : '#7c3aed'};color:#fff;">
+    <div style="background:${bg};border-radius:12px;padding:16px;margin-bottom:12px;border-left:4px solid ${borderColor};color:#fff;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px;">
-        <span style="font-size:0.85em;font-weight:700;">${isActive ? '🟢 NOW PLAYING' : '✅ COMPLETED'}</span>
-        <span style="font-size:0.75em;opacity:0.9;">🏓 Court ${m.court} · 🕐 ${formatClockTime(m.started_at)}${m.ended_at ? ' - ' + formatClockTime(m.ended_at) : ''}</span>
+        <span style="font-size:0.85em;font-weight:700;">${badge}</span>
+        <span style="font-size:0.75em;opacity:0.9;">${timeLabel}</span>
       </div>
       <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(255,255,255,0.1);border-radius:8px;margin:4px 0;flex-wrap:wrap;${nameStyleA}">
         <strong style="color:#10b981;">Team A:</strong>
@@ -894,15 +940,17 @@ async function renderLiveBoard() {
     ]);
 
     const activeMatches = matches.filter(m => m.status === 'active');
-    const doneMatches = matches.filter(m => m.status === 'done');
-    const playersInActive = getPlayersInActiveMatches(matches);
+    const queuedMatches = matches.filter(m => m.status === 'queued');
+    const doneMatches = matches.filter(m => m.status === 'done').reverse();
 
+    const playersInPending = getPlayersInPendingMatches(matches);
     const waitingPlayers = Object.keys(checkInMap).filter(n =>
-      checkInMap[n].status === 'active' && !playersInActive.has(n)
+      checkInMap[n].status === 'active' && !playersInPending.has(n)
     );
 
     let html = '';
 
+    // Active matches
     if (activeMatches.length === 0) {
       html += `<div style="text-align:center;padding:24px;background:rgba(124,58,237,0.1);border-radius:12px;border:1px solid rgba(124,58,237,0.3);margin-bottom:16px;">
         <p style="font-size:1.5em;margin:8px 0;">⏳</p>
@@ -910,19 +958,28 @@ async function renderLiveBoard() {
         <p style="font-size:0.9em;opacity:0.75;margin:4px 0;">The admin will start games soon. Stay tuned!</p>
       </div>`;
     } else {
-      activeMatches.forEach(m => { html += renderMatchCard(m, true); });
+      activeMatches.forEach(m => { html += renderMatchCard(m, 'active'); });
     }
 
+    // Queue
+    if (queuedMatches.length > 0) {
+      html += `<h3 style="color:#a78bfa;margin:24px 0 8px 0;text-align:center;">⏳ Up Next — Queue (${queuedMatches.length})</h3>`;
+      html += `<p style="text-align:center;font-size:0.85em;opacity:0.75;margin:0 0 12px 0;">These matches will auto-start as soon as a court frees up.</p>`;
+      queuedMatches.forEach((m, idx) => { html += renderMatchCard(m, 'queued', idx + 1); });
+    }
+
+    // Waiting pool
     html += `
       <div style="margin-top:20px;padding:16px;background:rgba(245,158,11,0.1);border-radius:12px;border-left:4px solid #f59e0b;color:#fff;">
-        <p style="font-weight:700;margin:0 0 8px 0;">⏳ Waiting Pool (${waitingPlayers.length})</p>
+        <p style="font-weight:700;margin:0 0 8px 0;">🪑 Waiting Pool (${waitingPlayers.length})</p>
         <p style="font-size:0.9em;opacity:0.85;margin:0;line-height:1.6;">${waitingPlayers.length > 0 ? waitingPlayers.map(escapeHtml).join(' · ') : 'No one waiting right now.'}</p>
       </div>
     `;
 
+    // Completed
     if (doneMatches.length > 0) {
       html += `<h3 style="color:#a78bfa;margin:24px 0 8px 0;text-align:center;">✅ Completed Today (${doneMatches.length})</h3>`;
-      doneMatches.forEach(m => { html += renderMatchCard(m, false); });
+      doneMatches.forEach(m => { html += renderMatchCard(m, 'done'); });
     }
 
     container.innerHTML = html;
@@ -964,36 +1021,38 @@ async function renderAdminTournament() {
     const allPlayers = [...registeredPlayers, ...walkInPlayers];
 
     const activeMatches = matches.filter(m => m.status === 'active');
+    const queuedMatches = matches.filter(m => m.status === 'queued');
     const doneMatches = matches.filter(m => m.status === 'done');
-    const playersInActive = getPlayersInActiveMatches(matches);
 
+    const playersInPending = getPlayersInPendingMatches(matches);
     const availablePlayers = allPlayers.filter(n =>
-      checkInMap[n] && checkInMap[n].status === 'active' && !playersInActive.has(n)
+      checkInMap[n] && checkInMap[n].status === 'active' && !playersInPending.has(n)
     );
 
     const stats = computePlayerStats(allPlayers, matches);
     const courtsInUse = new Set(activeMatches.map(m => m.court));
     const freeCourts = [1, 2].filter(c => !courtsInUse.has(c));
 
+    // Player list
     const playerListHTML = allPlayers.length === 0
       ? '<p style="color:#888;">No players yet today. Tap "➕ Add Walk-In" to add one.</p>'
       : allPlayers.map(name => {
           const ci = checkInMap[name];
-          const inActive = playersInActive.has(name);
+          const inPending = playersInPending.has(name);
           const s = stats[name] || { games: 0, wins: 0, losses: 0 };
           const recStr = s.games > 0 ? `${s.wins}-${s.losses}` : '—';
           const safeName = escapeHtml(name);
 
           let badge = '';
           let bg = '#f9fafb';
-          if (inActive) {
-            badge = '<span style="background:#10b981;color:#fff;padding:3px 10px;border-radius:12px;font-size:0.7em;font-weight:700;">PLAYING</span>';
+          if (inPending) {
+            badge = '<span style="background:#10b981;color:#fff;padding:3px 10px;border-radius:12px;font-size:0.7em;font-weight:700;">IN MATCH</span>';
             bg = '#ecfdf5';
           } else if (ci && ci.status === 'left') {
             badge = '<span style="background:#dc2626;color:#fff;padding:3px 10px;border-radius:12px;font-size:0.7em;font-weight:700;">LEFT</span>';
             bg = '#fef2f2';
           } else if (ci && ci.status === 'active') {
-            badge = '<span style="background:#059669;color:#fff;padding:3px 10px;border-radius:12px;font-size:0.7em;font-weight:700;">ACTIVE</span>';
+            badge = '<span style="background:#059669;color:#fff;padding:3px 10px;border-radius:12px;font-size:0.7em;font-weight:700;">AVAILABLE</span>';
             bg = '#f0fdf4';
           } else {
             badge = '<span style="background:#9ca3af;color:#fff;padding:3px 10px;border-radius:12px;font-size:0.7em;font-weight:700;">NOT CHECKED IN</span>';
@@ -1005,8 +1064,8 @@ async function renderAdminTournament() {
           let actions = '';
           if (!ci) {
             actions = `<button type="button" onclick="toggleCheckIn('${safeName}', false)" style="padding:6px 14px;background:#10b981;color:#fff;border:none;border-radius:6px;font-size:0.8em;font-weight:600;cursor:pointer;">✓ Check In</button>`;
-          } else if (inActive) {
-            actions = `<span style="font-size:0.75em;color:#666;font-style:italic;">Currently playing</span>`;
+          } else if (inPending) {
+            actions = `<span style="font-size:0.75em;color:#666;font-style:italic;">In active/queued match</span>`;
           } else if (ci.status === 'left') {
             actions = `<button type="button" onclick="togglePlayerLeft('${safeName}', false)" style="padding:6px 12px;background:#6b7280;color:#fff;border:none;border-radius:6px;font-size:0.8em;font-weight:600;cursor:pointer;">↺ Back Active</button>
               <button type="button" onclick="toggleCheckIn('${safeName}', true)" style="padding:6px 12px;background:#dc2626;color:#fff;border:none;border-radius:6px;font-size:0.8em;font-weight:600;cursor:pointer;margin-left:4px;">✕ Remove</button>`;
@@ -1025,6 +1084,7 @@ async function renderAdminTournament() {
           </div>`;
         }).join('');
 
+    // Active matches admin
     const activeHTML = activeMatches.length === 0
       ? '<p style="color:#888;">No active matches.</p>'
       : activeMatches.map(m => `
@@ -1043,10 +1103,31 @@ async function renderAdminTournament() {
           </div>
         `).join('');
 
+    // Queue admin
+    const queueHTML = queuedMatches.length === 0
+      ? '<p style="color:#888;">No matches in queue.</p>'
+      : queuedMatches.map((m, idx) => `
+          <div style="padding:12px;background:#faf5ff;border:1px solid #a78bfa;border-radius:8px;margin-bottom:8px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
+              <strong style="color:#7c3aed;">⏳ Queue #${idx + 1}</strong>
+              <small style="color:#666;">Auto-starts when a court frees up</small>
+            </div>
+            <p style="margin:4px 0;font-size:0.9em;"><strong>A:</strong> ${escapeHtml(m.team_a_1)} & ${escapeHtml(m.team_a_2)}</p>
+            <p style="margin:4px 0;font-size:0.9em;"><strong>B:</strong> ${escapeHtml(m.team_b_1)} & ${escapeHtml(m.team_b_2)}</p>
+            <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
+              <button type="button" onclick="adminCancelMatch(${m.id})" style="padding:6px 12px;background:#dc2626;color:#fff;border:none;border-radius:6px;font-size:0.8em;font-weight:600;cursor:pointer;">✕ Remove from Queue</button>
+            </div>
+          </div>
+        `).join('');
+
+    // Create form — with Court dropdown including Queue option
     const playerOptions = availablePlayers.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
-    const createHTML = freeCourts.length === 0
-      ? '<p style="color:#f59e0b;font-weight:600;">Both courts are occupied. End a match to start a new one.</p>'
-      : availablePlayers.length < 4
+    const courtOptionsHTML = `
+      <option value="0">📋 Queue — auto-assign when a court frees up</option>
+      ${freeCourts.map(c => `<option value="${c}">🏓 Court ${c} — start now</option>`).join('')}
+    `;
+
+    const createHTML = availablePlayers.length < 4
       ? `<p style="color:#f59e0b;font-weight:600;">Need at least 4 available players. Currently: ${availablePlayers.length}.</p>`
       : `
         <div style="background:#f9fafb;padding:12px;border-radius:8px;margin-bottom:12px;">
@@ -1054,7 +1135,7 @@ async function renderAdminTournament() {
             <label style="font-weight:600;display:flex;gap:6px;align-items:center;">
               Court:
               <select id="newMatchCourt" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd;">
-                ${freeCourts.map(c => `<option value="${c}">Court ${c}</option>`).join('')}
+                ${courtOptionsHTML}
               </select>
             </label>
             <button type="button" onclick="doSmartSuggest()" style="padding:6px 14px;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:0.85em;">✨ Smart Suggest</button>
@@ -1071,7 +1152,8 @@ async function renderAdminTournament() {
               <select id="teamBP2" style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;"><option value="">— Player 2 —</option>${playerOptions}</select>
             </div>
           </div>
-          <button type="button" onclick="doCreateMatch()" style="margin-top:12px;padding:12px 24px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;width:100%;">▶ Start Match</button>
+          <button type="button" onclick="doCreateMatch()" style="margin-top:12px;padding:12px 24px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;width:100%;">▶ Create Match</button>
+          <p style="font-size:0.8em;color:#666;margin:8px 0 0 0;text-align:center;">If you pick Queue, the match will auto-start the moment a court is free.</p>
         </div>
       `;
 
@@ -1096,7 +1178,7 @@ async function renderAdminTournament() {
             <button type="button" onclick="doClearOldData()" style="padding:8px 16px;background:#6b7280;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:0.85em;">🧹 Clean Old Data</button>
           </div>
         </div>
-        <p style="color:#666;font-size:0.9em;margin-bottom:12px;">Tap ✓ Check In for arrivals, ⏸ Mark as Left for departures. Walk-ins are added automatically as checked-in.</p>
+        <p style="color:#666;font-size:0.9em;margin-bottom:12px;">Tap ✓ Check In for arrivals, ⏸ Mark as Left for departures.</p>
         ${playerListHTML}
       </div>
 
@@ -1106,8 +1188,14 @@ async function renderAdminTournament() {
       </div>
 
       <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:16px;">
+        <h3 style="color:#a78bfa;margin-top:0;">⏳ Up Next — Queue (${queuedMatches.length})</h3>
+        <p style="color:#666;font-size:0.9em;margin-top:0;">These matches will auto-start as soon as a court frees up.</p>
+        ${queueHTML}
+      </div>
+
+      <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:16px;">
         <h3 style="color:#f59e0b;margin-top:0;">➕ Create New Match</h3>
-        <p style="color:#666;font-size:0.9em;margin-bottom:12px;">Free courts: ${freeCourts.map(c => 'Court ' + c).join(', ') || 'None'} · Available players: ${availablePlayers.length}</p>
+        <p style="color:#666;font-size:0.9em;margin-bottom:12px;">Free courts: ${freeCourts.map(c => 'Court ' + c).join(', ') || 'None — use Queue'} · Available players: ${availablePlayers.length}</p>
         ${createHTML}
       </div>
 
@@ -1125,15 +1213,10 @@ async function renderAdminTournament() {
 window.toggleCheckIn = async function (playerName, isCurrentlyIn) {
   const today = getTodayStr();
   try {
-    if (isCurrentlyIn) {
-      await removeCheckIn(today, playerName);
-    } else {
-      await addCheckIn(today, playerName, false);
-    }
+    if (isCurrentlyIn) await removeCheckIn(today, playerName);
+    else await addCheckIn(today, playerName, false);
     await renderAdminTournament();
-  } catch (error) {
-    alert("Failed to update check-in: " + error.message);
-  }
+  } catch (error) { alert("Failed to update check-in: " + error.message); }
 };
 
 window.togglePlayerLeft = async function (playerName, markLeft) {
@@ -1143,9 +1226,7 @@ window.togglePlayerLeft = async function (playerName, markLeft) {
   try {
     await setPlayerStatus(today, playerName, markLeft ? 'left' : 'active');
     await renderAdminTournament();
-  } catch (error) {
-    alert("Failed to update status: " + error.message);
-  }
+  } catch (error) { alert("Failed to update status: " + error.message); }
 };
 
 window.doAddWalkIn = async function () {
@@ -1153,61 +1234,38 @@ window.doAddWalkIn = async function () {
   const name = prompt("Enter walk-in player's full name:");
   if (!name || !name.trim()) return;
   const trimmed = name.trim();
-
   try {
     const checkInMap = await loadCheckIns(today);
-    if (checkInMap[trimmed]) {
-      alert(`"${trimmed}" is already on today's list.`);
-      return;
-    }
+    if (checkInMap[trimmed]) { alert(`"${trimmed}" is already on today's list.`); return; }
     await addCheckIn(today, trimmed, true);
     await renderAdminTournament();
-  } catch (error) {
-    alert("Failed to add walk-in: " + error.message);
-  }
+  } catch (error) { alert("Failed to add walk-in: " + error.message); }
 };
 
 window.doResetToday = async function () {
   const today = getTodayStr();
-  const ok = confirm(
-    "🗑 Reset Today's Session\n\n" +
-    "This will permanently delete ALL matches and check-ins for TODAY (" + today + ").\n\n" +
-    "Open Play registrations are NOT affected.\n\n" +
-    "Use this to start a fresh session tonight.\n\n" +
-    "Continue?"
-  );
-  if (!ok) return;
+  if (!confirm(`🗑 Reset Today's Session\n\nThis will delete ALL matches and check-ins for TODAY (${today}).\n\nContinue?`)) return;
   try {
     await supabaseFetch(`/rest/v1/matches?play_date=eq.${today}`, { method: "DELETE" });
     await supabaseFetch(`/rest/v1/check_ins?play_date=eq.${today}`, { method: "DELETE" });
     try { localStorage.removeItem("zinja_last_cleanup_date"); } catch {}
-    alert("✅ Today's session has been reset. Ready for a fresh start!");
+    alert("✅ Today's session has been reset.");
     await renderAdminTournament();
     await renderLiveBoard();
-  } catch (error) {
-    alert("❌ Reset failed: " + error.message);
-  }
+  } catch (error) { alert("❌ Reset failed: " + error.message); }
 };
 
 window.doClearOldData = async function () {
   const today = getTodayStr();
-  const ok = confirm(
-    "🧹 Clean Old Data\n\n" +
-    "This will permanently delete ALL matches and check-ins from PREVIOUS days.\n\n" +
-    "Today's data (" + today + ") will NOT be deleted.\n\n" +
-    "Continue?"
-  );
-  if (!ok) return;
+  if (!confirm(`🧹 Clean Old Data\n\nDeletes ALL matches and check-ins from PREVIOUS days.\n\nToday (${today}) is safe. Continue?`)) return;
   try {
     await supabaseFetch(`/rest/v1/matches?play_date=lt.${today}`, { method: "DELETE" });
     await supabaseFetch(`/rest/v1/check_ins?play_date=lt.${today}`, { method: "DELETE" });
     try { localStorage.setItem("zinja_last_cleanup_date", today); } catch {}
-    alert("✅ Old data cleaned up successfully!");
+    alert("✅ Old data cleaned.");
     await renderAdminTournament();
     await renderLiveBoard();
-  } catch (error) {
-    alert("❌ Cleanup failed: " + error.message);
-  }
+  } catch (error) { alert("❌ Cleanup failed: " + error.message); }
 };
 
 window.doSmartSuggest = async function () {
@@ -1218,21 +1276,13 @@ window.doSmartSuggest = async function () {
       loadCheckIns(today),
       loadMatches(today)
     ]);
-
     const registeredPlayers = (regs || []).map(r => r.player_name);
     const walkInPlayers = Object.keys(checkInMap).filter(n => checkInMap[n].is_walkin && !registeredPlayers.includes(n));
     const allPlayers = [...registeredPlayers, ...walkInPlayers];
-    const playersInActive = getPlayersInActiveMatches(matches);
+    const playersInPending = getPlayersInPendingMatches(matches);
+    const available = allPlayers.filter(n => checkInMap[n] && checkInMap[n].status === 'active' && !playersInPending.has(n));
 
-    const available = allPlayers.filter(n =>
-      checkInMap[n] && checkInMap[n].status === 'active' && !playersInActive.has(n)
-    );
-
-    if (available.length < 4) {
-      alert(`Need at least 4 available players. Currently: ${available.length}`);
-      return;
-    }
-
+    if (available.length < 4) { alert(`Need at least 4 available players. Currently: ${available.length}`); return; }
     const suggestion = smartSuggest(available, matches);
     if (!suggestion) { alert("Could not generate suggestion."); return; }
 
@@ -1240,11 +1290,8 @@ window.doSmartSuggest = async function () {
     document.getElementById('teamAP2').value = suggestion.teamA[1];
     document.getElementById('teamBP1').value = suggestion.teamB[0];
     document.getElementById('teamBP2').value = suggestion.teamB[1];
-
     alert(`✨ Smart Suggest applied!\n\nTeam A: ${suggestion.teamA[0]} & ${suggestion.teamA[1]}\nTeam B: ${suggestion.teamB[0]} & ${suggestion.teamB[1]}`);
-  } catch (error) {
-    alert("Suggest failed: " + error.message);
-  }
+  } catch (error) { alert("Suggest failed: " + error.message); }
 };
 
 window.doCreateMatch = async function () {
@@ -1255,32 +1302,24 @@ window.doCreateMatch = async function () {
   const b1 = document.getElementById('teamBP1')?.value;
   const b2 = document.getElementById('teamBP2')?.value;
 
-  if (!court || !a1 || !a2 || !b1 || !b2) {
-    alert("Please select Court and all 4 players."); return;
-  }
+  if (!a1 || !a2 || !b1 || !b2) { alert("Please select all 4 players."); return; }
   const all = [a1, a2, b1, b2];
-  if (new Set(all).size !== 4) {
-    alert("Each player can only appear once. Please fix duplicates."); return;
-  }
+  if (new Set(all).size !== 4) { alert("Each player can only appear once."); return; }
 
   try {
     await createMatch(today, court, [a1, a2], [b1, b2]);
     await renderAdminTournament();
     await renderLiveBoard();
-  } catch (error) {
-    alert("Failed to create match: " + error.message);
-  }
+  } catch (error) { alert("Failed to create match: " + error.message); }
 };
 
 window.adminDeclareWinner = async function (matchId, team) {
-  if (!confirm(`Declare Team ${team} as winner?`)) return;
+  if (!confirm(`Declare Team ${team} as winner?\n\nIf a court frees up, the next queued match will auto-start.`)) return;
   try {
     await declareWinner(matchId, team);
     await renderAdminTournament();
     await renderLiveBoard();
-  } catch (error) {
-    alert("Failed: " + error.message);
-  }
+  } catch (error) { alert("Failed: " + error.message); }
 };
 
 window.adminCancelMatch = async function (matchId) {
@@ -1289,9 +1328,7 @@ window.adminCancelMatch = async function (matchId) {
     await cancelMatch(matchId);
     await renderAdminTournament();
     await renderLiveBoard();
-  } catch (error) {
-    alert("Failed: " + error.message);
-  }
+  } catch (error) { alert("Failed: " + error.message); }
 };
 
 // ====================
@@ -1448,10 +1485,7 @@ function renderAdminContent() {
   const container = document.getElementById('adminContent');
   if (!container) return;
 
-  if (currentAdminTab === 'tournament') {
-    renderAdminTournament();
-    return;
-  }
+  if (currentAdminTab === 'tournament') { renderAdminTournament(); return; }
 
   let html = '';
   if (currentAdminTab === 'bookings') {
@@ -1529,9 +1563,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   loadOpenPlay();
   updateLiveClosureStatus();
 
-  // 🔥 Auto-cleanup: removes all data older than today (runs once per new day)
   await autoCleanupOldData();
-
   renderLiveBoard();
 
   const refreshBookingsBtn = document.getElementById("refreshBookingsBtn");
