@@ -9,7 +9,6 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
       font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-      /* 🎨 Dark navy matching ZINJA logo */
       background: linear-gradient(180deg, #0a1a3a 0%, #0f1f4a 30%, #1a0b3d 70%, #0a1a3a 100%);
       background-attachment: fixed;
       color: #fff;
@@ -152,7 +151,7 @@
     .stat-card .num { font-size: 1.15em; font-weight: 900; line-height: 1.1; }
     .stat-card .lbl { font-size: 0.78em; opacity: 0.9; margin-top: 3px; }
 
-    /* ==================== SECTION WRAPS (Dark now) ==================== */
+    /* ==================== SECTION WRAPS ==================== */
     .features-wrap { padding: 30px 16px 20px 16px; }
     .features-grid {
       display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
@@ -239,8 +238,21 @@
       border-radius: 14px; padding: 20px; margin-bottom: 16px;
       border: 1.5px solid #fbcfe8;
       box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+      color: #4b5563;
     }
     .card h3 { color: #831843; }
+
+    /* ============================================================
+       🎯 TEXT VISIBILITY FIX — lahat ng text sa pink cards
+       ============================================================ */
+    .card strong, .card b { color: #831843; }
+    .card .open-play-item strong { color: #831843; font-weight: 800; }
+    .card .booking-item strong { color: #831843; font-weight: 800; }
+    .card .date-group h4 { color: #7c3aed !important; }
+    .card .date-group h4 span { color: #7c3aed !important; }
+    .card .open-play-item div[style*="color:#666"] { color: #6b7280 !important; }
+    .card .booking-item div[style*="color:#666"] { color: #6b7280 !important; }
+    .card span[style*="color:#666"] { color: #6b7280 !important; }
 
     input, select, textarea {
       width: 100%; padding: 12px 14px;
@@ -534,11 +546,11 @@
           <div id="priceDisplay" style="display:none; margin:12px 0; padding:14px 18px; background:linear-gradient(135deg,#7c3aed,#06b6d4); border-radius:12px; color:#fff;">
             <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
               <span style="opacity:0.9;">📊 Rate per hour</span>
-              <strong id="ratePerHour">₱0</strong>
+              <strong id="ratePerHour" style="color:#fff;">₱0</strong>
             </div>
             <div style="display:flex; justify-content:space-between; padding-top:8px; border-top:1px solid rgba(255,255,255,0.3);">
               <span style="font-weight:600;">💰 TOTAL</span>
-              <strong id="totalPrice" style="font-size:1.3em;">₱0</strong>
+              <strong id="totalPrice" style="font-size:1.3em; color:#fff;">₱0</strong>
             </div>
             <div id="rateNote" style="font-size:0.8em; opacity:0.85; margin-top:6px; text-align:right;"></div>
           </div>
@@ -609,7 +621,7 @@
         <button type="button" id="refreshOpenPlayBtn" class="btn alt">🔄 Refresh List</button>
       </div>
       <div class="card">
-        <h3>Registered Players</h3>
+        <h3 style="margin-top:0;">Registered Players</h3>
         <div id="openPlayList"></div>
       </div>
     </div>
@@ -748,7 +760,7 @@
     © <span id="year"></span> ZINJA Pickleball Club · Malusay, Guihulngan City
   </footer>
 
-  <script src="zinja-app.js?v=43"></script>
+  <script src="zinja-app.js?v=44"></script>
   <script>
     document.getElementById('year').textContent = new Date().getFullYear();
 
