@@ -678,7 +678,7 @@ async function cancelOpenPlay() {
     }
   } catch (error) { showResult(result, `Cancellation failed. ${error.message || "Please try again."}`, false); }
 }// ====================
-// AUTO MATCH SYSTEM (MIXED MODE)
+// AUTO MATCH SYSTEM (MIXED MODE) + WIN/LOSE
 // ====================
 
 function seededShuffle(array, seed) {
@@ -696,15 +696,58 @@ function seededShuffle(array, seed) {
   return arr;
 }
 
+function matchKey(dateStr, court, startTime) {
+  return `${dateStr}|${court}|${startTime}`;
+}
+
+async function loadMatchResults(dateStr) {
+  try {
+    const rows = await supabaseFetch(`/rest/v1/match_results?select=court,start_time,winning_team&play_date=eq.${encodeURIComponent(dateStr)}`);
+    const map = {};
+    (rows || []).forEach(r => {
+      map[matchKey(dateStr, r.court, r.start_time)] = r.winning_team;
+    });
+    return map;
+  } catch (error) {
+    console.warn("Could not load match results:", error);
+    return {};
+  }
+}
+
+async function saveMatchResult(playDate, court, startTime, winningTeam) {
+  const filter = `play_date=eq.${encodeURIComponent(playDate)}&court=eq.${court}&start_time=eq.${encodeURIComponent(startTime)}`;
+  try {
+    await supabaseFetch(`/rest/v1/match_results?${filter}`, { method: "DELETE" });
+  } catch (e) { /* ignore if none existed */ }
+  await supabaseFetch("/rest/v1/match_results", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({
+      play_date: playDate,
+      court: court,
+      start_time: startTime,
+      winning_team: winningTeam
+    })
+  });
+}
+
+// Global function so onclick handlers can find it
+window.reportWin = async function (playDate, court, startTime, winningTeam) {
+  const teamLabel = winningTeam === 'A' ? 'Team A' : 'Team B';
+  if (!confirm(`🏆 Confirm: ${teamLabel} won this match?`)) return;
+  try {
+    await saveMatchResult(playDate, court, startTime, winningTeam);
+    await loadAutoMatchups(playDate);
+  } catch (error) {
+    alert("Failed to save result: " + error.message);
+  }
+};
+
 function generateAutoSchedule(players, startTime, availableCourts) {
   if (!players || players.length < 4 || !availableCourts || availableCourts.length === 0) return [];
 
   const numCourts = availableCourts.length;
   const totalPlayers = players.length;
-
-  console.log('=== MATCHUP DEBUG ===');
-  console.log('Total players:', totalPlayers);
-  console.log('Mode: MIXED (all together)');
 
   const sessionStartMin = timeToMinutes(SESSION_START_TIME);
   const sessionEndMin = 24 * 60;
@@ -713,10 +756,6 @@ function generateAutoSchedule(players, startTime, availableCourts) {
   const maxMatchesByTime = totalWaves * numCourts;
   const maxMatchesByGames = Math.floor((totalPlayers * GAMES_PER_PLAYER) / 4);
   const maxMatches = Math.min(maxMatchesByTime, maxMatchesByGames);
-
-  console.log(`Max by time: ${maxMatchesByTime}`);
-  console.log(`Max by games: ${maxMatchesByGames}`);
-  console.log(`Actual: ${maxMatches}`);
 
   const allMatches = [];
   let round = 0;
@@ -761,9 +800,10 @@ function generateAutoSchedule(players, startTime, availableCourts) {
   return schedule;
 }
 
-function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts) {
+function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts, matchResults) {
   const container = document.getElementById("matchupsContainer");
   if (!container) return;
+  matchResults = matchResults || {};
 
   if (schedule.length === 0) {
     container.innerHTML = `<p style="text-align:center;color:#f59e0b;">⚠️ No matchups for ${formatDate(dateStr)}. Need at least 4 players.</p>`;
@@ -799,9 +839,6 @@ function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts) {
   const lastMatch = visibleSchedule[visibleSchedule.length - 1];
   const sessionEnd = lastMatch ? formatTime12(lastMatch.endTime) : "N/A";
 
-  const totalPlayerSlots = visibleSchedule.length * 4;
-  const gamesPerPlayer = Math.round(totalPlayerSlots / playerCount);
-
   const completedCount = isBeforeSession ? 0 : schedule.length - visibleSchedule.length;
 
   let countdownBanner = '';
@@ -826,9 +863,10 @@ function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts) {
       <p style="font-size: 1.1em; margin: 4px 0;">📅 <strong>${formatDate(dateStr)}</strong></p>
       <p style="font-size: 0.95em; margin: 4px 0; opacity: 0.9;">👥 ${playerCount} players · ${courtsLabel}</p>
       <p style="font-size: 0.95em; margin: 4px 0; opacity: 0.9;">🏓 ${visibleSchedule.length} ${isBeforeSession ? 'scheduled' : 'matches'} · 🕐 End: <strong>${sessionEnd}</strong></p>
-      <p style="font-size: 0.85em; margin: 4px 0; opacity: 0.75;">~${gamesPerPlayer} games per player · 20 min/match to 11 points</p>
+      <p style="font-size: 0.85em; margin: 4px 0; opacity: 0.75;">20 min per match · Target: 11 points</p>
       <p style="font-size: 0.85em; margin: 8px 0 0 0; opacity: 0.85;">🎲 Mixed Mode — All players together</p>
       ${completedCount > 0 ? `<p style="font-size: 0.8em; margin: 8px 0 0 0; opacity: 0.6;">✅ ${completedCount} match${completedCount === 1 ? '' : 'es'} completed (auto-hidden)</p>` : ''}
+      <p style="font-size: 0.8em; margin: 6px 0 0 0; opacity: 0.6;">🏆 After your match, tap the winning team below</p>
     </div>
     ${countdownBanner}
   `;
@@ -847,10 +885,36 @@ function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts) {
       else if (isNext) { cls += " up-next"; badge = "🟡 UP NEXT"; }
     }
 
-    const subA0 = m.teamA[0].isSubstitute ? ' 🔄' : '';
-    const subA1 = m.teamA[1].isSubstitute ? ' 🔄' : '';
-    const subB0 = m.teamB[0].isSubstitute ? ' 🔄' : '';
-    const subB1 = m.teamB[1].isSubstitute ? ' 🔄' : '';
+    const key = matchKey(dateStr, m.court, m.startTime);
+    const result = matchResults[key]; // 'A' | 'B' | undefined
+    const aWon = result === 'A';
+    const bWon = result === 'B';
+    const hasResult = !!result;
+
+    const markA = aWon ? ' 🏆' : (bWon ? ' ❌' : '');
+    const markB = bWon ? ' 🏆' : (aWon ? ' ❌' : '');
+
+    const nameStyleA = bWon ? 'text-decoration: line-through; opacity: 0.55;' : '';
+    const nameStyleB = aWon ? 'text-decoration: line-through; opacity: 0.55;' : '';
+
+    const resultBanner = hasResult
+      ? `<div style="margin-top: 10px; padding: 8px 12px; background: linear-gradient(135deg, #10b981, #059669); color: #fff; border-radius: 8px; text-align: center; font-weight: 700; font-size: 0.9em;">🏆 Team ${result} Wins!</div>`
+      : '';
+
+    const actionsHtml = `
+      <div style="display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap;">
+        <button type="button"
+          onclick="reportWin('${dateStr}', ${m.court}, '${m.startTime}', 'A')"
+          style="flex: 1; min-width: 130px; padding: 10px 14px; border: 2px solid ${aWon ? '#10b981' : 'rgba(255,255,255,0.15)'}; border-radius: 8px; background: ${aWon ? '#10b981' : 'rgba(16,185,129,0.2)'}; color: #fff; font-weight: 700; font-size: 0.85em; cursor: pointer;">
+          ${aWon ? '✓ ' : '🏆 '}Team A Wins
+        </button>
+        <button type="button"
+          onclick="reportWin('${dateStr}', ${m.court}, '${m.startTime}', 'B')"
+          style="flex: 1; min-width: 130px; padding: 10px 14px; border: 2px solid ${bWon ? '#f59e0b' : 'rgba(255,255,255,0.15)'}; border-radius: 8px; background: ${bWon ? '#f59e0b' : 'rgba(245,158,11,0.2)'}; color: #fff; font-weight: 700; font-size: 0.85em; cursor: pointer;">
+          ${bWon ? '✓ ' : '🏆 '}Team B Wins
+        </button>
+      </div>
+    `;
 
     html += `
       <div class="${cls}">
@@ -861,24 +925,28 @@ function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts) {
         <div style="margin-bottom: 8px;">
           <span style="display: inline-block; padding: 3px 12px; background: #7c3aed33; border: 1px solid #7c3aed; border-radius: 20px; font-size: 0.75em; font-weight: 700; color: #fff;">🎲 Mixed · Round ${m.round}</span>
         </div>
-        <div class="team-block">
+        <div class="team-block" style="${nameStyleA}">
           <strong style="color: #10b981;">Team A:</strong>
-          <span>${escapeHtml(m.teamA[0].player_name)}${subA0}</span>
+          <span>${escapeHtml(m.teamA[0].player_name)}</span>
           <span style="opacity: 0.5;">&</span>
-          <span>${escapeHtml(m.teamA[1].player_name)}${subA1}</span>
+          <span>${escapeHtml(m.teamA[1].player_name)}</span>
+          <span style="margin-left: auto;">${markA}</span>
         </div>
         <div class="vs-badge">— VS — (to 11 pts)</div>
-        <div class="team-block">
+        <div class="team-block" style="${nameStyleB}">
           <strong style="color: #f59e0b;">Team B:</strong>
-          <span>${escapeHtml(m.teamB[0].player_name)}${subB0}</span>
+          <span>${escapeHtml(m.teamB[0].player_name)}</span>
           <span style="opacity: 0.5;">&</span>
-          <span>${escapeHtml(m.teamB[1].player_name)}${subB1}</span>
+          <span>${escapeHtml(m.teamB[1].player_name)}</span>
+          <span style="margin-left: auto;">${markB}</span>
         </div>
+        ${resultBanner}
+        ${actionsHtml}
       </div>
     `;
   });
 
-  html += `<p style="text-align: center; font-size: 0.85em; opacity: 0.7; margin-top: 24px;">💡 Mixed Mode — lahat ng players hinahalo. Auto-delete finished matches.</p>`;
+  html += `<p style="text-align: center; font-size: 0.85em; opacity: 0.7; margin-top: 24px;">💡 Mixed Mode — all players are mixed together. Tap 🏆 next to the team that won.</p>`;
   container.innerHTML = html;
 }
 
@@ -905,8 +973,9 @@ async function loadAutoMatchups(dateStr) {
     let seed = localStorage.getItem(seedKey);
     if (!seed) { seed = "default-seed"; localStorage.setItem(seedKey, seed); }
     const shuffled = seededShuffle(players, seed);
+    const matchResults = await loadMatchResults(dateStr);
     const schedule = generateAutoSchedule(shuffled, SESSION_START_TIME, availableCourts);
-    renderAutoSchedule(schedule, dateStr, shuffled.length, availableCourts);
+    renderAutoSchedule(schedule, dateStr, shuffled.length, availableCourts, matchResults);
   } catch (error) {
     console.error("Matchups error:", error);
     container.innerHTML = `<p style="text-align:center;color:#ef4444;">❌ ${error.message}</p>`;
@@ -1134,7 +1203,6 @@ async function loadAdminData() {
 
 function switchAdminTab(tab) {
   currentAdminTab = tab;
-  // FIX: gamit ang eksaktong ID na nasa HTML
   const tabIds = { bookings: 'tabBookings', openplay: 'tabOpenPlay', matchups: 'tabMatchups' };
   Object.keys(tabIds).forEach(t => {
     const btn = document.getElementById(tabIds[t]);
@@ -1192,8 +1260,8 @@ function renderAdminContent() {
     html = `
       <div style="background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px;">
         <h3 style="color: #7c3aed; margin-top: 0;">🎲 Matchups Manager</h3>
-        <p style="color: #666; font-size: 0.9em;">Auto-generated schedule from 6PM to 12AM — 20 min/match to 11 points.</p>
-        <p style="color: #888; font-size: 0.85em; font-style: italic;">🎲 Mixed Mode — Lahat ng players hinahalo</p>
+        <p style="color: #666; font-size: 0.9em;">Auto-generated schedule from 6PM to 12AM — 20 minutes per match to 11 points.</p>
+        <p style="color: #888; font-size: 0.85em; font-style: italic;">🎲 Mixed Mode — All players are mixed together</p>
         <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
           <input id="adminMatchDate" type="date" value="${today}" style="flex: 1; min-width: 200px; padding: 12px; border-radius: 8px; border: 1px solid #ddd;">
           <button type="button" onclick="renderAdminMatchups(document.getElementById('adminMatchDate').value)" style="padding: 12px 24px; background: linear-gradient(135deg, #7c3aed, #6d28d9); color: #fff; border: none; border-radius: 8px; font-weight: 700; cursor: pointer;">🔄 Load</button>
@@ -1258,7 +1326,6 @@ document.addEventListener("DOMContentLoaded", () => {
     loadAutoMatchups(today);
   }
 
-  // Auto-refresh matchups every 1 minute (updates countdown + auto-delete)
   setInterval(async () => {
     const matchDateInput = document.getElementById("matchDate");
     if (matchDateInput?.value && document.visibilityState === 'visible') {
