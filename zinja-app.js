@@ -716,17 +716,60 @@ async function loadMatches(dateStr) {
   } catch (error) { console.warn("Could not load matches:", error); return []; }
 }
 
+async function getPhysicalFreeCourts(dateStr) {
+  try {
+    const [matches, bookings] = await Promise.all([
+      loadMatches(dateStr),
+      supabaseFetch(`/rest/v1/bookings?select=court,start_time,duration_hours&booking_date=eq.${encodeURIComponent(dateStr)}`)
+    ]);
+    const physicallyOccupied = new Set();
+    (bookings || []).forEach(b => {
+      const bStart = timeToMinutes(b.start_time);
+      const bEnd = bStart + Number(b.duration_hours) * 60;
+      if (bStart < OPEN_PLAY_END_MIN && OPEN_PLAY_START_MIN < bEnd) {
+        physicallyOccupied.add(Number(b.court));
+      }
+    });
+    const physicalCourts = [];
+    for (let c = 1; c <= TOTAL_COURTS; c++) {
+      if (!physicallyOccupied.has(c)) physicalCourts.push(c);
+    }
+    const activeMatches = matches.filter(m => m.status === 'active');
+    const courtsInUse = new Set(activeMatches.map(m => m.court));
+    return physicalCourts.filter(c => !courtsInUse.has(c));
+  } catch (e) {
+    console.warn("getPhysicalFreeCourts failed:", e);
+    return [];
+  }
+}
+
 async function createMatch(dateStr, court, teamA, teamB) {
-  const isQueue = !court || court === 0;
+  let actualCourt = court;
+  let status = 'active';
+  let startedAt = new Date().toISOString();
+
+  if (!court || court === 0) {
+    const freeCourts = await getPhysicalFreeCourts(dateStr);
+    if (freeCourts.length > 0) {
+      actualCourt = freeCourts[0];
+      status = 'active';
+      startedAt = new Date().toISOString();
+    } else {
+      actualCourt = null;
+      status = 'queued';
+      startedAt = null;
+    }
+  }
+
   const payload = {
     play_date: dateStr,
-    court: isQueue ? null : court,
+    court: actualCourt,
     team_a_1: teamA[0],
     team_a_2: teamA[1],
     team_b_1: teamB[0],
     team_b_2: teamB[1],
-    status: isQueue ? 'queued' : 'active',
-    started_at: isQueue ? null : new Date().toISOString()
+    status: status,
+    started_at: startedAt
   };
   await supabaseFetch("/rest/v1/matches", {
     method: "POST",
@@ -770,6 +813,58 @@ async function promoteNextFromQueue(dateStr, court) {
     return queued[0];
   } catch (e) { console.warn("Promote from queue failed:", e); return null; }
 }
+
+async function autoPromoteQueues() {
+  try {
+    const today = getTodayStr();
+    const freeCourts = await getPhysicalFreeCourts(today);
+    if (freeCourts.length === 0) return false;
+
+    const queued = await supabaseFetch(
+      `/rest/v1/matches?play_date=eq.${encodeURIComponent(today)}&status=eq.queued&order=created_at.asc`
+    );
+    if (!queued || queued.length === 0) return false;
+
+    const promoteCount = Math.min(freeCourts.length, queued.length);
+    for (let i = 0; i < promoteCount; i++) {
+      await supabaseFetch(`/rest/v1/matches?id=eq.${queued[i].id}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify({
+          court: freeCourts[i],
+          status: 'active',
+          started_at: new Date().toISOString()
+        })
+      });
+    }
+    return promoteCount > 0;
+  } catch (e) {
+    console.warn("autoPromoteQueues failed:", e);
+    return false;
+  }
+}
+
+window.adminStartNow = async function (matchId) {
+  try {
+    const today = getTodayStr();
+    const freeCourts = await getPhysicalFreeCourts(today);
+    if (freeCourts.length === 0) {
+      alert("No free court available. Finish an active match first.");
+      return;
+    }
+    await supabaseFetch(`/rest/v1/matches?id=eq.${matchId}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({
+        court: freeCourts[0],
+        status: 'active',
+        started_at: new Date().toISOString()
+      })
+    });
+    await renderAdminTournament();
+    await renderLiveBoard();
+  } catch (e) { alert("Failed to start: " + e.message); }
+};
 
 async function cancelMatch(matchId) {
   const today = getTodayStr();
@@ -816,7 +911,6 @@ function getPlayersInPendingMatches(matches) {
   return set;
 }
 
-// 🆕 Match Limit: 32 players → 8 matches, 16 players → 4 matches
 function getMaxMatchInfo(checkInMap, matches) {
   const activeCheckedInCount = Object.values(checkInMap).filter(c => c.status === 'active').length;
   const maxMatches = Math.floor(activeCheckedInCount / 4);
@@ -932,6 +1026,8 @@ async function renderLiveBoard() {
   if (!container) return;
   const today = getTodayStr();
   try {
+    await autoPromoteQueues();
+
     const [checkInMap, matches] = await Promise.all([
       loadCheckIns(today),
       loadMatches(today)
@@ -1004,6 +1100,8 @@ async function renderAdminTournament() {
   const today = getTodayStr();
 
   try {
+    await autoPromoteQueues();
+
     const [regs, checkInMap, matches] = await Promise.all([
       supabaseFetch(`/rest/v1/open_play?select=player_name,skill_level&play_date=eq.${encodeURIComponent(today)}`),
       loadCheckIns(today),
@@ -1109,6 +1207,7 @@ async function renderAdminTournament() {
             <p style="margin:4px 0;font-size:0.9em;"><strong>A:</strong> ${escapeHtml(m.team_a_1)} & ${escapeHtml(m.team_a_2)}</p>
             <p style="margin:4px 0;font-size:0.9em;"><strong>B:</strong> ${escapeHtml(m.team_b_1)} & ${escapeHtml(m.team_b_2)}</p>
             <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
+              <button type="button" onclick="adminStartNow(${m.id})" style="padding:6px 12px;background:#10b981;color:#fff;border:none;border-radius:6px;font-size:0.8em;font-weight:600;cursor:pointer;">▶ Start Now</button>
               <button type="button" onclick="adminCancelMatch(${m.id})" style="padding:6px 12px;background:#dc2626;color:#fff;border:none;border-radius:6px;font-size:0.8em;font-weight:600;cursor:pointer;">✕ Remove from Queue</button>
             </div>
           </div>
@@ -1326,7 +1425,6 @@ window.doCreateMatch = async function () {
   if (new Set(all).size !== 4) { alert("Each player can only appear once."); return; }
 
   try {
-    // Re-validate match limit before creating
     const [checkInMap, matches] = await Promise.all([
       loadCheckIns(today),
       loadMatches(today)
