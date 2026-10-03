@@ -655,6 +655,27 @@ async function cancelOpenPlay() {
 }
 
 // ====================
+// AUTO CLEANUP (runs once per new day)
+// ====================
+
+async function autoCleanupOldData() {
+  const today = getTodayStr();
+  let lastCleanup = null;
+  try { lastCleanup = localStorage.getItem("zinja_last_cleanup_date"); } catch {}
+
+  if (lastCleanup === today) return;
+
+  try {
+    await supabaseFetch(`/rest/v1/matches?play_date=lt.${today}`, { method: "DELETE" });
+    await supabaseFetch(`/rest/v1/check_ins?play_date=lt.${today}`, { method: "DELETE" });
+    try { localStorage.setItem("zinja_last_cleanup_date", today); } catch {}
+    console.log("✅ Auto-cleanup complete for " + today + " (removed data before this date)");
+  } catch (error) {
+    console.warn("Auto-cleanup failed:", error);
+  }
+}
+
+// ====================
 // CHECK-IN SYSTEM
 // ====================
 
@@ -779,10 +800,6 @@ function smartSuggest(availablePlayers, matches) {
 
   const stats = computePlayerStats(availablePlayers, matches);
 
-  // Sort priority:
-  // 1. Fewest games played (fair rotation)
-  // 2. Highest win-score (winner-vs-winner bias)
-  // 3. Random tiebreak
   const sorted = availablePlayers.slice().sort((a, b) => {
     const ga = stats[a].games;
     const gb = stats[b].games;
@@ -797,7 +814,6 @@ function smartSuggest(availablePlayers, matches) {
 
   const picked = sorted.slice(0, 4);
 
-  // Team balance: strongest + weakest vs middle two
   picked.sort((a, b) => {
     const wa = stats[a].wins - stats[a].losses;
     const wb = stats[b].wins - stats[b].losses;
@@ -1076,6 +1092,7 @@ async function renderAdminTournament() {
           <h3 style="color:#7c3aed;margin:0;">👥 Check-In & Player Management (${checkedInCount} active)</h3>
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
             <button type="button" onclick="doAddWalkIn()" style="padding:8px 16px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:0.85em;">➕ Add Walk-In</button>
+            <button type="button" onclick="doResetToday()" style="padding:8px 16px;background:linear-gradient(135deg,#dc2626,#b91c1c);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:0.85em;">🗑 Reset Today</button>
             <button type="button" onclick="doClearOldData()" style="padding:8px 16px;background:#6b7280;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:0.85em;">🧹 Clean Old Data</button>
           </div>
         </div>
@@ -1150,6 +1167,28 @@ window.doAddWalkIn = async function () {
   }
 };
 
+window.doResetToday = async function () {
+  const today = getTodayStr();
+  const ok = confirm(
+    "🗑 Reset Today's Session\n\n" +
+    "This will permanently delete ALL matches and check-ins for TODAY (" + today + ").\n\n" +
+    "Open Play registrations are NOT affected.\n\n" +
+    "Use this to start a fresh session tonight.\n\n" +
+    "Continue?"
+  );
+  if (!ok) return;
+  try {
+    await supabaseFetch(`/rest/v1/matches?play_date=eq.${today}`, { method: "DELETE" });
+    await supabaseFetch(`/rest/v1/check_ins?play_date=eq.${today}`, { method: "DELETE" });
+    try { localStorage.removeItem("zinja_last_cleanup_date"); } catch {}
+    alert("✅ Today's session has been reset. Ready for a fresh start!");
+    await renderAdminTournament();
+    await renderLiveBoard();
+  } catch (error) {
+    alert("❌ Reset failed: " + error.message);
+  }
+};
+
 window.doClearOldData = async function () {
   const today = getTodayStr();
   const ok = confirm(
@@ -1162,6 +1201,7 @@ window.doClearOldData = async function () {
   try {
     await supabaseFetch(`/rest/v1/matches?play_date=lt.${today}`, { method: "DELETE" });
     await supabaseFetch(`/rest/v1/check_ins?play_date=lt.${today}`, { method: "DELETE" });
+    try { localStorage.setItem("zinja_last_cleanup_date", today); } catch {}
     alert("✅ Old data cleaned up successfully!");
     await renderAdminTournament();
     await renderLiveBoard();
@@ -1474,7 +1514,7 @@ async function deleteOpenPlay(id) {
 // START
 // ====================
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   const bookingForm = document.getElementById("bookingForm");
   const playForm = document.getElementById("playForm");
   if (bookingForm) bookingForm.addEventListener("submit", handleBookingSubmit);
@@ -1488,6 +1528,10 @@ document.addEventListener("DOMContentLoaded", () => {
   loadBookings();
   loadOpenPlay();
   updateLiveClosureStatus();
+
+  // 🔥 Auto-cleanup: removes all data older than today (runs once per new day)
+  await autoCleanupOldData();
+
   renderLiveBoard();
 
   const refreshBookingsBtn = document.getElementById("refreshBookingsBtn");
@@ -1512,7 +1556,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Auto-refresh live board every 1 minute
   setInterval(async () => {
     if (document.visibilityState === 'visible') {
       await renderLiveBoard();
@@ -1547,12 +1590,13 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   requestAnimationFrame(smartLoop);
 
-  document.addEventListener("visibilitychange", () => {
+  document.addEventListener("visibilitychange", async () => {
     if (document.visibilityState === "visible") {
       loadChatMessages();
       loadBookings();
       loadOpenPlay();
       updateLiveClosureStatus();
+      await autoCleanupOldData();
       renderLiveBoard();
     }
   });
