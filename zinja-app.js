@@ -20,11 +20,9 @@ const PLAYERS_PER_COURT = 16;
 const TOTAL_COURTS = 2;
 const OPEN_PLAY_FEE = 50;
 
-const MATCH_DURATION_MIN = 15;
+const MATCH_DURATION_MIN = 20;
 const MATCH_TARGET_SCORE = 11;
-
-const MIXED_MODE_THRESHOLD = 12;
-const MIN_TIER_SIZE = 4;
+const GAMES_PER_PLAYER = 6;
 
 const SESSION_START_TIME = "18:00";
 const SESSION_END_TIME = "24:00";
@@ -50,7 +48,6 @@ function getPHTNow() {
   return new Date(utcMs + (PHT_OFFSET_HOURS * 3600000));
 }
 
-// ===== NEW: Get current PHT time in minutes (for auto-delete finished matches) =====
 function getPHTMinutes() {
   const pht = getPHTNow();
   return pht.getHours() * 60 + pht.getMinutes();
@@ -499,7 +496,7 @@ async function handleBookingSubmit(event) {
 
   try {
     showResult(result, "⏳ Checking court availability...", true);
-    const existing = await supabaseFetch(`/rest/v1/bookings?select=start_time,duration_hours&booking_date=eq.${encodeURIComponent(bookingDate)}&court=eq.${encodeURIComponent(court)}`);
+    const existing = await supabaseFetch(`/rest/v1/public_bookings?select=start_time,duration_hours&booking_date=eq.${encodeURIComponent(bookingDate)}&court=eq.${encodeURIComponent(court)}`);
     const conflictingBooking = (existing || []).find(booking => bookingOverlaps(bookingTime, duration, booking.start_time, booking.duration_hours));
     if (conflictingBooking) {
       const conflictStart = formatTime(conflictingBooking.start_time);
@@ -683,7 +680,7 @@ async function cancelOpenPlay() {
 }
 
 // ====================
-// AUTO MATCH SYSTEM
+// AUTO MATCH SYSTEM (MIXED MODE)
 // ====================
 
 function seededShuffle(array, seed) {
@@ -701,110 +698,46 @@ function seededShuffle(array, seed) {
   return arr;
 }
 
-function groupPlayersBySkill(players) {
-  const advanced = [];
-  const intermediate = [];
-  const beginner = [];
-  const flexible = [];
-  players.forEach(p => {
-    const lvl = String(p.skill_level || '').trim();
-    if (lvl === 'Advanced') advanced.push(p);
-    else if (lvl === 'Intermediate') intermediate.push(p);
-    else if (lvl === 'Beginner') beginner.push(p);
-    else flexible.push(p);
-  });
-  return { advanced, intermediate, beginner, flexible };
-}
-
-function buildPools(players) {
-  const total = players.length;
-  const groups = groupPlayersBySkill(players);
-  const advCount = groups.advanced.length;
-  const intCount = groups.intermediate.length;
-  const begCount = groups.beginner.length;
-  const flexCount = groups.flexible.length;
-
-  console.log('=== MATCHUP DEBUG ===');
-  console.log('Total players:', total);
-  console.log('Advanced:', advCount, '| Intermediate:', intCount, '| Beginner:', begCount, '| Any level:', flexCount);
-
-  if (total < MIXED_MODE_THRESHOLD) {
-    console.log('→ MIXED MODE (few players)');
-    return [{ name: 'Mixed', color: '#7c3aed', players: [...players] }];
-  }
-
-  const hasAdvTier = advCount >= MIN_TIER_SIZE;
-  const hasIntTier = intCount >= MIN_TIER_SIZE;
-  const hasBegTier = begCount >= MIN_TIER_SIZE;
-  const validTierCount = [hasAdvTier, hasIntTier, hasBegTier].filter(Boolean).length;
-
-  console.log('Valid tiers:', validTierCount, '(need >= 2)');
-
-  if (validTierCount < 2) {
-    console.log('→ MIXED MODE (not enough valid tiers)');
-    return [{ name: 'Mixed', color: '#7c3aed', players: [...players] }];
-  }
-
-  console.log('→ SKILL-BASED MODE');
-  const pools = [];
-  const leftover = [];
-
-  if (hasAdvTier) pools.push({ name: 'Advanced', color: '#dc2626', players: [...groups.advanced] });
-  else leftover.push(...groups.advanced);
-
-  if (hasIntTier) pools.push({ name: 'Intermediate', color: '#f59e0b', players: [...groups.intermediate] });
-  else leftover.push(...groups.intermediate);
-
-  if (hasBegTier) pools.push({ name: 'Beginner', color: '#10b981', players: [...groups.beginner] });
-  else leftover.push(...groups.beginner);
-
-  leftover.push(...groups.flexible);
-
-  if (leftover.length >= MIN_TIER_SIZE) {
-    pools.push({ name: 'Mixed', color: '#7c3aed', players: leftover });
-  } else if (leftover.length > 0) {
-    const largest = pools.reduce((max, p) => p.players.length > max.players.length ? p : max);
-    largest.players.push(...leftover);
-    console.log('Merged leftover into', largest.name);
-  }
-
-  return pools;
-}
-
 function generateAutoSchedule(players, startTime, availableCourts) {
   if (!players || players.length < 4 || !availableCourts || availableCourts.length === 0) return [];
 
   const numCourts = availableCourts.length;
-  const pools = buildPools(players);
-  if (pools.length === 0) return [];
+  const totalPlayers = players.length;
+
+  console.log('=== MATCHUP DEBUG ===');
+  console.log('Total players:', totalPlayers);
+  console.log('Mode: MIXED (all together)');
 
   const sessionStartMin = timeToMinutes(SESSION_START_TIME);
   const sessionEndMin = 24 * 60;
   const sessionMinutes = sessionEndMin - sessionStartMin;
   const totalWaves = Math.floor(sessionMinutes / MATCH_DURATION_MIN);
-  const maxMatches = totalWaves * numCourts;
+  const maxMatchesByTime = totalWaves * numCourts;
+  const maxMatchesByGames = Math.floor((totalPlayers * GAMES_PER_PLAYER) / 4);
+  const maxMatches = Math.min(maxMatchesByTime, maxMatchesByGames);
+
+  console.log(`Max by time: ${maxMatchesByTime}`);
+  console.log(`Max by games: ${maxMatchesByGames}`);
+  console.log(`Actual: ${maxMatches}`);
 
   const allMatches = [];
   let round = 0;
   const MAX_SAFETY_ROUNDS = 200;
 
   while (allMatches.length < maxMatches && round < MAX_SAFETY_ROUNDS) {
+    const shuffled = seededShuffle(players, `mixed-round-${round}`);
     let matchesThisRound = 0;
-    pools.forEach(p => {
-      if (allMatches.length >= maxMatches) return;
-      const shuffled = seededShuffle(p.players, `${p.name}-round-${round}`);
-      for (let i = 0; i + 4 <= shuffled.length; i += 4) {
-        if (allMatches.length >= maxMatches) break;
-        allMatches.push({
-          tier: p.name,
-          tierColor: p.color,
-          round: round + 1,
-          teamA: [shuffled[i], shuffled[i+1]],
-          teamB: [shuffled[i+2], shuffled[i+3]]
-        });
-        matchesThisRound++;
-      }
-    });
+    for (let i = 0; i + 4 <= shuffled.length; i += 4) {
+      if (allMatches.length >= maxMatches) break;
+      allMatches.push({
+        tier: 'Mixed',
+        tierColor: '#7c3aed',
+        round: round + 1,
+        teamA: [shuffled[i], shuffled[i+1]],
+        teamB: [shuffled[i+2], shuffled[i+3]]
+      });
+      matchesThisRound++;
+    }
     if (matchesThisRound === 0) break;
     round++;
   }
@@ -830,7 +763,6 @@ function generateAutoSchedule(players, startTime, availableCourts) {
   return schedule;
 }
 
-// ===== NEW: renderAutoSchedule with auto-delete finished matches =====
 function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts) {
   const container = document.getElementById("matchupsContainer");
   if (!container) return;
@@ -840,18 +772,18 @@ function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts) {
     return;
   }
 
-  // ===== AUTO-DELETE FINISHED MATCHES =====
   const today = new Date().toISOString().split("T")[0];
   const isToday = dateStr === today;
   const currentPHTMin = getPHTMinutes();
+  const sessionStartMin = timeToMinutes(SESSION_START_TIME);
+  const isBeforeSession = isToday && currentPHTMin < sessionStartMin;
 
   let visibleSchedule = schedule;
-  if (isToday) {
+  if (isToday && !isBeforeSession) {
     visibleSchedule = schedule.filter(m => timeToMinutes(m.endTime) > currentPHTMin);
   }
 
-  // If lahat tapos na
-  if (visibleSchedule.length === 0) {
+  if (visibleSchedule.length === 0 && isToday && !isBeforeSession) {
     container.innerHTML = `
       <div style="text-align:center; padding: 40px 20px; background: rgba(124,58,237,0.15); border-radius: 12px; border: 1px solid rgba(124,58,237,0.3);">
         <p style="font-size: 2em; margin: 8px 0;">🏆</p>
@@ -872,36 +804,55 @@ function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts) {
   const totalPlayerSlots = visibleSchedule.length * 4;
   const gamesPerPlayer = Math.round(totalPlayerSlots / playerCount);
 
-  const tierCounts = {};
-  visibleSchedule.forEach(m => { tierCounts[m.tier] = (tierCounts[m.tier] || 0) + 1; });
-  const tierSummary = Object.entries(tierCounts).map(([t, c]) => `${t}: ${c}`).join(' · ');
+  const completedCount = isBeforeSession ? 0 : schedule.length - visibleSchedule.length;
 
-  const isMixedMode = tierCounts['Mixed'] && Object.keys(tierCounts).length === 1;
-  const modeLabel = isMixedMode ? "🎲 Mixed Mode" : "🎯 Skill-Based Mode";
-
-  const completedCount = schedule.length - visibleSchedule.length;
+  let countdownBanner = '';
+  if (isBeforeSession) {
+    const minsLeft = sessionStartMin - currentPHTMin;
+    const hoursLeft = Math.floor(minsLeft / 60);
+    const minsRem = minsLeft % 60;
+    const countdownText = hoursLeft > 0 
+      ? `${hoursLeft}h ${minsRem}m` 
+      : `${minsRem} minute${minsRem === 1 ? '' : 's'}`;
+    countdownBanner = `
+      <div style="text-align: center; margin-bottom: 20px; padding: 24px 20px; background: linear-gradient(135deg, #f59e0b, #dc2626); border-radius: 12px; color: #fff; box-shadow: 0 4px 20px rgba(245,158,11,0.4);">
+        <p style="font-size: 1.1em; margin: 4px 0; opacity: 0.95;">⏰ Session starts in</p>
+        <p style="font-size: 2.5em; font-weight: 900; margin: 8px 0; letter-spacing: 2px;">${countdownText}</p>
+        <p style="font-size: 0.95em; margin: 4px 0; opacity: 0.9;">First match: <strong>${formatTime12(SESSION_START_TIME)}</strong> · ${playerCount} players registered</p>
+      </div>
+    `;
+  }
 
   let html = `
     <div style="text-align: center; margin-bottom: 20px; padding: 16px; background: rgba(124,58,237,0.15); border-radius: 12px; border: 1px solid rgba(124,58,237,0.3);">
       <p style="font-size: 1.1em; margin: 4px 0;">📅 <strong>${formatDate(dateStr)}</strong></p>
       <p style="font-size: 0.95em; margin: 4px 0; opacity: 0.9;">👥 ${playerCount} players · ${courtsLabel}</p>
-      <p style="font-size: 0.95em; margin: 4px 0; opacity: 0.9;">🏓 ${visibleSchedule.length} remaining · 🕐 End: <strong>${sessionEnd}</strong></p>
-      <p style="font-size: 0.85em; margin: 4px 0; opacity: 0.75;">~${gamesPerPlayer} games per player · 15 min/match to 11 points</p>
-      <p style="font-size: 0.85em; margin: 8px 0 0 0; opacity: 0.85;">${modeLabel} — ${tierSummary}</p>
+      <p style="font-size: 0.95em; margin: 4px 0; opacity: 0.9;">🏓 ${visibleSchedule.length} ${isBeforeSession ? 'scheduled' : 'matches'} · 🕐 End: <strong>${sessionEnd}</strong></p>
+      <p style="font-size: 0.85em; margin: 4px 0; opacity: 0.75;">~${gamesPerPlayer} games per player · 20 min/match to 11 points</p>
+      <p style="font-size: 0.85em; margin: 8px 0 0 0; opacity: 0.85;">🎲 Mixed Mode — All players together</p>
       ${completedCount > 0 ? `<p style="font-size: 0.8em; margin: 8px 0 0 0; opacity: 0.6;">✅ ${completedCount} match${completedCount === 1 ? '' : 'es'} completed (auto-hidden)</p>` : ''}
     </div>
+    ${countdownBanner}
   `;
 
   visibleSchedule.forEach((m, idx) => {
-    const isNow = idx < numCourts;
-    const isNext = idx >= numCourts && idx < numCourts * 2;
     let cls = "matchup-card";
     let badge = `⏳ MATCH #${idx + 1}`;
-    if (isNow) { cls += " now-playing"; badge = "🟢 NOW PLAYING"; }
-    else if (isNext) { cls += " up-next"; badge = "🟡 UP NEXT"; }
+    
+    if (isBeforeSession) {
+      cls += " up-next";
+      badge = `📅 SCHEDULED`;
+    } else {
+      const isNow = idx < numCourts;
+      const isNext = idx >= numCourts && idx < numCourts * 2;
+      if (isNow) { cls += " now-playing"; badge = "🟢 NOW PLAYING"; }
+      else if (isNext) { cls += " up-next"; badge = "🟡 UP NEXT"; }
+    }
 
-    const tierColor = m.tierColor || '#7c3aed';
-    const tierIcon = m.tier === 'Advanced' ? '🔥' : m.tier === 'Intermediate' ? '⚡' : m.tier === 'Beginner' ? '🌱' : '🎲';
+    const subA0 = m.teamA[0].isSubstitute ? ' 🔄' : '';
+    const subA1 = m.teamA[1].isSubstitute ? ' 🔄' : '';
+    const subB0 = m.teamB[0].isSubstitute ? ' 🔄' : '';
+    const subB1 = m.teamB[1].isSubstitute ? ' 🔄' : '';
 
     html += `
       <div class="${cls}">
@@ -910,26 +861,26 @@ function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts) {
           <span style="font-size: 0.75em; opacity: 0.9;">🏓 Court ${m.court} · 🕐 ${formatTime12(m.startTime)} - ${formatTime12(m.endTime)}</span>
         </div>
         <div style="margin-bottom: 8px;">
-          <span style="display: inline-block; padding: 3px 12px; background: ${tierColor}33; border: 1px solid ${tierColor}; border-radius: 20px; font-size: 0.75em; font-weight: 700; color: #fff;">${tierIcon} ${m.tier} · Round ${m.round}</span>
+          <span style="display: inline-block; padding: 3px 12px; background: #7c3aed33; border: 1px solid #7c3aed; border-radius: 20px; font-size: 0.75em; font-weight: 700; color: #fff;">🎲 Mixed · Round ${m.round}</span>
         </div>
         <div class="team-block">
           <strong style="color: #10b981;">Team A:</strong>
-          <span>${escapeHtml(m.teamA[0].player_name)}</span>
+          <span>${escapeHtml(m.teamA[0].player_name)}${subA0}</span>
           <span style="opacity: 0.5;">&</span>
-          <span>${escapeHtml(m.teamA[1].player_name)}</span>
+          <span>${escapeHtml(m.teamA[1].player_name)}${subA1}</span>
         </div>
         <div class="vs-badge">— VS — (to 11 pts)</div>
         <div class="team-block">
           <strong style="color: #f59e0b;">Team B:</strong>
-          <span>${escapeHtml(m.teamB[0].player_name)}</span>
+          <span>${escapeHtml(m.teamB[0].player_name)}${subB0}</span>
           <span style="opacity: 0.5;">&</span>
-          <span>${escapeHtml(m.teamB[1].player_name)}</span>
+          <span>${escapeHtml(m.teamB[1].player_name)}${subB1}</span>
         </div>
       </div>
     `;
   });
 
-  html += `<p style="text-align: center; font-size: 0.85em; opacity: 0.7; margin-top: 24px;">💡 ${isMixedMode ? 'Mixed mode — all together.' : 'Skill-based matching — Advanced vs Advanced, Beginner vs Beginner.'} Finished matches are auto-hidden. Admin can re-shuffle.</p>`;
+  html += `<p style="text-align: center; font-size: 0.85em; opacity: 0.7; margin-top: 24px;">💡 Mixed Mode — lahat ng players hinahalo. Auto-delete finished matches.</p>`;
   container.innerHTML = html;
 }
 
@@ -999,11 +950,7 @@ async function renderAdminMatchups(dateStr) {
     const courtsLabel = numCourts === 2 ? "Courts 1 & 2" : `Court ${availableCourts[0]}`;
     const lastMatch = schedule[schedule.length - 1];
     const endTime = lastMatch ? formatTime12(lastMatch.endTime) : "N/A";
-    const tierCounts = {};
-    schedule.forEach(m => { tierCounts[m.tier] = (tierCounts[m.tier] || 0) + 1; });
-    const isMixedMode = tierCounts['Mixed'] && Object.keys(tierCounts).length === 1;
-    const modeLabel = isMixedMode ? "Mixed Mode" : "Skill-Based Mode";
-    container.innerHTML = `<p style="color:#10b981; font-weight:600;">✅ ${courtsLabel} · ${shuffled.length} players · ${schedule.length} matches · Ends ${endTime} · ${modeLabel}</p>`;
+    container.innerHTML = `<p style="color:#10b981; font-weight:600;">✅ ${courtsLabel} · ${shuffled.length} players · ${schedule.length} matches · Ends ${endTime} · 🎲 Mixed Mode</p>`;
   } catch (error) {
     container.innerHTML = `<p style="color:red;">❌ ${error.message}</p>`;
   }
@@ -1156,6 +1103,10 @@ function setupChat() {
   loadChatMessages();
 }
 
+// ====================
+// ADMIN PANEL
+// ====================
+
 async function loadAdminData() {
   const pw = document.getElementById('adminPassword')?.value;
   const resultDiv = document.getElementById('adminResult');
@@ -1240,8 +1191,8 @@ function renderAdminContent() {
     html = `
       <div style="background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px;">
         <h3 style="color: #7c3aed; margin-top: 0;">🎲 Matchups Manager</h3>
-        <p style="color: #666; font-size: 0.9em;">Auto-generated schedule from 6PM to 12AM — matches to 11 points (~15 min).</p>
-        <p style="color: #888; font-size: 0.85em; font-style: italic;">&lt; 12 players = Mixed Mode · ≥ 12 players with 2+ valid tiers = Skill-Based Mode</p>
+        <p style="color: #666; font-size: 0.9em;">Auto-generated schedule from 6PM to 12AM — 20 min/match to 11 points.</p>
+        <p style="color: #888; font-size: 0.85em; font-style: italic;">🎲 Mixed Mode — Lahat ng players hinahalo</p>
         <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
           <input id="adminMatchDate" type="date" value="${today}" style="flex: 1; min-width: 200px; padding: 12px; border-radius: 8px; border: 1px solid #ddd;">
           <button type="button" onclick="renderAdminMatchups(document.getElementById('adminMatchDate').value)" style="padding: 12px 24px; background: linear-gradient(135deg, #7c3aed, #6d28d9); color: #fff; border: none; border-radius: 8px; font-weight: 700; cursor: pointer;">🔄 Load</button>
@@ -1255,6 +1206,10 @@ function renderAdminContent() {
   }
   container.innerHTML = html;
 }
+
+// ====================
+// START
+// ====================
 
 document.addEventListener("DOMContentLoaded", () => {
   const bookingForm = document.getElementById("bookingForm");
@@ -1302,7 +1257,7 @@ document.addEventListener("DOMContentLoaded", () => {
     loadAutoMatchups(today);
   }
 
-  // ===== NEW: Auto-refresh matchups every 1 minute (para mag-update ang auto-delete) =====
+  // Auto-refresh matchups every 1 minute (updates countdown + auto-delete)
   setInterval(async () => {
     const matchDateInput = document.getElementById("matchDate");
     if (matchDateInput?.value && document.visibilityState === 'visible') {
