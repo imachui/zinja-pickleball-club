@@ -36,7 +36,6 @@ const ADMIN_PASSWORD = "zinja2026";
 let adminData = { bookings: [], openplay: [] };
 let currentAdminTab = 'tournament';
 
-// 🆕 Admin can pick any date (defaults to today)
 let adminSelectedDate = null;
 
 function getAdminDate() {
@@ -272,10 +271,10 @@ function updateLiveClosureStatus() {
   const timeStr = pht.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
 
   if (isClosed) {
-    banner.innerHTML = `<span style="display:inline-block;width:10px;height:10px;background:#fff;border-radius:50%;margin-right:8px;"></span><strong>🔴 CLOSED NOW</strong> — Weekly Rest Period (reopens Saturday 5:00 PM) · ${timeStr} PHT`;
+    banner.innerHTML = `<strong>🔴 CLOSED NOW</strong> — Weekly Rest Period (reopens Saturday 5:00 PM) · ${timeStr} PHT`;
     banner.style.background = "linear-gradient(135deg, #dc2626, #991b1b)";
   } else {
-    banner.innerHTML = `<span style="display:inline-block;width:10px;height:10px;background:#fff;border-radius:50%;margin-right:8px;"></span><strong>🟢 OPEN NOW</strong> — Book your court or join Open Play! · ${timeStr} PHT`;
+    banner.innerHTML = `<strong>🟢 OPEN NOW</strong> — Book your court or join Open Play! · ${timeStr} PHT`;
     banner.style.background = "linear-gradient(135deg, #059669, #047857)";
   }
 }
@@ -585,12 +584,12 @@ function createCancellationBoxes() {
 
   if (bookingForm && !document.getElementById("cancelBookingBox")) {
     bookingForm.insertAdjacentHTML("afterend", `
-      <div id="cancelBookingBox" style="margin-top:20px;padding:16px;border:1px solid #ddd;border-radius:12px;">
+      <div id="cancelBookingBox" style="margin-top:20px;padding:16px;border:1px solid #333;border-radius:12px;">
         <h3>Cancel My Court Booking</h3>
-        <p>Enter the mobile number and cancellation code you received when booking.</p>
-        <input id="cancelBookingMobile" type="tel" placeholder="Mobile number" style="display:block;width:100%;margin:8px 0;padding:10px;">
-        <input id="cancelBookingCode" type="text" placeholder="Cancellation code" maxlength="8" style="display:block;width:100%;margin:8px 0;padding:10px;text-transform:uppercase;">
-        <button type="button" id="cancelBookingButton">Cancel Booking</button>
+        <p style="font-size:0.9em;opacity:0.8;">Enter the mobile number and cancellation code you received when booking.</p>
+        <input id="cancelBookingMobile" type="tel" placeholder="Mobile number">
+        <input id="cancelBookingCode" type="text" placeholder="Cancellation code" maxlength="8" style="text-transform:uppercase;">
+        <button type="button" id="cancelBookingButton" class="btn" style="width:100%;">Cancel Booking</button>
         <div id="cancelBookingResult"></div>
       </div>
     `);
@@ -606,12 +605,12 @@ function createCancellationBoxes() {
 
   if (playForm && !document.getElementById("cancelOpenPlayBox")) {
     playForm.insertAdjacentHTML("afterend", `
-      <div id="cancelOpenPlayBox" style="margin-top:20px;padding:16px;border:1px solid #ddd;border-radius:12px;">
+      <div id="cancelOpenPlayBox" style="margin-top:20px;padding:16px;border:1px solid #333;border-radius:12px;">
         <h3>Cancel My Open Play Registration</h3>
-        <p>Enter the mobile number and cancellation code you received when joining.</p>
-        <input id="cancelOpenPlayMobile" type="tel" placeholder="Mobile number" style="display:block;width:100%;margin:8px 0;padding:10px;">
-        <input id="cancelOpenPlayCode" type="text" placeholder="Cancellation code" maxlength="8" style="display:block;width:100%;margin:8px 0;padding:10px;text-transform:uppercase;">
-        <button type="button" id="cancelOpenPlayButton">Cancel Registration</button>
+        <p style="font-size:0.9em;opacity:0.8;">Enter the mobile number and cancellation code you received when joining.</p>
+        <input id="cancelOpenPlayMobile" type="tel" placeholder="Mobile number">
+        <input id="cancelOpenPlayCode" type="text" placeholder="Cancellation code" maxlength="8" style="text-transform:uppercase;">
+        <button type="button" id="cancelOpenPlayButton" class="btn" style="width:100%;">Cancel Registration</button>
         <div id="cancelOpenPlayResult"></div>
       </div>
     `);
@@ -1506,6 +1505,32 @@ window.adminCancelMatch = async function (matchId) {
 };
 
 // ====================
+// PAGE NAVIGATION
+// ====================
+
+window.showPage = function (pageId) {
+  document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+  const target = document.getElementById('page-' + pageId);
+  if (target) {
+    target.classList.add('active');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    if (pageId === 'live') {
+      renderLiveBoard();
+    } else if (pageId === 'players') {
+      loadOpenPlay();
+    } else if (pageId === 'booking') {
+      loadBookings();
+    } else if (pageId === 'chat') {
+      setTimeout(() => {
+        const el = document.getElementById('chatMessages');
+        if (el) el.scrollTop = el.scrollHeight;
+      }, 100);
+    }
+  }
+};
+
+// ====================
 // CLUB CHAT
 // ====================
 
@@ -1600,7 +1625,7 @@ function setupChatName() {
 }
 
 function setupChat() {
-  const chatSection = document.getElementById("chat");
+  const chatSection = document.getElementById("page-chat");
   if (!chatSection) return;
   setupChatName();
   setupChatEmojiPicker();
@@ -1667,13 +1692,13 @@ function renderAdminContent() {
       html = '<p style="color: #888;">No court bookings yet.</p>';
     } else {
       html = adminData.bookings.map(b => `
-        <div class="admin-card">
-          <button class="admin-delete-btn" onclick="deleteBooking('${b.id}')">🗑 Delete</button>
-          <h4>🏓 ${escapeHtml(b.customer_name || 'Unknown')}</h4>
-          <p>📱 ${escapeHtml(b.mobile || 'No phone')}</p>
-          <p>📅 ${escapeHtml(b.booking_date || 'No date')} at ${escapeHtml(b.start_time || 'No time')}</p>
-          <p>🏟️ Court ${escapeHtml(b.court || '?')} • ⏱️ ${escapeHtml(b.duration_hours || '?')} hour(s)</p>
-          <p>💰 ₱${Number(b.price || 0).toLocaleString()}</p>
+        <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; margin-bottom:12px; box-shadow:0 2px 8px rgba(0,0,0,0.06); position:relative;">
+          <button onclick="deleteBooking('${b.id}')" style="position:absolute; top:12px; right:12px; background:#ef4444; color:#fff; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:0.85em; font-weight:600;">🗑 Delete</button>
+          <h4 style="margin:0 0 8px 0; color:#7c3aed;">🏓 ${escapeHtml(b.customer_name || 'Unknown')}</h4>
+          <p style="margin:4px 0; font-size:0.92em; color:#444;">📱 ${escapeHtml(b.mobile || 'No phone')}</p>
+          <p style="margin:4px 0; font-size:0.92em; color:#444;">📅 ${escapeHtml(b.booking_date || 'No date')} at ${escapeHtml(b.start_time || 'No time')}</p>
+          <p style="margin:4px 0; font-size:0.92em; color:#444;">🏟️ Court ${escapeHtml(b.court || '?')} • ⏱️ ${escapeHtml(b.duration_hours || '?')} hour(s)</p>
+          <p style="margin:4px 0; font-size:0.92em; color:#444;">💰 ₱${Number(b.price || 0).toLocaleString()}</p>
         </div>
       `).join('');
     }
@@ -1682,12 +1707,12 @@ function renderAdminContent() {
       html = '<p style="color: #888;">No Open Play registrations yet.</p>';
     } else {
       html = adminData.openplay.map(o => `
-        <div class="admin-card">
-          <button class="admin-delete-btn" onclick="deleteOpenPlay('${o.id}')">🗑 Delete</button>
-          <h4>🏓 ${escapeHtml(o.player_name || 'Unknown')}</h4>
-          <p>📱 ${escapeHtml(o.mobile || 'No phone')}</p>
-          <p>📅 ${escapeHtml(o.play_date || 'No date')}</p>
-          <p>🎯 Skill Level: ${escapeHtml(o.skill_level || 'Not specified')}</p>
+        <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; margin-bottom:12px; box-shadow:0 2px 8px rgba(0,0,0,0.06); position:relative;">
+          <button onclick="deleteOpenPlay('${o.id}')" style="position:absolute; top:12px; right:12px; background:#ef4444; color:#fff; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:0.85em; font-weight:600;">🗑 Delete</button>
+          <h4 style="margin:0 0 8px 0; color:#7c3aed;">🏓 ${escapeHtml(o.player_name || 'Unknown')}</h4>
+          <p style="margin:4px 0; font-size:0.92em; color:#444;">📱 ${escapeHtml(o.mobile || 'No phone')}</p>
+          <p style="margin:4px 0; font-size:0.92em; color:#444;">📅 ${escapeHtml(o.play_date || 'No date')}</p>
+          <p style="margin:4px 0; font-size:0.92em; color:#444;">🎯 Skill Level: ${escapeHtml(o.skill_level || 'Not specified')}</p>
         </div>
       `).join('');
     }
@@ -1758,15 +1783,19 @@ document.addEventListener("DOMContentLoaded", async () => {
       refreshOpenPlayBtn.textContent = "⏳ Loading...";
       await loadOpenPlay();
       refreshOpenPlayBtn.disabled = false;
-      refreshOpenPlayBtn.textContent = "🔄 Refresh Open Play";
+      refreshOpenPlayBtn.textContent = "🔄 Refresh List";
     });
   }
 
   setInterval(async () => {
     if (document.visibilityState === 'visible') {
-      await renderLiveBoard();
+      const livePage = document.getElementById('page-live');
+      if (livePage && livePage.classList.contains('active')) {
+        await renderLiveBoard();
+      }
       const adminDataEl = document.getElementById('adminData');
-      if (currentAdminTab === 'tournament' && adminDataEl && adminDataEl.style.display !== 'none') {
+      const adminPage = document.getElementById('page-admin');
+      if (currentAdminTab === 'tournament' && adminPage && adminPage.classList.contains('active') && adminDataEl && adminDataEl.style.display !== 'none') {
         await renderAdminTournament();
       }
     }
@@ -1780,7 +1809,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (document.visibilityState === 'visible') {
       if (timestamp - lastChatLoad >= CHAT_POLL_MS) {
         lastChatLoad = timestamp;
-        loadChatMessages();
+        const chatPage = document.getElementById('page-chat');
+        if (chatPage && chatPage.classList.contains('active')) {
+          loadChatMessages();
+        }
       }
       if (timestamp - lastDataLoad >= DATA_POLL_MS) {
         lastDataLoad = timestamp;
@@ -1798,12 +1830,18 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   document.addEventListener("visibilitychange", async () => {
     if (document.visibilityState === "visible") {
-      loadChatMessages();
       loadBookings();
       loadOpenPlay();
       updateLiveClosureStatus();
       await autoCleanupOldData();
-      renderLiveBoard();
+      const livePage = document.getElementById('page-live');
+      if (livePage && livePage.classList.contains('active')) {
+        renderLiveBoard();
+      }
+      const chatPage = document.getElementById('page-chat');
+      if (chatPage && chatPage.classList.contains('active')) {
+        loadChatMessages();
+      }
     }
   });
 });
