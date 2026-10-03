@@ -9,7 +9,7 @@ const headers = {
 const CHAT_POLL_MS = 60000;
 const DATA_POLL_MS = 300000;
 const STATUS_POLL_MS = 300000;
-const MATCHUPS_POLL_MS = 180000;
+const LIVE_MATCH_POLL_MS = 60000;
 
 const BOOKING_DISPLAY_DAYS = 30;
 const OPENPLAY_DISPLAY_DAYS = 7;
@@ -20,13 +20,6 @@ const OPEN_PLAY_START_TIME = "18:00";
 const PLAYERS_PER_COURT = 16;
 const TOTAL_COURTS = 2;
 const OPEN_PLAY_FEE = 50;
-
-const MATCH_DURATION_MIN = 20;
-const MATCH_TARGET_SCORE = 11;
-const GAMES_PER_PLAYER = 6;
-
-const SESSION_START_TIME = "18:00";
-const SESSION_END_TIME = "24:00";
 
 const MORNING_START_MIN = 6 * 60;
 const MORNING_END_MIN = 16 * 60;
@@ -40,8 +33,8 @@ const CLOSURE_END_HOUR = 17;
 const PHT_OFFSET_HOURS = 8;
 
 const ADMIN_PASSWORD = "zinja2026";
-let adminData = { bookings: [], openplay: [], playerStatus: [] };
-let currentAdminTab = 'bookings';
+let adminData = { bookings: [], openplay: [] };
+let currentAdminTab = 'tournament';
 
 function getPHTNow() {
   const now = new Date();
@@ -49,9 +42,12 @@ function getPHTNow() {
   return new Date(utcMs + (PHT_OFFSET_HOURS * 3600000));
 }
 
-function getPHTMinutes() {
+function getTodayStr() {
   const pht = getPHTNow();
-  return pht.getHours() * 60 + pht.getMinutes();
+  const y = pht.getFullYear();
+  const m = String(pht.getMonth() + 1).padStart(2, "0");
+  const d = String(pht.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 function generateCancelCode() {
@@ -95,20 +91,10 @@ function addHoursToTime(time, hours) {
   return `${displayHour}:${String(endMinute).padStart(2, "0")} ${suffix}`;
 }
 
-function addMinutesToTime(time, mins) {
-  const [h, m] = time.split(":").map(Number);
-  const total = h * 60 + m + mins;
-  const newH = Math.floor(total / 60) % 24;
-  const newM = total % 60;
-  return `${String(newH).padStart(2, "0")}:${String(newM).padStart(2, "0")}`;
-}
-
-function formatTime12(time) {
-  if (!time) return "";
-  const [h, m] = time.split(":").map(Number);
-  const suffix = h >= 12 ? "PM" : "AM";
-  const displayH = h % 12 || 12;
-  return `${displayH}:${String(m).padStart(2, "0")} ${suffix}`;
+function formatClockTime(isoString) {
+  if (!isoString) return "";
+  const d = new Date(isoString);
+  return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 }
 
 function showResult(element, message, success = true) {
@@ -278,10 +264,10 @@ function updateLiveClosureStatus() {
   const timeStr = pht.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
 
   if (isClosed) {
-    banner.innerHTML = `<span style="display: inline-block; width: 10px; height: 10px; background: #fff; border-radius: 50%; margin-right: 8px;"></span><strong>🔴 CLOSED NOW</strong> — Weekly Rest Period (reopens Saturday 5:00 PM) · ${timeStr} PHT`;
+    banner.innerHTML = `<span style="display:inline-block;width:10px;height:10px;background:#fff;border-radius:50%;margin-right:8px;"></span><strong>🔴 CLOSED NOW</strong> — Weekly Rest Period (reopens Saturday 5:00 PM) · ${timeStr} PHT`;
     banner.style.background = "linear-gradient(135deg, #dc2626, #991b1b)";
   } else {
-    banner.innerHTML = `<span style="display: inline-block; width: 10px; height: 10px; background: #fff; border-radius: 50%; margin-right: 8px;"></span><strong>🟢 OPEN NOW</strong> — Book your court or join Open Play! · ${timeStr} PHT`;
+    banner.innerHTML = `<span style="display:inline-block;width:10px;height:10px;background:#fff;border-radius:50%;margin-right:8px;"></span><strong>🟢 OPEN NOW</strong> — Book your court or join Open Play! · ${timeStr} PHT`;
     banner.style.background = "linear-gradient(135deg, #059669, #047857)";
   }
 }
@@ -294,7 +280,7 @@ function announceClosureInChat() {
   if (!getCurrentClosureStatus()) return;
   const notice = document.createElement("div");
   notice.id = "closureChatNotice";
-  notice.style.cssText = "margin-bottom: 12px; padding: 12px; background: #7f1d1d; border-radius: 8px; border-left: 4px solid #ef4444; color: #fff; font-size: 0.95em;";
+  notice.style.cssText = "margin-bottom:12px;padding:12px;background:#7f1d1d;border-radius:8px;border-left:4px solid #ef4444;color:#fff;font-size:0.95em;";
   notice.innerHTML = `<strong>📢 Facility Notice:</strong> Courts and Open Play are currently <strong>CLOSED</strong> for our scheduled rest period. We reopen on <strong>Saturday at 5:00 PM (PHT)</strong>. Thank you for understanding!`;
   container.insertBefore(notice, container.firstChild);
 }
@@ -527,12 +513,6 @@ async function handleBookingSubmit(event) {
     const availabilityDiv = document.getElementById("availabilityInfo");
     if (availabilityDiv) availabilityDiv.innerHTML = "";
     await loadBookings();
-    
-    const matchDateInput = document.getElementById("matchDate");
-    if (matchDateInput && matchDateInput.value === bookingDate) {
-      localStorage.removeItem(`zinja_matchup_seed_${bookingDate}`);
-      await loadAutoMatchups(bookingDate);
-    }
   } catch (error) {
     console.error("Booking error:", error);
     showResult(result, `Something went wrong. ${error.message || "Please try again."}`, false);
@@ -585,12 +565,6 @@ async function handleOpenPlaySubmit(event) {
     const infoDiv = document.getElementById("openPlayInfo");
     if (infoDiv) infoDiv.innerHTML = "";
     await loadOpenPlay();
-    
-    const matchDateInput = document.getElementById("matchDate");
-    if (matchDateInput && matchDateInput.value === playDate) {
-      localStorage.removeItem(`zinja_matchup_seed_${playDate}`);
-      await loadAutoMatchups(playDate);
-    }
   } catch (error) {
     console.error("Open Play error:", error);
     showResult(result, `Something went wrong. ${error.message || "Please try again."}`, false);
@@ -678,635 +652,573 @@ async function cancelOpenPlay() {
       showResult(result, "No matching Open Play registration was found.", false);
     }
   } catch (error) { showResult(result, `Cancellation failed. ${error.message || "Please try again."}`, false); }
-}// ====================
-// PLAYER STATUS (LEFT / SUBSTITUTED)
+}
+
+// ====================
+// CHECK-IN SYSTEM
 // ====================
 
-async function loadPlayerStatus(dateStr) {
+async function loadCheckIns(dateStr) {
   try {
-    const rows = await supabaseFetch(`/rest/v1/player_status?select=player_name,status,substitute_name&play_date=eq.${encodeURIComponent(dateStr)}`);
+    const rows = await supabaseFetch(`/rest/v1/check_ins?select=player_name,status,is_walkin&play_date=eq.${encodeURIComponent(dateStr)}`);
     const map = {};
     (rows || []).forEach(r => {
-      map[r.player_name] = { status: r.status, substitute: r.substitute_name };
+      map[r.player_name] = { status: r.status, is_walkin: r.is_walkin };
     });
     return map;
   } catch (error) {
-    console.warn("Could not load player status:", error);
+    console.warn("Could not load check-ins:", error);
     return {};
   }
 }
 
-async function markPlayerLeft(playDate, playerName) {
-  const filter = `play_date=eq.${encodeURIComponent(playDate)}&player_name=eq.${encodeURIComponent(playerName)}`;
-  try { await supabaseFetch(`/rest/v1/player_status?${filter}`, { method: "DELETE" }); } catch (e) {}
-  await supabaseFetch("/rest/v1/player_status", {
+async function addCheckIn(dateStr, playerName, isWalkin = false) {
+  await supabaseFetch("/rest/v1/check_ins", {
     method: "POST",
     headers: { Prefer: "return=representation" },
-    body: JSON.stringify({ play_date: playDate, player_name: playerName, status: "left" })
+    body: JSON.stringify({ play_date: dateStr, player_name: playerName, is_walkin: isWalkin, status: 'active' })
   });
 }
 
-async function markPlayerSubstituted(playDate, originalName, substituteName) {
-  const filter = `play_date=eq.${encodeURIComponent(playDate)}&player_name=eq.${encodeURIComponent(originalName)}`;
-  try { await supabaseFetch(`/rest/v1/player_status?${filter}`, { method: "DELETE" }); } catch (e) {}
-  await supabaseFetch("/rest/v1/player_status", {
-    method: "POST",
+async function removeCheckIn(dateStr, playerName) {
+  await supabaseFetch(`/rest/v1/check_ins?play_date=eq.${encodeURIComponent(dateStr)}&player_name=eq.${encodeURIComponent(playerName)}`, { method: "DELETE" });
+}
+
+async function setPlayerStatus(dateStr, playerName, status) {
+  await supabaseFetch(`/rest/v1/check_ins?play_date=eq.${encodeURIComponent(dateStr)}&player_name=eq.${encodeURIComponent(playerName)}`, {
+    method: "PATCH",
     headers: { Prefer: "return=representation" },
-    body: JSON.stringify({ play_date: playDate, player_name: originalName, status: "replaced", substitute_name: substituteName })
+    body: JSON.stringify({ status: status })
   });
 }
 
-async function clearPlayerStatus(playDate, playerName) {
-  const filter = `play_date=eq.${encodeURIComponent(playDate)}&player_name=eq.${encodeURIComponent(playerName)}`;
-  try { await supabaseFetch(`/rest/v1/player_status?${filter}`, { method: "DELETE" }); } catch (e) {}
-}
-
-// Public: Player taps the ✕ next to their name
-window.handleMarkLeftClick = async function (playDate, playerName) {
-  if (!confirm(`Mark ${playerName} as LEFT?\n\nThey will not play any more matches today.`)) return;
-  try {
-    await markPlayerLeft(playDate, playerName);
-    await loadAutoMatchups(playDate);
-  } catch (error) {
-    alert("Failed to mark player: " + error.message);
-  }
-};
-
-// Admin: Assign substitute
-window.handleSubstituteClick = async function (playDate, originalName) {
-  const substituteName = prompt(`Enter substitute name for "${originalName}":`);
-  if (!substituteName || !substituteName.trim()) return;
-  try {
-    await markPlayerSubstituted(playDate, originalName, substituteName.trim());
-    await loadAutoMatchups(playDate);
-    if (typeof renderAdminMatchups === "function") {
-      const el = document.getElementById("adminMatchupsContainer");
-      if (el) el.innerHTML = '<p style="color:#10b981;">✅ Substitute assigned. Reload the list to see updated status.</p>';
-    }
-  } catch (error) {
-    alert("Failed to assign substitute: " + error.message);
-  }
-};
-
-// Admin: Undo mark/left/substitute
-window.handleClearStatusClick = async function (playDate, playerName) {
-  if (!confirm(`Reset status for "${playerName}" back to Active?`)) return;
-  try {
-    await clearPlayerStatus(playDate, playerName);
-    await loadAutoMatchups(playDate);
-  } catch (error) {
-    alert("Failed to reset: " + error.message);
-  }
-};
-
-// Event delegation for the public ✕ buttons
-document.addEventListener("click", (e) => {
-  const btn = e.target.closest(".mark-left-btn");
-  if (btn) {
-    const date = btn.dataset.date;
-    const name = btn.dataset.name;
-    if (date && name) window.handleMarkLeftClick(date, name);
-  }
-  const subBtn = e.target.closest(".admin-sub-btn");
-  if (subBtn) {
-    const date = subBtn.dataset.date;
-    const name = subBtn.dataset.name;
-    if (date && name) window.handleSubstituteClick(date, name);
-  }
-  const clearBtn = e.target.closest(".admin-clear-btn");
-  if (clearBtn) {
-    const date = clearBtn.dataset.date;
-    const name = clearBtn.dataset.name;
-    if (date && name) window.handleClearStatusClick(date, name);
-  }
-});
-
 // ====================
-// SWISS-STYLE TOURNAMENT (WINNERS vs WINNERS, LOSERS vs LOSERS)
+// MATCH CRUD
 // ====================
 
-function seededShuffle(array, seed) {
-  const arr = [...array];
-  let s = 0;
-  for (let i = 0; i < String(seed).length; i++) s += String(seed).charCodeAt(i);
-  const rand = () => {
-    s = (s * 9301 + 49297) % 233280;
-    return s / 233280;
-  };
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(rand() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}
-
-function matchKey(dateStr, court, startTime) {
-  return `${dateStr}|${court}|${startTime}`;
-}
-
-async function loadMatchResults(dateStr) {
+async function loadMatches(dateStr) {
   try {
-    const rows = await supabaseFetch(`/rest/v1/match_results?select=court,start_time,winning_team&play_date=eq.${encodeURIComponent(dateStr)}`);
-    const map = {};
-    (rows || []).forEach(r => {
-      map[matchKey(dateStr, r.court, r.start_time)] = r.winning_team;
-    });
-    return map;
+    const rows = await supabaseFetch(`/rest/v1/matches?play_date=eq.${encodeURIComponent(dateStr)}&order=started_at.desc`);
+    return rows || [];
   } catch (error) {
-    console.warn("Could not load match results:", error);
-    return {};
+    console.warn("Could not load matches:", error);
+    return [];
   }
 }
 
-async function saveMatchResult(playDate, court, startTime, winningTeam) {
-  const filter = `play_date=eq.${encodeURIComponent(playDate)}&court=eq.${court}&start_time=eq.${encodeURIComponent(startTime)}`;
-  try {
-    await supabaseFetch(`/rest/v1/match_results?${filter}`, { method: "DELETE" });
-  } catch (e) { /* ignore */ }
-  await supabaseFetch("/rest/v1/match_results", {
+async function createMatch(dateStr, court, teamA, teamB) {
+  await supabaseFetch("/rest/v1/matches", {
     method: "POST",
     headers: { Prefer: "return=representation" },
     body: JSON.stringify({
-      play_date: playDate,
+      play_date: dateStr,
       court: court,
-      start_time: startTime,
-      winning_team: winningTeam
+      team_a_1: teamA[0],
+      team_a_2: teamA[1],
+      team_b_1: teamB[0],
+      team_b_2: teamB[1],
+      status: 'active'
     })
   });
 }
 
-window.reportWin = async function (playDate, court, startTime, winningTeam) {
+async function declareWinner(matchId, winningTeam) {
+  await supabaseFetch(`/rest/v1/matches?id=eq.${matchId}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({
+      status: 'done',
+      winning_team: winningTeam,
+      ended_at: new Date().toISOString()
+    })
+  });
+}
+
+async function cancelMatch(matchId) {
+  await supabaseFetch(`/rest/v1/matches?id=eq.${matchId}`, { method: "DELETE" });
+}
+
+// ====================
+// SMART SUGGEST
+// ====================
+
+function computePlayerStats(playerNames, matches) {
+  const stats = {};
+  playerNames.forEach(name => { stats[name] = { games: 0, wins: 0, losses: 0 }; });
+
+  matches.forEach(m => {
+    const teamA = [m.team_a_1, m.team_a_2];
+    const teamB = [m.team_b_1, m.team_b_2];
+    [...teamA, ...teamB].forEach(n => {
+      if (stats[n]) stats[n].games++;
+    });
+    if (m.status === 'done' && m.winning_team) {
+      const winners = m.winning_team === 'A' ? teamA : teamB;
+      const losers = m.winning_team === 'A' ? teamB : teamA;
+      winners.forEach(n => { if (stats[n]) stats[n].wins++; });
+      losers.forEach(n => { if (stats[n]) stats[n].losses++; });
+    }
+  });
+
+  return stats;
+}
+
+function getPlayersInActiveMatches(matches) {
+  const set = new Set();
+  matches.filter(m => m.status === 'active').forEach(m => {
+    set.add(m.team_a_1);
+    set.add(m.team_a_2);
+    set.add(m.team_b_1);
+    set.add(m.team_b_2);
+  });
+  return set;
+}
+
+function smartSuggest(availablePlayers, matches) {
+  if (availablePlayers.length < 4) return null;
+
+  const stats = computePlayerStats(availablePlayers, matches);
+
+  const sorted = availablePlayers.slice().sort((a, b) => {
+    const diff = stats[a].games - stats[b].games;
+    if (diff !== 0) return diff;
+    return Math.random() - 0.5;
+  });
+
+  const picked = sorted.slice(0, 4);
+
+  picked.sort((a, b) => {
+    const wa = stats[a].wins - stats[a].losses;
+    const wb = stats[b].wins - stats[b].losses;
+    return wb - wa;
+  });
+
+  return {
+    teamA: [picked[0], picked[3]],
+    teamB: [picked[1], picked[2]]
+  };
+}
+
+// ====================
+// PUBLIC LIVE BOARD
+// ====================
+
+function renderMatchCard(m, isActive) {
+  const teamALabel = `${escapeHtml(m.team_a_1)} & ${escapeHtml(m.team_a_2)}`;
+  const teamBLabel = `${escapeHtml(m.team_b_1)} & ${escapeHtml(m.team_b_2)}`;
+
+  const aWon = m.winning_team === 'A';
+  const bWon = m.winning_team === 'B';
+  const hasResult = !!m.winning_team;
+
+  const markA = aWon ? ' 🏆' : (bWon ? ' ❌' : '');
+  const markB = bWon ? ' 🏆' : (aWon ? ' ❌' : '');
+  const nameStyleA = bWon ? 'text-decoration:line-through;opacity:0.55;' : '';
+  const nameStyleB = aWon ? 'text-decoration:line-through;opacity:0.55;' : '';
+
+  const winButtons = isActive ? `
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+      <button type="button" onclick="reportMatchWin(${m.id}, 'A')"
+        style="flex:1;min-width:130px;padding:12px 14px;border:2px solid #10b981;border-radius:8px;background:rgba(16,185,129,0.25);color:#fff;font-weight:700;font-size:0.9em;cursor:pointer;">
+        🏆 Team A Won
+      </button>
+      <button type="button" onclick="reportMatchWin(${m.id}, 'B')"
+        style="flex:1;min-width:130px;padding:12px 14px;border:2px solid #f59e0b;border-radius:8px;background:rgba(245,158,11,0.25);color:#fff;font-weight:700;font-size:0.9em;cursor:pointer;">
+        🏆 Team B Won
+      </button>
+    </div>
+  ` : '';
+
+  const banner = hasResult
+    ? `<div style="margin-top:10px;padding:8px 12px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border-radius:8px;text-align:center;font-weight:700;font-size:0.9em;">🏆 Team ${m.winning_team} Wins!</div>`
+    : '';
+
+  return `
+    <div style="background:${isActive ? 'linear-gradient(135deg,#064e3b,#065f46)' : 'linear-gradient(135deg,#1e293b,#0f172a)'};border-radius:12px;padding:16px;margin-bottom:12px;border-left:4px solid ${isActive ? '#10b981' : '#7c3aed'};color:#fff;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px;">
+        <span style="font-size:0.85em;font-weight:700;">${isActive ? '🟢 NOW PLAYING' : '✅ COMPLETED'}</span>
+        <span style="font-size:0.75em;opacity:0.9;">🏓 Court ${m.court} · 🕐 ${formatClockTime(m.started_at)}${m.ended_at ? ' - ' + formatClockTime(m.ended_at) : ''}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(255,255,255,0.1);border-radius:8px;margin:4px 0;flex-wrap:wrap;${nameStyleA}">
+        <strong style="color:#10b981;">Team A:</strong>
+        <span>${teamALabel}</span>
+        <span style="margin-left:auto;">${markA}</span>
+      </div>
+      <div style="text-align:center;font-weight:700;color:#a78bfa;padding:4px 0;">— VS —</div>
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(255,255,255,0.1);border-radius:8px;margin:4px 0;flex-wrap:wrap;${nameStyleB}">
+        <strong style="color:#f59e0b;">Team B:</strong>
+        <span>${teamBLabel}</span>
+        <span style="margin-left:auto;">${markB}</span>
+      </div>
+      ${banner}
+      ${winButtons}
+    </div>
+  `;
+}
+
+async function renderLiveBoard() {
+  const container = document.getElementById("matchupsContainer");
+  if (!container) return;
+  const today = getTodayStr();
+  try {
+    const [checkInMap, matches] = await Promise.all([
+      loadCheckIns(today),
+      loadMatches(today)
+    ]);
+
+    const activeMatches = matches.filter(m => m.status === 'active');
+    const doneMatches = matches.filter(m => m.status === 'done');
+    const playersInActive = getPlayersInActiveMatches(matches);
+
+    const waitingPlayers = Object.keys(checkInMap).filter(n =>
+      checkInMap[n].status === 'active' && !playersInActive.has(n)
+    );
+
+    let html = '';
+
+    if (activeMatches.length === 0) {
+      html += `<div style="text-align:center;padding:24px;background:rgba(124,58,237,0.1);border-radius:12px;border:1px solid rgba(124,58,237,0.3);margin-bottom:16px;">
+        <p style="font-size:1.5em;margin:8px 0;">⏳</p>
+        <p style="font-weight:700;margin:8px 0;">No live matches right now</p>
+        <p style="font-size:0.9em;opacity:0.75;margin:4px 0;">The admin will start games soon. Stay tuned!</p>
+      </div>`;
+    } else {
+      activeMatches.forEach(m => { html += renderMatchCard(m, true); });
+    }
+
+    html += `
+      <div style="margin-top:20px;padding:16px;background:rgba(245,158,11,0.1);border-radius:12px;border-left:4px solid #f59e0b;color:#fff;">
+        <p style="font-weight:700;margin:0 0 8px 0;">⏳ Waiting Pool (${waitingPlayers.length})</p>
+        <p style="font-size:0.9em;opacity:0.85;margin:0;line-height:1.6;">${waitingPlayers.length > 0 ? waitingPlayers.map(escapeHtml).join(' · ') : 'No one waiting right now.'}</p>
+      </div>
+    `;
+
+    if (doneMatches.length > 0) {
+      html += `<h3 style="color:#a78bfa;margin:24px 0 8px 0;text-align:center;">✅ Completed Today (${doneMatches.length})</h3>`;
+      doneMatches.forEach(m => { html += renderMatchCard(m, false); });
+    }
+
+    container.innerHTML = html;
+  } catch (error) {
+    console.error("Live board error:", error);
+    container.innerHTML = `<p style="text-align:center;color:#ef4444;">Unable to load live board: ${escapeHtml(error.message)}</p>`;
+  }
+}
+
+window.reportMatchWin = async function (matchId, winningTeam) {
   const teamLabel = winningTeam === 'A' ? 'Team A' : 'Team B';
   if (!confirm(`🏆 Confirm: ${teamLabel} won this match?`)) return;
   try {
-    await saveMatchResult(playDate, court, startTime, winningTeam);
-    await loadAutoMatchups(playDate);
+    await declareWinner(matchId, winningTeam);
+    await renderLiveBoard();
   } catch (error) {
     alert("Failed to save result: " + error.message);
   }
 };
 
-function getBracketLabel(rec) {
-  const total = rec.wins + rec.losses;
-  if (total === 0) return '🎲 Opening Round';
-  if (rec.losses === 0) return `🔥 ${rec.wins}-0 Winners Bracket`;
-  if (rec.wins === 0) return `💪 0-${rec.losses} Losers Bracket`;
-  return `⚖️ ${rec.wins}-${rec.losses} Bracket`;
-}
+// ====================
+// ADMIN — TOURNAMENT TAB
+// ====================
 
-function swissPairRound(players, records, roundNum, dateStr, seed) {
-  const groups = {};
-  players.forEach(p => {
-    const r = records[p.player_name] || { wins: 0, losses: 0 };
-    const key = `${r.wins}-${r.losses}`;
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(p);
-  });
-
-  const sortedKeys = Object.keys(groups).sort((a, b) => {
-    const [aw, al] = a.split('-').map(Number);
-    const [bw, bl] = b.split('-').map(Number);
-    if (bw !== aw) return bw - aw;
-    return al - bl;
-  });
-
-  const ordered = [];
-  sortedKeys.forEach((key, gi) => {
-    const shuffled = seededShuffle(groups[key], `swiss-${seed}-r${roundNum}-g${gi}-${key}`);
-    ordered.push(...shuffled);
-  });
-
-  const pairs = [];
-  for (let i = 0; i + 4 <= ordered.length; i += 4) {
-    pairs.push({
-      teamA: [ordered[i], ordered[i+1]],
-      teamB: [ordered[i+2], ordered[i+3]]
-    });
-  }
-  return pairs;
-}
-
-function generateAutoSchedule(players, startTime, availableCourts, resultsMap, dateStr) {
-  if (!players || players.length < 4 || !availableCourts || availableCourts.length === 0) return [];
-
-  const numCourts = availableCourts.length;
-  const sessionEndMin = 24 * 60;
-  const sessionStartMin = timeToMinutes(startTime);
-  const sessionMinutes = sessionEndMin - sessionStartMin;
-  const totalWaves = Math.floor(sessionMinutes / MATCH_DURATION_MIN);
-  const maxMatchesByTime = totalWaves * numCourts;
-  const maxMatchesByGames = Math.floor((players.length * GAMES_PER_PLAYER) / 4);
-  const maxMatches = Math.min(maxMatchesByTime, maxMatchesByGames);
-
-  const records = {};
-  players.forEach(p => { records[p.player_name] = { wins: 0, losses: 0 }; });
-
-  const seedKey = `zinja_matchup_seed_${dateStr}`;
-  let seed = localStorage.getItem(seedKey);
-  if (!seed) { seed = "default-seed"; localStorage.setItem(seedKey, seed); }
-
-  const allMatches = [];
-  let currentTime = startTime;
-  let round = 1;
-  const MAX_ROUNDS = 30;
-
-  while (allMatches.length < maxMatches && round <= MAX_ROUNDS) {
-    if (timeToMinutes(currentTime) >= sessionEndMin) break;
-
-    let pairs;
-    if (round === 1) {
-      const shuffled = seededShuffle(players, seed);
-      pairs = [];
-      for (let i = 0; i + 4 <= shuffled.length; i += 4) {
-        pairs.push({ teamA: [shuffled[i], shuffled[i+1]], teamB: [shuffled[i+2], shuffled[i+3]] });
-      }
-    } else {
-      pairs = swissPairRound(players, records, round, dateStr, seed);
-    }
-
-    if (pairs.length === 0) break;
-
-    const wavesNeeded = Math.ceil(pairs.length / numCourts);
-    const roundEndMin = timeToMinutes(currentTime) + wavesNeeded * MATCH_DURATION_MIN;
-    if (roundEndMin > sessionEndMin) break;
-
-    const matchesThisRound = [];
-    let waveTime = currentTime;
-
-    for (let w = 0; w < wavesNeeded; w++) {
-      for (let c = 0; c < numCourts && w * numCourts + c < pairs.length; c++) {
-        if (allMatches.length >= maxMatches) break;
-        const p = pairs[w * numCourts + c];
-        const match = {
-          tier: 'Mixed',
-          tierColor: '#7c3aed',
-          round: round,
-          teamA: p.teamA,
-          teamB: p.teamB,
-          court: availableCourts[c],
-          startTime: waveTime,
-          endTime: addMinutesToTime(waveTime, MATCH_DURATION_MIN)
-        };
-        const recA = records[p.teamA[0].player_name];
-        match.bracket = getBracketLabel(recA);
-        allMatches.push(match);
-        matchesThisRound.push(match);
-      }
-      waveTime = addMinutesToTime(waveTime, MATCH_DURATION_MIN);
-      if (allMatches.length >= maxMatches) break;
-    }
-
-    if (matchesThisRound.length === 0) break;
-
-    matchesThisRound.forEach(m => {
-      const key = matchKey(dateStr, m.court, m.startTime);
-      const result = resultsMap[key];
-      if (result === 'A') {
-        m.teamA.forEach(p => records[p.player_name].wins++);
-        m.teamB.forEach(p => records[p.player_name].losses++);
-      } else if (result === 'B') {
-        m.teamB.forEach(p => records[p.player_name].wins++);
-        m.teamA.forEach(p => records[p.player_name].losses++);
-      }
-    });
-
-    currentTime = waveTime;
-    round++;
-  }
-
-  return allMatches;
-}
-
-function renderPlayerWithStatus(player, statusMap, dateStr, opts = {}) {
-  const status = statusMap[player.player_name];
-  const allowActions = opts.allowActions !== false;
-
-  // Substituted: show new name
-  if (status && status.status === 'replaced' && status.substitute) {
-    return `<span style="color:#a78bfa;font-weight:700;">${escapeHtml(status.substitute)}</span><em style="font-size:0.75em;opacity:0.65;margin-left:4px;">(sub for ${escapeHtml(player.player_name)})</em>`;
-  }
-
-  // Left: show dimmed with strikethrough
-  if (status && status.status === 'left') {
-    return `<span style="text-decoration:line-through;opacity:0.5;">${escapeHtml(player.player_name)}</span><span style="font-size:0.7em;background:#dc2626;color:#fff;padding:2px 6px;border-radius:4px;margin-left:6px;">LEFT</span>`;
-  }
-
-  // Active player
-  const safeName = escapeHtml(player.player_name);
-  const actions = allowActions
-    ? `<button type="button" class="mark-left-btn" data-date="${escapeHtml(dateStr)}" data-name="${safeName}" title="Mark as Left" style="margin-left:6px;background:transparent;border:1px solid rgba(255,255,255,0.3);color:#fff;width:22px;height:22px;border-radius:50%;font-size:0.7em;cursor:pointer;padding:0;line-height:1;">✕</button>`
-    : '';
-  return `<span>${safeName}</span>${actions}`;
-}
-
-function renderAutoSchedule(schedule, dateStr, playerCount, availableCourts, matchResults, statusMap) {
-  const container = document.getElementById("matchupsContainer");
+async function renderAdminTournament() {
+  const container = document.getElementById('adminContent');
   if (!container) return;
-  matchResults = matchResults || {};
-  statusMap = statusMap || {};
+  const today = getTodayStr();
 
-  if (schedule.length === 0) {
-    container.innerHTML = `<p style="text-align:center;color:#f59e0b;">⚠️ No matchups for ${formatDate(dateStr)}. Need at least 4 players.</p>`;
-    return;
-  }
+  try {
+    const [regs, checkInMap, matches] = await Promise.all([
+      supabaseFetch(`/rest/v1/open_play?select=player_name,skill_level&play_date=eq.${encodeURIComponent(today)}`),
+      loadCheckIns(today),
+      loadMatches(today)
+    ]);
 
-  const today = new Date().toISOString().split("T")[0];
-  const isToday = dateStr === today;
-  const currentPHTMin = getPHTMinutes();
-  const sessionStartMin = timeToMinutes(SESSION_START_TIME);
-  const isBeforeSession = isToday && currentPHTMin < sessionStartMin;
+    const registeredPlayers = (regs || []).map(r => r.player_name);
+    const walkInPlayers = Object.keys(checkInMap).filter(n => checkInMap[n].is_walkin && !registeredPlayers.includes(n));
+    const allPlayers = [...registeredPlayers, ...walkInPlayers];
 
-  let visibleSchedule = schedule;
-  if (isToday && !isBeforeSession) {
-    visibleSchedule = schedule.filter(m => timeToMinutes(m.endTime) > currentPHTMin);
-  }
+    const activeMatches = matches.filter(m => m.status === 'active');
+    const doneMatches = matches.filter(m => m.status === 'done');
+    const playersInActive = getPlayersInActiveMatches(matches);
 
-  if (visibleSchedule.length === 0 && isToday && !isBeforeSession) {
+    const availablePlayers = allPlayers.filter(n =>
+      checkInMap[n] && checkInMap[n].status === 'active' && !playersInActive.has(n)
+    );
+
+    const stats = computePlayerStats(allPlayers, matches);
+    const courtsInUse = new Set(activeMatches.map(m => m.court));
+    const freeCourts = [1, 2].filter(c => !courtsInUse.has(c));
+
+    const playerListHTML = allPlayers.length === 0
+      ? '<p style="color:#888;">No players yet today. Tap "➕ Add Walk-In" to add one.</p>'
+      : allPlayers.map(name => {
+          const ci = checkInMap[name];
+          const inActive = playersInActive.has(name);
+          const s = stats[name] || { games: 0, wins: 0, losses: 0 };
+          const recStr = s.games > 0 ? `${s.wins}-${s.losses}` : '—';
+          const safeName = escapeHtml(name);
+
+          let badge = '';
+          let bg = '#f9fafb';
+          if (inActive) {
+            badge = '<span style="background:#10b981;color:#fff;padding:3px 10px;border-radius:12px;font-size:0.7em;font-weight:700;">PLAYING</span>';
+            bg = '#ecfdf5';
+          } else if (ci && ci.status === 'left') {
+            badge = '<span style="background:#dc2626;color:#fff;padding:3px 10px;border-radius:12px;font-size:0.7em;font-weight:700;">LEFT</span>';
+            bg = '#fef2f2';
+          } else if (ci && ci.status === 'active') {
+            badge = '<span style="background:#059669;color:#fff;padding:3px 10px;border-radius:12px;font-size:0.7em;font-weight:700;">ACTIVE</span>';
+            bg = '#f0fdf4';
+          } else {
+            badge = '<span style="background:#9ca3af;color:#fff;padding:3px 10px;border-radius:12px;font-size:0.7em;font-weight:700;">NOT CHECKED IN</span>';
+          }
+          if (ci && ci.is_walkin) {
+            badge += ' <span style="background:#f59e0b;color:#fff;padding:3px 10px;border-radius:12px;font-size:0.7em;font-weight:700;margin-left:4px;">WALK-IN</span>';
+          }
+
+          let actions = '';
+          if (!ci) {
+            actions = `<button type="button" onclick="toggleCheckIn('${safeName}', false)" style="padding:6px 14px;background:#10b981;color:#fff;border:none;border-radius:6px;font-size:0.8em;font-weight:600;cursor:pointer;">✓ Check In</button>`;
+          } else if (inActive) {
+            actions = `<span style="font-size:0.75em;color:#666;font-style:italic;">Currently playing</span>`;
+          } else if (ci.status === 'left') {
+            actions = `<button type="button" onclick="togglePlayerLeft('${safeName}', false)" style="padding:6px 12px;background:#6b7280;color:#fff;border:none;border-radius:6px;font-size:0.8em;font-weight:600;cursor:pointer;">↺ Back Active</button>
+              <button type="button" onclick="toggleCheckIn('${safeName}', true)" style="padding:6px 12px;background:#dc2626;color:#fff;border:none;border-radius:6px;font-size:0.8em;font-weight:600;cursor:pointer;margin-left:4px;">✕ Remove</button>`;
+          } else {
+            actions = `<button type="button" onclick="togglePlayerLeft('${safeName}', true)" style="padding:6px 12px;background:#dc2626;color:#fff;border:none;border-radius:6px;font-size:0.8em;font-weight:600;cursor:pointer;">⏸ Mark as Left</button>
+              <button type="button" onclick="toggleCheckIn('${safeName}', true)" style="padding:6px 12px;background:#6b7280;color:#fff;border:none;border-radius:6px;font-size:0.8em;font-weight:600;cursor:pointer;margin-left:4px;">✕ Remove</button>`;
+          }
+
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:${bg};border-radius:8px;margin-bottom:6px;flex-wrap:wrap;gap:8px;">
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+              <strong>${safeName}</strong>
+              ${badge}
+              <span style="font-size:0.8em;color:#666;">Games: ${s.games} · Record: ${recStr}</span>
+            </div>
+            <div>${actions}</div>
+          </div>`;
+        }).join('');
+
+    const activeHTML = activeMatches.length === 0
+      ? '<p style="color:#888;">No active matches.</p>'
+      : activeMatches.map(m => `
+          <div style="padding:12px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
+              <strong>Court ${m.court}</strong>
+              <small style="color:#666;">Started ${formatClockTime(m.started_at)}</small>
+            </div>
+            <p style="margin:4px 0;font-size:0.9em;"><strong>A:</strong> ${escapeHtml(m.team_a_1)} & ${escapeHtml(m.team_a_2)}</p>
+            <p style="margin:4px 0;font-size:0.9em;"><strong>B:</strong> ${escapeHtml(m.team_b_1)} & ${escapeHtml(m.team_b_2)}</p>
+            <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
+              <button type="button" onclick="adminDeclareWinner(${m.id}, 'A')" style="padding:6px 12px;background:#10b981;color:#fff;border:none;border-radius:6px;font-size:0.8em;font-weight:600;cursor:pointer;">🏆 A Won</button>
+              <button type="button" onclick="adminDeclareWinner(${m.id}, 'B')" style="padding:6px 12px;background:#f59e0b;color:#fff;border:none;border-radius:6px;font-size:0.8em;font-weight:600;cursor:pointer;">🏆 B Won</button>
+              <button type="button" onclick="adminCancelMatch(${m.id})" style="padding:6px 12px;background:#dc2626;color:#fff;border:none;border-radius:6px;font-size:0.8em;font-weight:600;cursor:pointer;">✕ Cancel</button>
+            </div>
+          </div>
+        `).join('');
+
+    const playerOptions = availablePlayers.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+    const createHTML = freeCourts.length === 0
+      ? '<p style="color:#f59e0b;font-weight:600;">Both courts are occupied. End a match to start a new one.</p>'
+      : availablePlayers.length < 4
+      ? `<p style="color:#f59e0b;font-weight:600;">Need at least 4 available players. Currently: ${availablePlayers.length}.</p>`
+      : `
+        <div style="background:#f9fafb;padding:12px;border-radius:8px;margin-bottom:12px;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+            <label style="font-weight:600;display:flex;gap:6px;align-items:center;">
+              Court:
+              <select id="newMatchCourt" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd;">
+                ${freeCourts.map(c => `<option value="${c}">Court ${c}</option>`).join('')}
+              </select>
+            </label>
+            <button type="button" onclick="doSmartSuggest()" style="padding:6px 14px;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:0.85em;">✨ Smart Suggest</button>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div>
+              <label style="display:block;font-size:0.85em;font-weight:600;color:#10b981;margin-bottom:4px;">Team A</label>
+              <select id="teamAP1" style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;margin-bottom:6px;"><option value="">— Player 1 —</option>${playerOptions}</select>
+              <select id="teamAP2" style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;"><option value="">— Player 2 —</option>${playerOptions}</select>
+            </div>
+            <div>
+              <label style="display:block;font-size:0.85em;font-weight:600;color:#f59e0b;margin-bottom:4px;">Team B</label>
+              <select id="teamBP1" style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;margin-bottom:6px;"><option value="">— Player 1 —</option>${playerOptions}</select>
+              <select id="teamBP2" style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;"><option value="">— Player 2 —</option>${playerOptions}</select>
+            </div>
+          </div>
+          <button type="button" onclick="doCreateMatch()" style="margin-top:12px;padding:12px 24px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;width:100%;">▶ Start Match</button>
+        </div>
+      `;
+
+    const completedHTML = doneMatches.length === 0
+      ? '<p style="color:#888;">No completed matches yet.</p>'
+      : doneMatches.map(m => `
+          <div style="padding:8px 12px;background:#f9fafb;border-radius:6px;margin-bottom:6px;font-size:0.9em;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+            <span>Court ${m.court} · ${escapeHtml(m.team_a_1)} & ${escapeHtml(m.team_a_2)} vs ${escapeHtml(m.team_b_1)} & ${escapeHtml(m.team_b_2)}</span>
+            <strong style="color:#10b981;">🏆 Team ${m.winning_team}</strong>
+          </div>
+        `).join('');
+
+    const checkedInCount = Object.values(checkInMap).filter(c => c.status === 'active').length;
+
     container.innerHTML = `
-      <div style="text-align:center; padding: 40px 20px; background: rgba(124,58,237,0.15); border-radius: 12px; border: 1px solid rgba(124,58,237,0.3);">
-        <p style="font-size: 2em; margin: 8px 0;">🏆</p>
-        <p style="font-size: 1.2em; font-weight: 700; color: #7c3aed; margin: 8px 0;">Session Complete!</p>
-        <p style="font-size: 0.95em; opacity: 0.85; margin: 4px 0;">All matches for ${formatDate(dateStr)} are done.</p>
-        <p style="font-size: 0.85em; opacity: 0.7; margin-top: 16px;">Thanks for playing! See you next session (6PM-12AM).</p>
+      <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+          <h3 style="color:#7c3aed;margin:0;">👥 Check-In & Player Management (${checkedInCount} active)</h3>
+          <button type="button" onclick="doAddWalkIn()" style="padding:8px 16px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:0.85em;">➕ Add Walk-In</button>
+        </div>
+        <p style="color:#666;font-size:0.9em;margin-bottom:12px;">Tap ✓ Check In for arrivals, ⏸ Mark as Left for departures. Walk-ins are added automatically as checked-in.</p>
+        ${playerListHTML}
+      </div>
+
+      <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:16px;">
+        <h3 style="color:#10b981;margin-top:0;">🟢 Active Matches (${activeMatches.length})</h3>
+        ${activeHTML}
+      </div>
+
+      <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:16px;">
+        <h3 style="color:#f59e0b;margin-top:0;">➕ Create New Match</h3>
+        <p style="color:#666;font-size:0.9em;margin-bottom:12px;">Free courts: ${freeCourts.map(c => 'Court ' + c).join(', ') || 'None'} · Available players: ${availablePlayers.length}</p>
+        ${createHTML}
+      </div>
+
+      <div style="background:#fff;border-radius:12px;padding:16px;">
+        <h3 style="color:#7c3aed;margin-top:0;">✅ Completed Today (${doneMatches.length})</h3>
+        ${completedHTML}
       </div>
     `;
-    return;
+  } catch (error) {
+    console.error("Admin tournament error:", error);
+    container.innerHTML = `<p style="color:red;">❌ ${escapeHtml(error.message)}</p>`;
   }
+}
 
-  const numCourts = availableCourts.length;
-  const courtsLabel = numCourts === 2 ? "🏓 2 Courts (parallel)" : `🏓 1 Court (Court ${availableCourts[0]})`;
-
-  const lastMatch = visibleSchedule[visibleSchedule.length - 1];
-  const sessionEnd = lastMatch ? formatTime12(lastMatch.endTime) : "N/A";
-
-  const completedCount = isBeforeSession ? 0 : schedule.length - visibleSchedule.length;
-
-  let countdownBanner = '';
-  if (isBeforeSession) {
-    const minsLeft = sessionStartMin - currentPHTMin;
-    const hoursLeft = Math.floor(minsLeft / 60);
-    const minsRem = minsLeft % 60;
-    const countdownText = hoursLeft > 0 
-      ? `${hoursLeft}h ${minsRem}m` 
-      : `${minsRem} minute${minsRem === 1 ? '' : 's'}`;
-    countdownBanner = `
-      <div style="text-align: center; margin-bottom: 20px; padding: 24px 20px; background: linear-gradient(135deg, #f59e0b, #dc2626); border-radius: 12px; color: #fff; box-shadow: 0 4px 20px rgba(245,158,11,0.4);">
-        <p style="font-size: 1.1em; margin: 4px 0; opacity: 0.95;">⏰ Session starts in</p>
-        <p style="font-size: 2.5em; font-weight: 900; margin: 8px 0; letter-spacing: 2px;">${countdownText}</p>
-        <p style="font-size: 0.95em; margin: 4px 0; opacity: 0.9;">First match: <strong>${formatTime12(SESSION_START_TIME)}</strong> · ${playerCount} players registered</p>
-      </div>
-    `;
-  }
-
-  let html = `
-    <div style="text-align: center; margin-bottom: 20px; padding: 16px; background: rgba(124,58,237,0.15); border-radius: 12px; border: 1px solid rgba(124,58,237,0.3);">
-      <p style="font-size: 1.1em; margin: 4px 0;">📅 <strong>${formatDate(dateStr)}</strong></p>
-      <p style="font-size: 0.95em; margin: 4px 0; opacity: 0.9;">👥 ${playerCount} players · ${courtsLabel}</p>
-      <p style="font-size: 0.95em; margin: 4px 0; opacity: 0.9;">🏓 ${visibleSchedule.length} ${isBeforeSession ? 'scheduled' : 'matches'} · 🕐 End: <strong>${sessionEnd}</strong></p>
-      <p style="font-size: 0.85em; margin: 4px 0; opacity: 0.75;">20 min per match · Target: 11 points</p>
-      <p style="font-size: 0.85em; margin: 8px 0 0 0; opacity: 0.85;">🏆 Winners play winners · 💪 Losers play losers</p>
-      ${completedCount > 0 ? `<p style="font-size: 0.8em; margin: 8px 0 0 0; opacity: 0.6;">✅ ${completedCount} match${completedCount === 1 ? '' : 'es'} completed (auto-hidden)</p>` : ''}
-      <p style="font-size: 0.8em; margin: 6px 0 0 0; opacity: 0.6;">Tap ✕ next to your name if you need to leave · Tap 🏆 after each match</p>
-    </div>
-    ${countdownBanner}
-  `;
-
-  visibleSchedule.forEach((m, idx) => {
-    let cls = "matchup-card";
-    let badge = `⏳ MATCH #${idx + 1}`;
-    
-    if (isBeforeSession) {
-      cls += " up-next";
-      badge = `📅 SCHEDULED`;
+window.toggleCheckIn = async function (playerName, isCurrentlyIn) {
+  const today = getTodayStr();
+  try {
+    if (isCurrentlyIn) {
+      await removeCheckIn(today, playerName);
     } else {
-      const isNow = idx < numCourts;
-      const isNext = idx >= numCourts && idx < numCourts * 2;
-      if (isNow) { cls += " now-playing"; badge = "🟢 NOW PLAYING"; }
-      else if (isNext) { cls += " up-next"; badge = "🟡 UP NEXT"; }
+      await addCheckIn(today, playerName, false);
     }
-
-    const key = matchKey(dateStr, m.court, m.startTime);
-    const result = matchResults[key];
-    const aWon = result === 'A';
-    const bWon = result === 'B';
-    const hasResult = !!result;
-
-    const markA = aWon ? ' 🏆' : (bWon ? ' ❌' : '');
-    const markB = bWon ? ' 🏆' : (aWon ? ' ❌' : '');
-    const nameStyleA = bWon ? 'text-decoration: line-through; opacity: 0.55;' : '';
-    const nameStyleB = aWon ? 'text-decoration: line-through; opacity: 0.55;' : '';
-
-    const resultBanner = hasResult
-      ? `<div style="margin-top: 10px; padding: 8px 12px; background: linear-gradient(135deg, #10b981, #059669); color: #fff; border-radius: 8px; text-align: center; font-weight: 700; font-size: 0.9em;">🏆 Team ${result} Wins!</div>`
-      : '';
-
-    const actionsHtml = `
-      <div style="display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap;">
-        <button type="button"
-          onclick="reportWin('${dateStr}', ${m.court}, '${m.startTime}', 'A')"
-          style="flex: 1; min-width: 130px; padding: 10px 14px; border: 2px solid ${aWon ? '#10b981' : 'rgba(255,255,255,0.15)'}; border-radius: 8px; background: ${aWon ? '#10b981' : 'rgba(16,185,129,0.2)'}; color: #fff; font-weight: 700; font-size: 0.85em; cursor: pointer;">
-          ${aWon ? '✓ ' : '🏆 '}Team A Won
-        </button>
-        <button type="button"
-          onclick="reportWin('${dateStr}', ${m.court}, '${m.startTime}', 'B')"
-          style="flex: 1; min-width: 130px; padding: 10px 14px; border: 2px solid ${bWon ? '#f59e0b' : 'rgba(255,255,255,0.15)'}; border-radius: 8px; background: ${bWon ? '#f59e0b' : 'rgba(245,158,11,0.2)'}; color: #fff; font-weight: 700; font-size: 0.85em; cursor: pointer;">
-          ${bWon ? '✓ ' : '🏆 '}Team B Won
-        </button>
-      </div>
-    `;
-
-    html += `
-      <div class="${cls}">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 6px;">
-          <span style="font-size: 0.85em; font-weight: 700;">${badge}</span>
-          <span style="font-size: 0.75em; opacity: 0.9;">🏓 Court ${m.court} · 🕐 ${formatTime12(m.startTime)} - ${formatTime12(m.endTime)}</span>
-        </div>
-        <div style="margin-bottom: 8px; display: flex; gap: 6px; flex-wrap: wrap;">
-          <span style="display: inline-block; padding: 3px 12px; background: #7c3aed33; border: 1px solid #7c3aed; border-radius: 20px; font-size: 0.75em; font-weight: 700; color: #fff;">Round ${m.round}</span>
-          <span style="display: inline-block; padding: 3px 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.25); border-radius: 20px; font-size: 0.75em; font-weight: 700; color: #fff;">${m.bracket || '🎲 Opening Round'}</span>
-        </div>
-        <div class="team-block" style="${nameStyleA}">
-          <strong style="color: #10b981;">Team A:</strong>
-          ${renderPlayerWithStatus(m.teamA[0], statusMap, dateStr)}
-          <span style="opacity: 0.5;">&</span>
-          ${renderPlayerWithStatus(m.teamA[1], statusMap, dateStr)}
-          <span style="margin-left: auto;">${markA}</span>
-        </div>
-        <div class="vs-badge">— VS — (to 11 pts)</div>
-        <div class="team-block" style="${nameStyleB}">
-          <strong style="color: #f59e0b;">Team B:</strong>
-          ${renderPlayerWithStatus(m.teamB[0], statusMap, dateStr)}
-          <span style="opacity: 0.5;">&</span>
-          ${renderPlayerWithStatus(m.teamB[1], statusMap, dateStr)}
-          <span style="margin-left: auto;">${markB}</span>
-        </div>
-        ${resultBanner}
-        ${actionsHtml}
-      </div>
-    `;
-  });
-
-  html += `<p style="text-align: center; font-size: 0.85em; opacity: 0.7; margin-top: 24px;">💡 Winners play winners. Losers play losers. Tap ✕ to mark a player as left.</p>`;
-  container.innerHTML = html;
-}
-
-async function loadAutoMatchups(dateStr) {
-  const container = document.getElementById("matchupsContainer");
-  if (!container || !dateStr) return;
-  container.innerHTML = '<p style="text-align:center;">⏳ Generating schedule...</p>';
-  try {
-    const players = await supabaseFetch(`/rest/v1/open_play?select=player_name,skill_level&play_date=eq.${encodeURIComponent(dateStr)}`);
-    if (!players || players.length === 0) {
-      container.innerHTML = `<p style="text-align:center;color:#f59e0b;">⚠️ No Open Play registrations for ${formatDate(dateStr)}.</p>`;
-      return;
-    }
-    if (players.length < 4) {
-      container.innerHTML = `<p style="text-align:center;color:#f59e0b;">⚠️ Need at least 4 players to generate matchups. Currently: ${players.length}.</p>`;
-      return;
-    }
-    const availableCourts = await getAvailableCourtsForDate(dateStr);
-    if (availableCourts.length === 0) {
-      container.innerHTML = `<p style="text-align:center;color:#ef4444;">⚠️ Both courts are booked for Open Play hours on ${formatDate(dateStr)}. No matchups to generate.</p>`;
-      return;
-    }
-    const [matchResults, statusMap] = await Promise.all([
-      loadMatchResults(dateStr),
-      loadPlayerStatus(dateStr)
-    ]);
-    const schedule = generateAutoSchedule(players, SESSION_START_TIME, availableCourts, matchResults, dateStr);
-    renderAutoSchedule(schedule, dateStr, players.length, availableCourts, matchResults, statusMap);
+    await renderAdminTournament();
   } catch (error) {
-    console.error("Matchups error:", error);
-    container.innerHTML = `<p style="text-align:center;color:#ef4444;">❌ ${error.message}</p>`;
+    alert("Failed to update check-in: " + error.message);
   }
-}
+};
 
-async function adminRerollMatchups() {
-  const pw = prompt("Enter admin password to re-shuffle:");
-  if (pw !== ADMIN_PASSWORD) { alert("❌ Invalid password"); return; }
-  const dateInput = document.getElementById("adminMatchDate");
-  const dateStr = dateInput?.value;
-  if (!dateStr) { alert("Please select a date first."); return; }
-  if (!confirm("This will delete all match results AND player status for this date. Continue?")) return;
+window.togglePlayerLeft = async function (playerName, markLeft) {
+  const today = getTodayStr();
+  const action = markLeft ? 'mark as LEFT' : 'mark as ACTIVE again';
+  if (!confirm(`Are you sure you want to ${action} "${playerName}"?`)) return;
   try {
-    await supabaseFetch(`/rest/v1/match_results?play_date=eq.${encodeURIComponent(dateStr)}`, { method: "DELETE" });
-    await supabaseFetch(`/rest/v1/player_status?play_date=eq.${encodeURIComponent(dateStr)}`, { method: "DELETE" });
-  } catch (e) { /* ignore */ }
-  const newSeed = Math.random().toString(36).substring(2, 10);
-  localStorage.setItem(`zinja_matchup_seed_${dateStr}`, newSeed);
-  await renderAdminMatchups(dateStr);
-  await loadAutoMatchups(dateStr);
-}
-
-async function renderAdminMatchups(dateStr) {
-  const container = document.getElementById("adminMatchupsContainer");
-  if (!container || !dateStr) return;
-  container.innerHTML = '<p style="text-align:center;">⏳ Loading...</p>';
-  try {
-    const players = await supabaseFetch(`/rest/v1/open_play?select=player_name,skill_level&play_date=eq.${encodeURIComponent(dateStr)}`);
-    if (!players || players.length < 4) {
-      container.innerHTML = `<p style="color:#888;">Need at least 4 players. Currently: ${players?.length || 0}.</p>`;
-      return;
-    }
-    const availableCourts = await getAvailableCourtsForDate(dateStr);
-    if (availableCourts.length === 0) {
-      container.innerHTML = `<p style="color:#ef4444;">⚠️ No courts available on ${formatDate(dateStr)}.</p>`;
-      return;
-    }
-    const [matchResults, statusMap] = await Promise.all([
-      loadMatchResults(dateStr),
-      loadPlayerStatus(dateStr)
-    ]);
-    const schedule = generateAutoSchedule(players, SESSION_START_TIME, availableCourts, matchResults, dateStr);
-    const numCourts = availableCourts.length;
-    const courtsLabel = numCourts === 2 ? "Courts 1 & 2" : `Court ${availableCourts[0]}`;
-    const lastMatch = schedule[schedule.length - 1];
-    const endTime = lastMatch ? formatTime12(lastMatch.endTime) : "N/A";
-    const totalRounds = schedule.length > 0 ? schedule[schedule.length - 1].round : 0;
-
-    const playerRows = players.map(p => {
-      const st = statusMap[p.player_name];
-      let badge = '';
-      let actions = '';
-      const safeName = escapeHtml(p.player_name);
-
-      if (!st) {
-        badge = '<span style="background:#10b981;color:#fff;padding:3px 8px;border-radius:12px;font-size:0.7em;font-weight:700;">ACTIVE</span>';
-        actions = `<button type="button" class="admin-sub-btn" data-date="${escapeHtml(dateStr)}" data-name="${safeName}" style="padding:5px 10px;background:#7c3aed;color:#fff;border:none;border-radius:6px;font-size:0.75em;font-weight:600;cursor:pointer;">🔄 Assign Substitute</button>`;
-      } else if (st.status === 'left') {
-        badge = '<span style="background:#dc2626;color:#fff;padding:3px 8px;border-radius:12px;font-size:0.7em;font-weight:700;">LEFT</span>';
-        actions = `<button type="button" class="admin-sub-btn" data-date="${escapeHtml(dateStr)}" data-name="${safeName}" style="padding:5px 10px;background:#7c3aed;color:#fff;border:none;border-radius:6px;font-size:0.75em;font-weight:600;cursor:pointer;">➕ Assign Substitute</button>
-          <button type="button" class="admin-clear-btn" data-date="${escapeHtml(dateStr)}" data-name="${safeName}" style="padding:5px 10px;background:#6b7280;color:#fff;border:none;border-radius:6px;font-size:0.75em;font-weight:600;cursor:pointer;">↺ Undo</button>`;
-      } else if (st.status === 'replaced') {
-        badge = `<span style="background:#7c3aed;color:#fff;padding:3px 8px;border-radius:12px;font-size:0.7em;font-weight:700;">SUB: ${escapeHtml(st.substitute || '?')}</span>`;
-        actions = `<button type="button" class="admin-clear-btn" data-date="${escapeHtml(dateStr)}" data-name="${safeName}" style="padding:5px 10px;background:#6b7280;color:#fff;border:none;border-radius:6px;font-size:0.75em;font-weight:600;cursor:pointer;">↺ Undo</button>`;
-      }
-
-      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#f9fafb;border-radius:8px;margin-bottom:6px;flex-wrap:wrap;gap:8px;">
-        <div style="display:flex;gap:8px;align-items:center;">
-          <strong>${safeName}</strong>
-          ${badge}
-        </div>
-        <div style="display:flex;gap:6px;">${actions}</div>
-      </div>`;
-    }).join('');
-
-    container.innerHTML = `
-      <p style="color:#10b981; font-weight:600; margin-bottom:8px;">✅ ${courtsLabel} · ${players.length} players · ${schedule.length} matches across ${totalRounds} round(s) · Ends ${endTime}</p>
-      <p style="color:#888; font-size:0.85em; margin-bottom:16px;">🏆 Winners play winners · 💪 Losers play losers</p>
-      <h4 style="color:#7c3aed; margin:16px 0 8px 0;">👥 Manage Players (${players.length})</h4>
-      <div>${playerRows}</div>
-    `;
+    await setPlayerStatus(today, playerName, markLeft ? 'left' : 'active');
+    await renderAdminTournament();
   } catch (error) {
-    container.innerHTML = `<p style="color:red;">❌ ${error.message}</p>`;
+    alert("Failed to update status: " + error.message);
   }
-}
+};
 
-async function deleteBooking(id) {
-  const pw = prompt("Enter admin password to delete this booking:");
-  if (pw !== ADMIN_PASSWORD) { alert("❌ Invalid password"); return; }
-  if (!confirm("Are you sure you want to delete this booking? This cannot be undone.")) return;
-  try {
-    let bookingDate = null;
-    try {
-      const info = await supabaseFetch(`/rest/v1/bookings?id=eq.${id}&select=booking_date`);
-      if (info && info[0]) bookingDate = info[0].booking_date;
-    } catch (e) { console.warn("Could not fetch booking date", e); }
-    
-    await supabaseFetch(`/rest/v1/bookings?id=eq.${id}`, { method: "DELETE" });
-    alert("✅ Booking deleted.");
-    await loadAdminData();
-    await loadBookings();
-    
-    const matchDateInput = document.getElementById("matchDate");
-    if (matchDateInput && bookingDate && matchDateInput.value === bookingDate) {
-      await loadAutoMatchups(bookingDate);
-    }
-  } catch (error) { alert("❌ Delete failed: " + error.message); }
-}
+window.doAddWalkIn = async function () {
+  const today = getTodayStr();
+  const name = prompt("Enter walk-in player's full name:");
+  if (!name || !name.trim()) return;
+  const trimmed = name.trim();
 
-async function deleteOpenPlay(id) {
-  const pw = prompt("Enter admin password to delete this player:");
-  if (pw !== ADMIN_PASSWORD) { alert("❌ Invalid password"); return; }
-  if (!confirm("Are you sure you want to delete this player registration? This cannot be undone.")) return;
   try {
-    let playerDate = null;
-    try {
-      const info = await supabaseFetch(`/rest/v1/open_play?id=eq.${id}&select=play_date`);
-      if (info && info[0]) playerDate = info[0].play_date;
-    } catch (e) { console.warn("Could not fetch player date", e); }
-    
-    await supabaseFetch(`/rest/v1/open_play?id=eq.${id}`, { method: "DELETE" });
-    alert("✅ Player removed.");
-    await loadAdminData();
-    
-    const matchDateInput = document.getElementById("matchDate");
-    if (matchDateInput && playerDate && matchDateInput.value === playerDate) {
-      localStorage.removeItem(`zinja_matchup_seed_${playerDate}`);
-      await loadAutoMatchups(playerDate);
+    const checkInMap = await loadCheckIns(today);
+    if (checkInMap[trimmed]) {
+      alert(`"${trimmed}" is already on today's list.`);
+      return;
     }
-  } catch (error) { alert("❌ Delete failed: " + error.message); }
-}
+    await addCheckIn(today, trimmed, true);
+    await renderAdminTournament();
+  } catch (error) {
+    alert("Failed to add walk-in: " + error.message);
+  }
+};
+
+window.doSmartSuggest = async function () {
+  const today = getTodayStr();
+  try {
+    const [regs, checkInMap, matches] = await Promise.all([
+      supabaseFetch(`/rest/v1/open_play?select=player_name&play_date=eq.${encodeURIComponent(today)}`),
+      loadCheckIns(today),
+      loadMatches(today)
+    ]);
+
+    const registeredPlayers = (regs || []).map(r => r.player_name);
+    const walkInPlayers = Object.keys(checkInMap).filter(n => checkInMap[n].is_walkin && !registeredPlayers.includes(n));
+    const allPlayers = [...registeredPlayers, ...walkInPlayers];
+    const playersInActive = getPlayersInActiveMatches(matches);
+
+    const available = allPlayers.filter(n =>
+      checkInMap[n] && checkInMap[n].status === 'active' && !playersInActive.has(n)
+    );
+
+    if (available.length < 4) {
+      alert(`Need at least 4 available players. Currently: ${available.length}`);
+      return;
+    }
+
+    const suggestion = smartSuggest(available, matches);
+    if (!suggestion) { alert("Could not generate suggestion."); return; }
+
+    document.getElementById('teamAP1').value = suggestion.teamA[0];
+    document.getElementById('teamAP2').value = suggestion.teamA[1];
+    document.getElementById('teamBP1').value = suggestion.teamB[0];
+    document.getElementById('teamBP2').value = suggestion.teamB[1];
+
+    alert(`✨ Smart Suggest applied!\n\nTeam A: ${suggestion.teamA[0]} & ${suggestion.teamA[1]}\nTeam B: ${suggestion.teamB[0]} & ${suggestion.teamB[1]}`);
+  } catch (error) {
+    alert("Suggest failed: " + error.message);
+  }
+};
+
+window.doCreateMatch = async function () {
+  const today = getTodayStr();
+  const court = Number(document.getElementById('newMatchCourt')?.value);
+  const a1 = document.getElementById('teamAP1')?.value;
+  const a2 = document.getElementById('teamAP2')?.value;
+  const b1 = document.getElementById('teamBP1')?.value;
+  const b2 = document.getElementById('teamBP2')?.value;
+
+  if (!court || !a1 || !a2 || !b1 || !b2) {
+    alert("Please select Court and all 4 players."); return;
+  }
+  const all = [a1, a2, b1, b2];
+  if (new Set(all).size !== 4) {
+    alert("Each player can only appear once. Please fix duplicates."); return;
+  }
+
+  try {
+    await createMatch(today, court, [a1, a2], [b1, b2]);
+    await renderAdminTournament();
+    await renderLiveBoard();
+  } catch (error) {
+    alert("Failed to create match: " + error.message);
+  }
+};
+
+window.adminDeclareWinner = async function (matchId, team) {
+  if (!confirm(`Declare Team ${team} as winner?`)) return;
+  try {
+    await declareWinner(matchId, team);
+    await renderAdminTournament();
+    await renderLiveBoard();
+  } catch (error) {
+    alert("Failed: " + error.message);
+  }
+};
+
+window.adminCancelMatch = async function (matchId) {
+  if (!confirm("Cancel this match? It will be deleted permanently.")) return;
+  try {
+    await cancelMatch(matchId);
+    await renderAdminTournament();
+    await renderLiveBoard();
+  } catch (error) {
+    alert("Failed: " + error.message);
+  }
+};
 
 // ====================
 // CLUB CHAT
@@ -1327,12 +1239,12 @@ async function loadChatMessages() {
     container.innerHTML = rows.map(msg => {
       const time = new Date(msg.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
       return `
-        <div style="margin-bottom: 12px; padding: 10px; background: #2a2a4a; border-radius: 8px; border-left: 3px solid #7c3aed;">
-          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-            <strong style="color: #a78bfa;">${escapeHtml(msg.player_name)}</strong>
-            <small style="color: #aaa;">${time}</small>
+        <div style="margin-bottom:12px;padding:10px;background:#2a2a4a;border-radius:8px;border-left:3px solid #7c3aed;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+            <strong style="color:#a78bfa;">${escapeHtml(msg.player_name)}</strong>
+            <small style="color:#aaa;">${time}</small>
           </div>
-          <div style="word-wrap: break-word; font-size: 1.05em; color: #ffffff;">${escapeHtml(msg.message)}</div>
+          <div style="word-wrap:break-word;font-size:1.05em;color:#fff;">${escapeHtml(msg.message)}</div>
         </div>
       `;
     }).join("");
@@ -1429,11 +1341,9 @@ async function loadAdminData() {
 
   try {
     const bkRes = await supabaseFetch('/rest/v1/bookings?select=id,customer_name,mobile,booking_date,start_time,court,duration_hours,price,created_at&order=created_at.desc');
-    const bookings = bkRes || [];
+    adminData.bookings = bkRes || [];
     const opRes = await supabaseFetch('/rest/v1/open_play?select=id,player_name,mobile,play_date,skill_level&order=created_at.desc');
-    const openplay = opRes || [];
-    adminData.bookings = bookings;
-    adminData.openplay = openplay;
+    adminData.openplay = opRes || [];
     renderAdminContent();
   } catch (err) {
     if (resultDiv) resultDiv.innerHTML = `<p style="color: red;">❌ Failed to load data: ${err.message}</p>`;
@@ -1442,7 +1352,7 @@ async function loadAdminData() {
 
 function switchAdminTab(tab) {
   currentAdminTab = tab;
-  const tabIds = { bookings: 'tabBookings', openplay: 'tabOpenPlay', matchups: 'tabMatchups' };
+  const tabIds = { bookings: 'tabBookings', openplay: 'tabOpenPlay', tournament: 'tabTournament' };
   Object.keys(tabIds).forEach(t => {
     const btn = document.getElementById(tabIds[t]);
     if (btn) {
@@ -1463,8 +1373,13 @@ function switchAdminTab(tab) {
 function renderAdminContent() {
   const container = document.getElementById('adminContent');
   if (!container) return;
-  let html = '';
 
+  if (currentAdminTab === 'tournament') {
+    renderAdminTournament();
+    return;
+  }
+
+  let html = '';
   if (currentAdminTab === 'bookings') {
     if (adminData.bookings.length === 0) {
       html = '<p style="color: #888;">No court bookings yet.</p>';
@@ -1494,25 +1409,31 @@ function renderAdminContent() {
         </div>
       `).join('');
     }
-  } else if (currentAdminTab === 'matchups') {
-    const today = new Date().toISOString().split("T")[0];
-    html = `
-      <div style="background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px;">
-        <h3 style="color: #7c3aed; margin-top: 0;">🎲 Matchups Manager</h3>
-        <p style="color: #666; font-size: 0.9em;">Winners play winners. Losers play losers. Every result re-pairs the next round.</p>
-        <p style="color: #888; font-size: 0.85em; font-style: italic;">20 minutes per match · Target: 11 points</p>
-        <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
-          <input id="adminMatchDate" type="date" value="${today}" style="flex: 1; min-width: 200px; padding: 12px; border-radius: 8px; border: 1px solid #ddd;">
-          <button type="button" onclick="renderAdminMatchups(document.getElementById('adminMatchDate').value)" style="padding: 12px 24px; background: linear-gradient(135deg, #7c3aed, #6d28d9); color: #fff; border: none; border-radius: 8px; font-weight: 700; cursor: pointer;">🔄 Load</button>
-          <button type="button" onclick="adminRerollMatchups()" style="padding: 12px 24px; background: #ef4444; color: #fff; border: none; border-radius: 8px; font-weight: 700; cursor: pointer;">🔀 Reset Brackets</button>
-        </div>
-        <div id="adminMatchupsContainer">
-          <p style="color: #888;">Select a date and click Load.</p>
-        </div>
-      </div>
-    `;
   }
   container.innerHTML = html;
+}
+
+async function deleteBooking(id) {
+  const pw = prompt("Enter admin password to delete this booking:");
+  if (pw !== ADMIN_PASSWORD) { alert("❌ Invalid password"); return; }
+  if (!confirm("Delete this booking? Cannot be undone.")) return;
+  try {
+    await supabaseFetch(`/rest/v1/bookings?id=eq.${id}`, { method: "DELETE" });
+    alert("✅ Booking deleted.");
+    await loadAdminData();
+    await loadBookings();
+  } catch (error) { alert("❌ Delete failed: " + error.message); }
+}
+
+async function deleteOpenPlay(id) {
+  const pw = prompt("Enter admin password to delete this player:");
+  if (pw !== ADMIN_PASSWORD) { alert("❌ Invalid password"); return; }
+  if (!confirm("Delete this player registration? Cannot be undone.")) return;
+  try {
+    await supabaseFetch(`/rest/v1/open_play?id=eq.${id}`, { method: "DELETE" });
+    alert("✅ Player removed.");
+    await loadAdminData();
+  } catch (error) { alert("❌ Delete failed: " + error.message); }
 }
 
 // ====================
@@ -1532,8 +1453,8 @@ document.addEventListener("DOMContentLoaded", () => {
   setupChat();
   loadBookings();
   loadOpenPlay();
-
   updateLiveClosureStatus();
+  renderLiveBoard();
 
   const refreshBookingsBtn = document.getElementById("refreshBookingsBtn");
   if (refreshBookingsBtn) {
@@ -1557,21 +1478,16 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  const matchDateInput = document.getElementById("matchDate");
-  if (matchDateInput) {
-    const today = new Date().toISOString().split("T")[0];
-    matchDateInput.value = today;
-    matchDateInput.addEventListener("change", () => loadAutoMatchups(matchDateInput.value));
-    loadAutoMatchups(today);
-  }
-
-  // Auto-refresh matchups every 3 minutes
+  // Auto-refresh live board every 1 minute
   setInterval(async () => {
-    const matchDateInput = document.getElementById("matchDate");
-    if (matchDateInput?.value && document.visibilityState === 'visible') {
-      await loadAutoMatchups(matchDateInput.value);
+    if (document.visibilityState === 'visible') {
+      await renderLiveBoard();
+      const adminDataEl = document.getElementById('adminData');
+      if (currentAdminTab === 'tournament' && adminDataEl && adminDataEl.style.display !== 'none') {
+        await renderAdminTournament();
+      }
     }
-  }, MATCHUPS_POLL_MS);
+  }, LIVE_MATCH_POLL_MS);
 
   let lastChatLoad = 0;
   let lastDataLoad = 0;
@@ -1603,7 +1519,7 @@ document.addEventListener("DOMContentLoaded", () => {
       loadBookings();
       loadOpenPlay();
       updateLiveClosureStatus();
-      if (matchDateInput?.value) loadAutoMatchups(matchDateInput.value);
+      renderLiveBoard();
     }
   });
 });
