@@ -1,6 +1,7 @@
 const SUPABASE_URL = "https://kbafnegagyiwztyfmxpr.supabase.co";
 const SUPABASE_KEY = "sb_publishable_djA6ivm66-hfO3WLub527w_AbOa8rvc";
 
+// 💳 PALITAN ITO NG TOTOONG GCASH DETAILS MO KUNG KAILANGAN
 const GCASH_NUMBER = "09761415950";
 const GCASH_NAME = "ZINJA Pickleball Club";
 
@@ -17,21 +18,18 @@ const LIVE_MATCH_POLL_MS = 60000;
 const BOOKING_DISPLAY_DAYS = 30;
 const OPENPLAY_DISPLAY_DAYS = 7;
 
-// UPDATED TIMES
-const OPEN_PLAY_START_MIN = 18 * 60; // 6:00 PM
-const OPEN_PLAY_END_MIN = 23 * 60;   // 11:00 PM
+const OPEN_PLAY_START_MIN = 18 * 60;
+const OPEN_PLAY_END_MIN = 23 * 60; // 11:00 PM
 const OPEN_PLAY_START_TIME = "18:00";
 const PLAYERS_PER_COURT = 16;
 const TOTAL_COURTS = 2;
 const OPEN_PLAY_FEE = 50;
 
-// UPDATED MORNING/EVE RATES
-const MORNING_START_MIN = 5 * 60;  // 5:00 AM
-const MORNING_END_MIN = 16 * 60;   // 4:00 PM
+const MORNING_START_MIN = 5 * 60; // 5:00 AM
+const MORNING_END_MIN = 16 * 60;  // 4:00 PM
 const MORNING_RATE = 100;
 const EVENING_RATE = 150;
 
-// Closure remains Friday 5PM to Saturday 5PM
 const CLOSURE_DAY_START = 5;
 const CLOSURE_DAY_END = 6;
 const CLOSURE_START_HOUR = 17;
@@ -499,7 +497,7 @@ window.confirmPayment = async function() {
 };
 
 window.handleBookingSubmit = async function (event) {
-  if (event) event.preventDefault(); // Prevent actual form submit
+  if (event) event.preventDefault();
   const form = document.getElementById("bookingForm");
   const result = document.getElementById("bookingResult");
   const name = document.getElementById("name")?.value.trim();
@@ -538,7 +536,7 @@ window.handleBookingSubmit = async function (event) {
     }
 
     const priceCalc = calculateBookingPrice(bookingTime, duration);
-    result.innerHTML = ""; // clear
+    result.innerHTML = ""; 
     
     openPaymentModal('booking', {
       name, mobile, bookingDate, bookingTime, court, duration, priceCalc
@@ -585,7 +583,7 @@ async function processBookingWithPayment(data, gcashRef) {
 }
 
 window.handleOpenPlaySubmit = async function (event) {
-  if (event) event.preventDefault(); // Prevent actual form submit
+  if (event) event.preventDefault();
   const form = document.getElementById("playForm");
   const result = document.getElementById("playResult");
   const name = document.getElementById("player")?.value.trim();
@@ -618,7 +616,7 @@ window.handleOpenPlaySubmit = async function (event) {
       return;
     }
 
-    result.innerHTML = ""; // clear
+    result.innerHTML = ""; 
     
     openPaymentModal('openplay', {
       name, mobile, playDate, skillLevel
@@ -660,7 +658,7 @@ async function processOpenPlayWithPayment(data, gcashRef) {
   await loadOpenPlay();
 }
 
-// ==================== AUTO CLEANUP & MATCHES (UNCHANGED) ====================
+// ==================== AUTO CLEANUP & MATCHES ====================
 
 async function autoCleanupOldData() {
   const today = getTodayStr();
