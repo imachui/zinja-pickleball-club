@@ -17,18 +17,21 @@ const LIVE_MATCH_POLL_MS = 60000;
 const BOOKING_DISPLAY_DAYS = 30;
 const OPENPLAY_DISPLAY_DAYS = 7;
 
-const OPEN_PLAY_START_MIN = 18 * 60;
-const OPEN_PLAY_END_MIN = 24 * 60;
+// UPDATED TIMES
+const OPEN_PLAY_START_MIN = 18 * 60; // 6:00 PM
+const OPEN_PLAY_END_MIN = 23 * 60;   // 11:00 PM
 const OPEN_PLAY_START_TIME = "18:00";
 const PLAYERS_PER_COURT = 16;
 const TOTAL_COURTS = 2;
 const OPEN_PLAY_FEE = 50;
 
-const MORNING_START_MIN = 6 * 60;
-const MORNING_END_MIN = 16 * 60;
+// UPDATED MORNING/EVE RATES
+const MORNING_START_MIN = 5 * 60;  // 5:00 AM
+const MORNING_END_MIN = 16 * 60;   // 4:00 PM
 const MORNING_RATE = 100;
 const EVENING_RATE = 150;
 
+// Closure remains Friday 5PM to Saturday 5PM
 const CLOSURE_DAY_START = 5;
 const CLOSURE_DAY_END = 6;
 const CLOSURE_START_HOUR = 17;
@@ -197,7 +200,7 @@ function updatePriceDisplay() {
   if (calc.breakdown) {
     noteEl.textContent = `Mixed rate: ${calc.breakdown}`;
   } else {
-    noteEl.textContent = calc.rate === MORNING_RATE ? "☀️ Day rate (6AM-4PM)" : "🌙 Evening rate (5PM-12AM)";
+    noteEl.textContent = calc.rate === MORNING_RATE ? "☀️ Day rate (5AM-4PM)" : "🌙 Evening rate (5PM-11PM)";
   }
 }
 
@@ -323,13 +326,13 @@ async function updateOpenPlayInfo() {
     infoDiv.innerHTML = "<p>⏳ Checking available slots...</p>";
     const cap = await checkOpenPlayCapacity(playDate);
     if (cap.noCourts) {
-      infoDiv.innerHTML = `<div style="background:#ffebee;padding:12px;border-radius:8px;border-left:4px solid #ef4444;"><strong>❌ Open Play unavailable on ${formatDate(playDate)}</strong><p style="margin:6px 0 0 0;font-size:0.9em;">Both courts are booked during Open Play hours (6PM-12AM).</p></div>`;
+      infoDiv.innerHTML = `<div style="background:#ffebee;padding:12px;border-radius:8px;border-left:4px solid #ef4444;"><strong>❌ Open Play unavailable on ${formatDate(playDate)}</strong><p style="margin:6px 0 0 0;font-size:0.9em;">Both courts are booked during Open Play hours (6PM-11PM).</p></div>`;
       return;
     }
     const statusColor = cap.isFull ? "#ef4444" : (cap.spotsLeft < 5 ? "#ff9800" : "#4caf50");
     const statusBg = cap.isFull ? "#ffebee" : (cap.spotsLeft < 5 ? "#fff3e0" : "#e8f5e9");
     const courtLabel = cap.availableCourts.length === 2 ? "🏓 2 Courts (both available)" : `🏓 1 Court (Court ${cap.availableCourts[0]})`;
-    infoDiv.innerHTML = `<div style="background:${statusBg};padding:12px;border-radius:8px;border-left:4px solid ${statusColor};"><strong>Open Play on ${formatDate(playDate)} (6PM - 12AM)</strong><p style="margin:6px 0;font-size:0.95em;">${courtLabel}</p><p style="margin:6px 0;font-size:0.95em;"><strong>${cap.currentCount}/${cap.maxSlots}</strong> slots taken ${cap.isFull ? "— <strong>FULL</strong>" : `— <strong>${cap.spotsLeft}</strong> slots left`}</p></div>`;
+    infoDiv.innerHTML = `<div style="background:${statusBg};padding:12px;border-radius:8px;border-left:4px solid ${statusColor};"><strong>Open Play on ${formatDate(playDate)} (6PM - 11PM)</strong><p style="margin:6px 0;font-size:0.95em;">${courtLabel}</p><p style="margin:6px 0;font-size:0.95em;"><strong>${cap.currentCount}/${cap.maxSlots}</strong> slots taken ${cap.isFull ? "— <strong>FULL</strong>" : `— <strong>${cap.spotsLeft}</strong> slots left`}</p></div>`;
   } catch (error) { console.error("Open play info error:", error); infoDiv.innerHTML = ""; }
 }
 
@@ -495,9 +498,9 @@ window.confirmPayment = async function() {
   }
 };
 
-async function handleBookingSubmit(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
+window.handleBookingSubmit = async function (event) {
+  if (event) event.preventDefault(); // Prevent actual form submit
+  const form = document.getElementById("bookingForm");
   const result = document.getElementById("bookingResult");
   const name = document.getElementById("name")?.value.trim();
   const mobile = document.getElementById("phone")?.value.trim();
@@ -581,9 +584,9 @@ async function processBookingWithPayment(data, gcashRef) {
   await loadBookings();
 }
 
-async function handleOpenPlaySubmit(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
+window.handleOpenPlaySubmit = async function (event) {
+  if (event) event.preventDefault(); // Prevent actual form submit
+  const form = document.getElementById("playForm");
   const result = document.getElementById("playResult");
   const name = document.getElementById("player")?.value.trim();
   const mobile = document.getElementById("playerPhone")?.value.trim();
@@ -1205,46 +1208,4 @@ async function renderAdminTournament() {
     const playerOptions = availablePlayers.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
     const courtOptionsHTML = `
       <option value="0">📋 Queue — auto-assign when a court frees up</option>
-      ${freeCourts.map(c => `<option value="${c}">🏓 Court ${c} — start now</option>`).join('')}
-    `;
-
-    let createHTML;
-    if (maxMatches === 0) {
-      createHTML = `<div style="background:#eff6ff;padding:16px;border-radius:8px;border-left:4px solid #3b82f6;">
-        <p style="color:#1e40af;font-weight:700;margin:0 0 8px 0;">⏳ Waiting for players</p>
-        <p style="color:#1e40af;font-size:0.9em;margin:0;">Need at least 4 checked-in players to create a match.</p>
-      </div>`;
-    } else if (!canCreateMore) {
-      createHTML = `
-        <div style="background:#fef3c7;padding:16px;border-radius:8px;border-left:4px solid #f59e0b;">
-          <p style="color:#92400e;font-weight:700;margin:0 0 8px 0;">🛑 Match limit reached (${currentCount} / ${maxMatches})</p>
-          <p style="color:#78350f;font-size:0.9em;margin:0;">All ${activeCheckedInCount} checked-in players are already in an active or queued match. Finish a match to free up a slot.</p>
-        </div>`;
-    } else if (availablePlayers.length < 4) {
-      createHTML = `<p style="color:#b45309;font-weight:600;">Need at least 4 available players. Currently: ${availablePlayers.length}.</p>`;
-    } else {
-      createHTML = `
-        <div style="background:#f9fafb;padding:12px;border-radius:8px;margin-bottom:12px;">
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
-            <label style="font-weight:600;display:flex;gap:6px;align-items:center;color:#1f2937;">
-              Court:
-              <select id="newMatchCourt" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd;">
-                ${courtOptionsHTML}
-              </select>
-            </label>
-            <button type="button" onclick="doSmartSuggest()" style="padding:6px 14px;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:0.85em;">✨ Smart Suggest</button>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <div>
-              <label style="display:block;font-size:0.85em;font-weight:600;color:#10b981;margin-bottom:4px;">Team A</label>
-              <select id="teamAP1" style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;margin-bottom:6px;"><option value="">— Player 1 —</option>${playerOptions}</select>
-              <select id="teamAP2" style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;"><option value="">— Player 2 —</option>${playerOptions}</select>
-            </div>
-            <div>
-              <label style="display:block;font-size:0.85em;font-weight:600;color:#f59e0b;margin-bottom:4px;">Team B</label>
-              <select id="teamBP1" style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;margin-bottom:6px;"><option value="">— Player 1 —</option>${playerOptions}</select>
-              <select id="teamBP2" style="width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;"><option value="">— Player 2 —</option>${playerOptions}</select>
-            </div>
-          </div>
-          <button type="button" onclick="doCreateMatch()" style="margin-top:12px;padding:12px 24px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;width:100%;">▶ Create Match</button>
-          <p style="font-size:0.8em;color:#6b7280;margin:8px 
+      ${freeCourts.map(c => `<option value="${c}">🏓 Court ${c} — start now</
