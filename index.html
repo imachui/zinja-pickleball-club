@@ -465,7 +465,6 @@
             <div id="rateNote" style="font-size:0.8em; opacity:0.85; margin-top:6px; text-align:right;"></div>
           </div>
           <div id="availabilityInfo" style="margin:10px 0;"></div>
-          <!-- Pinalitan ng type="button" para hindi mag-submit agad -->
           <button class="btn" type="button" onclick="handleBookingSubmit(event)" style="width:100%;">Tap to Proceed to Payment</button>
         </form>
         <div id="bookingResult"></div>
@@ -499,7 +498,6 @@
             <option value="Any level">Any level</option>
           </select>
           <div id="openPlayInfo" style="margin:10px 0;"></div>
-          <!-- Pinalitan ng type="button" para hindi mag-submit agad -->
           <button class="btn" type="button" onclick="handleOpenPlaySubmit(event)" style="width:100%;">Tap to Proceed to Payment</button>
         </form>
         <div id="playResult"></div>
@@ -652,7 +650,7 @@
     © <span id="year"></span> ZINJA Pickleball Club · Malusay, Guihulngan City
   </footer>
 
-  <script src="zinja-app.js?v=52"></script>
+  <script src="zinja-app.js?v=53"></script>
   <script>
     document.getElementById('year').textContent = new Date().getFullYear();
 
@@ -666,7 +664,9 @@
     }
     function menuGo(page) {
       closeMenu();
-      setTimeout(() => showPage(page), 200);
+      setTimeout(() => {
+          if (typeof showPage === 'function') showPage(page);
+      }, 200);
     }
     function scrollToSchedule() {
       const el = document.getElementById('scheduleSection');
