@@ -1,6 +1,9 @@
 const SUPABASE_URL = "https://kbafnegagyiwztyfmxpr.supabase.co";
 const SUPABASE_KEY = "sb_publishable_djA6ivm66-hfO3WLub527w_AbOa8rvc";
 
+const GCASH_NUMBER = "09761415950";
+const GCASH_NAME = "ZINJA Pickleball Club";
+
 const headers = {
   apikey: SUPABASE_KEY,
   "Content-Type": "application/json"
@@ -37,6 +40,11 @@ let adminData = { bookings: [], openplay: [] };
 let currentAdminTab = 'tournament';
 
 let adminSelectedDate = null;
+
+// Payment Modal State
+let pendingPaymentType = null;
+let pendingPaymentData = null;
+let pendingAmount = 0;
 
 function getAdminDate() {
   if (!adminSelectedDate) adminSelectedDate = getTodayStr();
@@ -142,21 +150,6 @@ function bookingOverlaps(newTime, newDuration, oldTime, oldDuration) {
   const oldStart = timeToMinutes(oldTime);
   const oldEnd = oldStart + Number(oldDuration) * 60;
   return newStart < oldEnd && oldStart < newEnd;
-}
-
-function saveCancellation(type, data) {
-  try {
-    const key = type === "booking" ? "zinja_last_booking" : "zinja_last_open_play";
-    localStorage.setItem(key, JSON.stringify(data));
-  } catch (error) { console.warn("Could not save cancellation info:", error); }
-}
-
-function getSavedCancellation(type) {
-  try {
-    const key = type === "booking" ? "zinja_last_booking" : "zinja_last_open_play";
-    const value = localStorage.getItem(key);
-    return value ? JSON.parse(value) : null;
-  } catch { return null; }
 }
 
 function calculateBookingPrice(startTime, durationHours) {
@@ -277,19 +270,6 @@ function updateLiveClosureStatus() {
     banner.innerHTML = `<strong>🟢 OPEN NOW</strong> — Book your court or join Open Play! · ${timeStr} PHT`;
     banner.style.background = "linear-gradient(135deg, #059669, #047857)";
   }
-}
-
-function announceClosureInChat() {
-  const container = document.getElementById("chatMessages");
-  if (!container) return;
-  const existing = document.getElementById("closureChatNotice");
-  if (existing) existing.remove();
-  if (!getCurrentClosureStatus()) return;
-  const notice = document.createElement("div");
-  notice.id = "closureChatNotice";
-  notice.style.cssText = "margin-bottom:12px;padding:12px;background:#7f1d1d;border-radius:8px;border-left:4px solid #ef4444;color:#fff;font-size:0.95em;";
-  notice.innerHTML = `<strong>📢 Facility Notice:</strong> Courts and Open Play are currently <strong>CLOSED</strong> for our scheduled rest period. We reopen on <strong>Saturday at 5:00 PM (PHT)</strong>. Thank you for understanding!`;
-  container.insertBefore(notice, container.firstChild);
 }
 
 async function getAvailableCourtsForDate(playDate) {
@@ -462,6 +442,59 @@ async function loadOpenPlay() {
   } catch (error) { console.error("Open Play error:", error); container.innerHTML = "<p>Unable to load Open Play right now.</p>"; }
 }
 
+// ==================== PAYMENT LOGIC (MANUAL VERIFICATION) ====================
+
+function openPaymentModal(type, data, amount) {
+  pendingPaymentType = type;
+  pendingPaymentData = data;
+  pendingAmount = amount;
+
+  document.getElementById("modalAmount").textContent = `₱${amount.toLocaleString()}`;
+  document.getElementById("modalGcashNumber").textContent = GCASH_NUMBER;
+  document.getElementById("modalGcashName").textContent = GCASH_NAME;
+  document.getElementById("modalGcashRef").value = "";
+  document.getElementById("modalConfirmBtn").disabled = false;
+  document.getElementById("modalConfirmBtn").textContent = "I Have Paid";
+  
+  document.getElementById("paymentModal").classList.add("open");
+}
+
+window.closePaymentModal = function() {
+  document.getElementById("paymentModal").classList.remove("open");
+  pendingPaymentType = null;
+  pendingPaymentData = null;
+  pendingAmount = 0;
+};
+
+window.confirmPayment = async function() {
+  const refInput = document.getElementById("modalGcashRef").value.trim();
+  if (!refInput) {
+    alert("Please enter your GCash Reference Number.");
+    return;
+  }
+  if (refInput.length < 6) {
+    alert("Reference number is too short. Please double-check.");
+    return;
+  }
+
+  const btn = document.getElementById("modalConfirmBtn");
+  btn.disabled = true;
+  btn.textContent = "Saving...";
+
+  try {
+    if (pendingPaymentType === 'booking') {
+      await processBookingWithPayment(pendingPaymentData, refInput);
+    } else if (pendingPaymentType === 'openplay') {
+      await processOpenPlayWithPayment(pendingPaymentData, refInput);
+    }
+    closePaymentModal();
+  } catch (error) {
+    alert("Failed: " + error.message);
+    btn.disabled = false;
+    btn.textContent = "I Have Paid";
+  }
+};
+
 async function handleBookingSubmit(event) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -500,30 +533,52 @@ async function handleBookingSubmit(event) {
       alert(`⚠️ BOOKING CONFLICT!\n\nCourt ${court} on ${formatDate(bookingDate)}\n\nAlready reserved: ${conflictStart} - ${conflictEnd}\nYour requested: ${formatTime(bookingTime)} - ${newEnd}`);
       return;
     }
+
     const priceCalc = calculateBookingPrice(bookingTime, duration);
-    const cancellationCode = generateCancelCode();
-    await supabaseFetch("/rest/v1/bookings", {
-      method: "POST",
-      headers: { Prefer: "return=representation" },
-      body: JSON.stringify({
-        customer_name: name, mobile, booking_date: bookingDate, start_time: bookingTime,
-        court, duration_hours: duration, cancellation_code: cancellationCode,
-        price: priceCalc.total, hourly_rate: priceCalc.rate
-      })
-    });
-    saveCancellation("booking", { mobile, code: cancellationCode });
-    const endTime = addHoursToTime(bookingTime, duration);
-    showResult(result, `✅ Thank you, ${name}! Booking confirmed for Court ${court}, ${formatDate(bookingDate)} from ${formatTime(bookingTime)} to ${endTime}. 💰 Total: ₱${priceCalc.total.toLocaleString()}. Cancellation code: ${cancellationCode}.`, true);
-    form.reset();
-    const priceDiv = document.getElementById("priceDisplay");
-    if (priceDiv) priceDiv.style.display = "none";
-    const availabilityDiv = document.getElementById("availabilityInfo");
-    if (availabilityDiv) availabilityDiv.innerHTML = "";
-    await loadBookings();
+    result.innerHTML = ""; // clear
+    
+    openPaymentModal('booking', {
+      name, mobile, bookingDate, bookingTime, court, duration, priceCalc
+    }, priceCalc.total);
+
   } catch (error) {
     console.error("Booking error:", error);
     showResult(result, `Something went wrong. ${error.message || "Please try again."}`, false);
   }
+}
+
+async function processBookingWithPayment(data, gcashRef) {
+  const cancellationCode = generateCancelCode();
+  
+  await supabaseFetch("/rest/v1/bookings", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({
+      customer_name: data.name, 
+      mobile: data.mobile, 
+      booking_date: data.bookingDate, 
+      start_time: data.bookingTime,
+      court: data.court, 
+      duration_hours: data.duration, 
+      cancellation_code: cancellationCode,
+      price: data.priceCalc.total, 
+      hourly_rate: data.priceCalc.rate,
+      gcash_ref: gcashRef,
+      payment_status: 'Pending Verification'
+    })
+  });
+
+  saveCancellation("booking", { mobile: data.mobile, code: cancellationCode });
+  const resultDiv = document.getElementById("bookingResult");
+  showResult(resultDiv, `✅ Thank you, ${data.name}! Booking recorded. Please wait for the admin to verify your GCash payment (Ref: ${gcashRef}).\n\nCancellation code: ${cancellationCode}.`, true);
+  
+  document.getElementById("bookingForm").reset();
+  const priceDiv = document.getElementById("priceDisplay");
+  if (priceDiv) priceDiv.style.display = "none";
+  const availabilityDiv = document.getElementById("availabilityInfo");
+  if (availabilityDiv) availabilityDiv.innerHTML = "";
+  
+  await loadBookings();
 }
 
 async function handleOpenPlaySubmit(event) {
@@ -559,111 +614,50 @@ async function handleOpenPlaySubmit(event) {
       alert(`⚠️ OPEN PLAY FULL\n\n${formatDate(playDate)}`);
       return;
     }
-    const cancellationCode = generateCancelCode();
-    await supabaseFetch("/rest/v1/open_play", {
-      method: "POST",
-      headers: { Prefer: "return=representation" },
-      body: JSON.stringify({ player_name: name, mobile, play_date: playDate, play_time: OPEN_PLAY_START_TIME, skill_level: skillLevel, cancellation_code: cancellationCode })
-    });
-    saveCancellation("open_play", { mobile, code: cancellationCode });
-    const newCount = cap.currentCount + 1;
-    showResult(result, `✅ Thank you, ${name}! Open Play confirmed for ${formatDate(playDate)} (6PM-12AM). Fee: ₱${OPEN_PLAY_FEE}. Cancellation code: ${cancellationCode}.\n\n📊 Slots: ${newCount}/${cap.maxSlots} taken.`, true);
-    form.reset();
-    const infoDiv = document.getElementById("openPlayInfo");
-    if (infoDiv) infoDiv.innerHTML = "";
-    await loadOpenPlay();
+
+    result.innerHTML = ""; // clear
+    
+    openPaymentModal('openplay', {
+      name, mobile, playDate, skillLevel
+    }, OPEN_PLAY_FEE);
+
   } catch (error) {
     console.error("Open Play error:", error);
     showResult(result, `Something went wrong. ${error.message || "Please try again."}`, false);
   }
 }
 
-function createCancellationBoxes() {
-  const bookingForm = document.getElementById("bookingForm");
-  const playForm = document.getElementById("playForm");
+async function processOpenPlayWithPayment(data, gcashRef) {
+  const cancellationCode = generateCancelCode();
+  
+  await supabaseFetch("/rest/v1/open_play", {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({ 
+      player_name: data.name, 
+      mobile: data.mobile, 
+      play_date: data.playDate, 
+      play_time: OPEN_PLAY_START_TIME, 
+      skill_level: data.skillLevel, 
+      cancellation_code: cancellationCode,
+      gcash_ref: gcashRef,
+      payment_status: 'Pending Verification'
+    })
+  });
 
-  if (bookingForm && !document.getElementById("cancelBookingBox")) {
-    bookingForm.insertAdjacentHTML("afterend", `
-      <div id="cancelBookingBox" style="margin-top:20px;padding:16px;border:1px solid #333;border-radius:12px;">
-        <h3>Cancel My Court Booking</h3>
-        <p style="font-size:0.9em;opacity:0.8;">Enter the mobile number and cancellation code you received when booking.</p>
-        <input id="cancelBookingMobile" type="tel" placeholder="Mobile number">
-        <input id="cancelBookingCode" type="text" placeholder="Cancellation code" maxlength="8" style="text-transform:uppercase;">
-        <button type="button" id="cancelBookingButton" class="btn" style="width:100%;">Cancel Booking</button>
-        <div id="cancelBookingResult"></div>
-      </div>
-    `);
-    document.getElementById("cancelBookingButton")?.addEventListener("click", cancelBooking);
-    const saved = getSavedCancellation("booking");
-    if (saved) {
-      const mobileInput = document.getElementById("cancelBookingMobile");
-      const codeInput = document.getElementById("cancelBookingCode");
-      if (mobileInput) mobileInput.value = saved.mobile || "";
-      if (codeInput) codeInput.value = saved.code || "";
-    }
-  }
-
-  if (playForm && !document.getElementById("cancelOpenPlayBox")) {
-    playForm.insertAdjacentHTML("afterend", `
-      <div id="cancelOpenPlayBox" style="margin-top:20px;padding:16px;border:1px solid #333;border-radius:12px;">
-        <h3>Cancel My Open Play Registration</h3>
-        <p style="font-size:0.9em;opacity:0.8;">Enter the mobile number and cancellation code you received when joining.</p>
-        <input id="cancelOpenPlayMobile" type="tel" placeholder="Mobile number">
-        <input id="cancelOpenPlayCode" type="text" placeholder="Cancellation code" maxlength="8" style="text-transform:uppercase;">
-        <button type="button" id="cancelOpenPlayButton" class="btn" style="width:100%;">Cancel Registration</button>
-        <div id="cancelOpenPlayResult"></div>
-      </div>
-    `);
-    document.getElementById("cancelOpenPlayButton")?.addEventListener("click", cancelOpenPlay);
-    const saved = getSavedCancellation("open_play");
-    if (saved) {
-      const mobileInput = document.getElementById("cancelOpenPlayMobile");
-      const codeInput = document.getElementById("cancelOpenPlayCode");
-      if (mobileInput) mobileInput.value = saved.mobile || "";
-      if (codeInput) codeInput.value = saved.code || "";
-    }
-  }
+  saveCancellation("open_play", { mobile: data.mobile, code: cancellationCode });
+  
+  const resultDiv = document.getElementById("playResult");
+  showResult(resultDiv, `✅ Thank you, ${data.name}! Registration recorded. Please wait for the admin to verify your GCash payment (Ref: ${gcashRef}).\n\nCancellation code: ${cancellationCode}.`, true);
+  
+  document.getElementById("playForm").reset();
+  const infoDiv = document.getElementById("openPlayInfo");
+  if (infoDiv) infoDiv.innerHTML = "";
+  
+  await loadOpenPlay();
 }
 
-async function cancelBooking() {
-  const mobile = document.getElementById("cancelBookingMobile")?.value.trim();
-  const code = document.getElementById("cancelBookingCode")?.value.trim().toUpperCase();
-  const result = document.getElementById("cancelBookingResult");
-  if (!mobile || !code) { showResult(result, "Please enter your mobile number and cancellation code.", false); return; }
-  try {
-    showResult(result, "Cancelling booking...", true);
-    const data = await supabaseFetch("/rest/v1/rpc/cancel_booking", { method: "POST", body: JSON.stringify({ p_mobile: mobile, p_code: code }) });
-    if (data === true) {
-      try { localStorage.removeItem("zinja_last_booking"); } catch {}
-      showResult(result, "Your court booking has been cancelled.", true);
-      await loadBookings();
-    } else {
-      showResult(result, "No matching booking was found.", false);
-    }
-  } catch (error) { showResult(result, `Cancellation failed. ${error.message || "Please try again."}`, false); }
-}
-
-async function cancelOpenPlay() {
-  const mobile = document.getElementById("cancelOpenPlayMobile")?.value.trim();
-  const code = document.getElementById("cancelOpenPlayCode")?.value.trim().toUpperCase();
-  const result = document.getElementById("cancelOpenPlayResult");
-  if (!mobile || !code) { showResult(result, "Please enter your mobile number and cancellation code.", false); return; }
-  try {
-    showResult(result, "Cancelling registration...", true);
-    const data = await supabaseFetch("/rest/v1/rpc/cancel_open_play", { method: "POST", body: JSON.stringify({ p_mobile: mobile, p_code: code }) });
-    if (data === true) {
-      try { localStorage.removeItem("zinja_last_open_play"); } catch {}
-      showResult(result, "Your Open Play registration has been cancelled.", true);
-      await loadOpenPlay();
-    } else {
-      showResult(result, "No matching Open Play registration was found.", false);
-    }
-  } catch (error) { showResult(result, `Cancellation failed. ${error.message || "Please try again."}`, false); }
-}
-
-// ====================
-// AUTO CLEANUP
-// ====================
+// ==================== AUTO CLEANUP & MATCHES (UNCHANGED) ====================
 
 async function autoCleanupOldData() {
   const today = getTodayStr();
@@ -678,10 +672,6 @@ async function autoCleanupOldData() {
     console.log("✅ Auto-cleanup complete for " + today);
   } catch (error) { console.warn("Auto-cleanup failed:", error); }
 }
-
-// ====================
-// CHECK-IN SYSTEM
-// ====================
 
 async function loadCheckIns(dateStr) {
   try {
@@ -711,10 +701,6 @@ async function setPlayerStatus(dateStr, playerName, status) {
     body: JSON.stringify({ status: status })
   });
 }
-
-// ====================
-// MATCH CRUD
-// ====================
 
 async function loadMatches(dateStr) {
   try {
@@ -891,10 +877,6 @@ async function cancelMatch(matchId) {
   if (freedCourt) await promoteNextFromQueue(matchDate, freedCourt);
 }
 
-// ====================
-// SMART SUGGEST — FAIR ROTATION
-// ====================
-
 function computePlayerStats(playerNames, matches) {
   const stats = {};
   playerNames.forEach(name => { stats[name] = { games: 0, wins: 0, losses: 0 }; });
@@ -936,11 +918,6 @@ function getMaxMatchInfo(checkInMap, matches) {
   return { maxMatches, currentCount, activeCount, queuedCount, canCreateMore, availableSlots, activeCheckedInCount };
 }
 
-// Fair rotation:
-// 1. Fewest games played (so everyone gets equal turns)
-// 2. Then highest win-loss score (so winners eventually face winners)
-// 3. Random tiebreak
-// 4. Balanced teams: strongest + weakest vs middle two
 function smartSuggest(availablePlayers, matches) {
   if (availablePlayers.length < 4) return null;
   const stats = computePlayerStats(availablePlayers, matches);
@@ -949,11 +926,9 @@ function smartSuggest(availablePlayers, matches) {
     const ga = stats[a].games;
     const gb = stats[b].games;
     if (ga !== gb) return ga - gb;
-
     const wa = stats[a].wins - stats[a].losses;
     const wb = stats[b].wins - stats[b].losses;
     if (wb !== wa) return wb - wa;
-
     return Math.random() - 0.5;
   });
 
@@ -966,10 +941,6 @@ function smartSuggest(availablePlayers, matches) {
 
   return { teamA: [picked[0], picked[3]], teamB: [picked[1], picked[2]] };
 }
-
-// ====================
-// PUBLIC LIVE BOARD
-// ====================
 
 function renderMatchCard(m, mode, queueNumber) {
   const teamALabel = `${escapeHtml(m.team_a_1)} & ${escapeHtml(m.team_a_2)}`;
@@ -1111,10 +1082,6 @@ window.reportMatchWin = async function (matchId, winningTeam) {
   }
 };
 
-// ====================
-// ADMIN — TOURNAMENT TAB
-// ====================
-
 async function renderAdminTournament() {
   const container = document.getElementById('adminContent');
   if (!container) return;
@@ -1150,7 +1117,6 @@ async function renderAdminTournament() {
     const limit = getMaxMatchInfo(checkInMap, matches);
     const { maxMatches, currentCount, canCreateMore, availableSlots, activeCheckedInCount } = limit;
 
-    // ============== PLAYER LIST (visible names) ==============
     const playerListHTML = allPlayers.length === 0
       ? '<p style="color:#6b7280;">No players yet for this date. Players who registered via Open Play appear here automatically. Tap "➕ Add Walk-In" to add one manually.</p>'
       : allPlayers.map(name => {
@@ -1201,7 +1167,6 @@ async function renderAdminTournament() {
           </div>`;
         }).join('');
 
-    // ============== ACTIVE MATCHES (visible names) ==============
     const activeHTML = activeMatches.length === 0
       ? '<p style="color:#6b7280;">No active matches.</p>'
       : activeMatches.map(m => `
@@ -1220,7 +1185,6 @@ async function renderAdminTournament() {
           </div>
         `).join('');
 
-    // ============== QUEUE ==============
     const queueHTML = queuedMatches.length === 0
       ? '<p style="color:#6b7280;">No matches in queue.</p>'
       : queuedMatches.map((m, idx) => `
@@ -1238,7 +1202,6 @@ async function renderAdminTournament() {
           </div>
         `).join('');
 
-    // ============== CREATE MATCH ==============
     const playerOptions = availablePlayers.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
     const courtOptionsHTML = `
       <option value="0">📋 Queue — auto-assign when a court frees up</option>
@@ -1284,575 +1247,4 @@ async function renderAdminTournament() {
             </div>
           </div>
           <button type="button" onclick="doCreateMatch()" style="margin-top:12px;padding:12px 24px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;width:100%;">▶ Create Match</button>
-          <p style="font-size:0.8em;color:#6b7280;margin:8px 0 0 0;text-align:center;">${availableSlots} slot${availableSlots === 1 ? '' : 's'} remaining in this round.</p>
-        </div>`;
-    }
-
-    // ============== COMPLETED ==============
-    const completedHTML = doneMatches.length === 0
-      ? '<p style="color:#6b7280;">No completed matches yet.</p>'
-      : doneMatches.map(m => `
-          <div style="padding:8px 12px;background:#f9fafb;border-radius:6px;margin-bottom:6px;font-size:0.9em;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-            <span style="color:#1f2937;">Court ${m.court} · ${escapeHtml(m.team_a_1)} & ${escapeHtml(m.team_a_2)} vs ${escapeHtml(m.team_b_1)} & ${escapeHtml(m.team_b_2)}</span>
-            <strong style="color:#10b981;">🏆 Team ${m.winning_team}</strong>
-          </div>
-        `).join('');
-
-    const checkedInCount = Object.values(checkInMap).filter(c => c.status === 'active').length;
-    const limitColor = canCreateMore ? '#10b981' : '#f59e0b';
-    const limitBg = canCreateMore ? '#ecfdf5' : '#fef3c7';
-
-    const dateBadge = isToday
-      ? '<span style="background:#10b981;color:#fff;padding:4px 12px;border-radius:20px;font-size:0.75em;font-weight:700;margin-left:8px;">TODAY</span>'
-      : `<span style="background:#7c3aed;color:#fff;padding:4px 12px;border-radius:20px;font-size:0.75em;font-weight:700;margin-left:8px;">${formatDate(today)}</span>`;
-
-    container.innerHTML = `
-      <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:16px;border:2px solid #7c3aed;">
-        <h3 style="color:#7c3aed;margin:0 0 12px 0;">📅 Session Date ${dateBadge}</h3>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-          <input type="date" id="adminDatePicker" value="${today}" style="padding:10px;border-radius:8px;border:1px solid #ddd;font-size:1em;">
-          <button type="button" onclick="doSetAdminDate()" style="padding:10px 20px;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;">🔄 Load Date</button>
-          <button type="button" onclick="doTodayDate()" style="padding:10px 20px;background:#6b7280;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;">📌 Jump to Today</button>
-        </div>
-        <p style="color:#6b7280;font-size:0.85em;margin:10px 0 0 0;">Pick any date to prepare lineups in advance. Players who registered for Open Play on that date appear automatically.</p>
-      </div>
-
-      <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:16px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
-          <h3 style="color:#7c3aed;margin:0;">👥 Check-In & Player Management (${checkedInCount} active)</h3>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            <button type="button" onclick="doAddWalkIn()" style="padding:8px 16px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:0.85em;">➕ Add Walk-In</button>
-            <button type="button" onclick="doResetToday()" style="padding:8px 16px;background:linear-gradient(135deg,#dc2626,#b91c1c);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:0.85em;">🗑 Reset This Date</button>
-            <button type="button" onclick="doClearOldData()" style="padding:8px 16px;background:#6b7280;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:0.85em;">🧹 Clean Old Data</button>
-          </div>
-        </div>
-        <p style="color:#6b7280;font-size:0.9em;margin-bottom:12px;">Tap ✓ Check In for arrivals, ⏸ Mark as Left for departures.</p>
-
-        <div style="background:${limitBg};padding:12px 16px;border-radius:8px;border-left:4px solid ${limitColor};margin-bottom:12px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-            <div>
-              <span style="font-weight:700;color:#111827;">📊 Match Slots</span>
-              <span style="font-weight:900;font-size:1.3em;color:${limitColor};margin-left:10px;">${currentCount} / ${maxMatches}</span>
-            </div>
-            <span style="font-size:0.85em;color:#4b5563;">${activeCheckedInCount} players ÷ 4 = ${maxMatches} matches${canCreateMore ? ` · ${availableSlots} slot${availableSlots === 1 ? '' : 's'} open` : ' · FULL'}</span>
-          </div>
-        </div>
-
-        ${playerListHTML}
-      </div>
-
-      <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:16px;">
-        <h3 style="color:#10b981;margin-top:0;">🟢 Active Matches (${activeMatches.length})</h3>
-        ${activeHTML}
-      </div>
-
-      <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:16px;">
-        <h3 style="color:#a78bfa;margin-top:0;">⏳ Up Next — Queue (${queuedMatches.length})</h3>
-        <p style="color:#6b7280;font-size:0.9em;margin-top:0;">These matches auto-start when a court frees up.</p>
-        ${queueHTML}
-      </div>
-
-      <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:16px;">
-        <h3 style="color:#f59e0b;margin-top:0;">➕ Create New Match</h3>
-        ${createHTML}
-      </div>
-
-      <div style="background:#fff;border-radius:12px;padding:16px;">
-        <h3 style="color:#7c3aed;margin-top:0;">✅ Completed (${doneMatches.length})</h3>
-        ${completedHTML}
-      </div>
-    `;
-  } catch (error) {
-    console.error("Admin tournament error:", error);
-    container.innerHTML = `<p style="color:red;">❌ ${escapeHtml(error.message)}</p>`;
-  }
-}
-
-window.doSetAdminDate = async function () {
-  const picker = document.getElementById('adminDatePicker');
-  if (!picker || !picker.value) return;
-  adminSelectedDate = picker.value;
-  await renderAdminTournament();
-};
-
-window.doTodayDate = async function () {
-  adminSelectedDate = getTodayStr();
-  await renderAdminTournament();
-};
-
-window.toggleCheckIn = async function (playerName, isCurrentlyIn) {
-  const today = getAdminDate();
-  try {
-    if (isCurrentlyIn) await removeCheckIn(today, playerName);
-    else await addCheckIn(today, playerName, false);
-    await renderAdminTournament();
-  } catch (error) { alert("Failed to update check-in: " + error.message); }
-};
-
-window.togglePlayerLeft = async function (playerName, markLeft) {
-  const today = getAdminDate();
-  const action = markLeft ? 'mark as LEFT' : 'mark as ACTIVE again';
-  if (!confirm(`Are you sure you want to ${action} "${playerName}"?`)) return;
-  try {
-    await setPlayerStatus(today, playerName, markLeft ? 'left' : 'active');
-    await renderAdminTournament();
-  } catch (error) { alert("Failed to update status: " + error.message); }
-};
-
-window.doAddWalkIn = async function () {
-  const today = getAdminDate();
-  const name = prompt("Enter walk-in player's full name:");
-  if (!name || !name.trim()) return;
-  const trimmed = name.trim();
-  try {
-    const checkInMap = await loadCheckIns(today);
-    if (checkInMap[trimmed]) { alert(`"${trimmed}" is already on this date's list.`); return; }
-    await addCheckIn(today, trimmed, true);
-    await renderAdminTournament();
-  } catch (error) { alert("Failed to add walk-in: " + error.message); }
-};
-
-window.doResetToday = async function () {
-  const today = getAdminDate();
-  if (!confirm(`🗑 Reset Session\n\nThis will delete ALL matches and check-ins for ${today}.\n\nContinue?`)) return;
-  try {
-    await supabaseFetch(`/rest/v1/matches?play_date=eq.${today}`, { method: "DELETE" });
-    await supabaseFetch(`/rest/v1/check_ins?play_date=eq.${today}`, { method: "DELETE" });
-    alert("✅ Session has been reset.");
-    await renderAdminTournament();
-    await renderLiveBoard();
-  } catch (error) { alert("❌ Reset failed: " + error.message); }
-};
-
-window.doClearOldData = async function () {
-  const today = getTodayStr();
-  if (!confirm(`🧹 Clean Old Data\n\nDeletes ALL matches and check-ins from PREVIOUS days (before ${today}).\n\nContinue?`)) return;
-  try {
-    await supabaseFetch(`/rest/v1/matches?play_date=lt.${today}`, { method: "DELETE" });
-    await supabaseFetch(`/rest/v1/check_ins?play_date=lt.${today}`, { method: "DELETE" });
-    try { localStorage.setItem("zinja_last_cleanup_date", today); } catch {}
-    alert("✅ Old data cleaned.");
-    await renderAdminTournament();
-    await renderLiveBoard();
-  } catch (error) { alert("❌ Cleanup failed: " + error.message); }
-};
-
-window.doSmartSuggest = async function () {
-  const today = getAdminDate();
-  try {
-    const [regs, checkInMap, matches] = await Promise.all([
-      supabaseFetch(`/rest/v1/open_play?select=player_name&play_date=eq.${encodeURIComponent(today)}`),
-      loadCheckIns(today),
-      loadMatches(today)
-    ]);
-    const registeredPlayers = (regs || []).map(r => r.player_name);
-    const walkInPlayers = Object.keys(checkInMap).filter(n => checkInMap[n].is_walkin && !registeredPlayers.includes(n));
-    const allPlayers = [...registeredPlayers, ...walkInPlayers];
-    const playersInPending = getPlayersInPendingMatches(matches);
-    const available = allPlayers.filter(n => checkInMap[n] && checkInMap[n].status === 'active' && !playersInPending.has(n));
-
-    if (available.length < 4) { alert(`Need at least 4 available players. Currently: ${available.length}`); return; }
-    const suggestion = smartSuggest(available, matches);
-    if (!suggestion) { alert("Could not generate suggestion."); return; }
-
-    document.getElementById('teamAP1').value = suggestion.teamA[0];
-    document.getElementById('teamAP2').value = suggestion.teamA[1];
-    document.getElementById('teamBP1').value = suggestion.teamB[0];
-    document.getElementById('teamBP2').value = suggestion.teamB[1];
-    alert(`✨ Smart Suggest applied!\n\nTeam A: ${suggestion.teamA[0]} & ${suggestion.teamA[1]}\nTeam B: ${suggestion.teamB[0]} & ${suggestion.teamB[1]}`);
-  } catch (error) { alert("Suggest failed: " + error.message); }
-};
-
-window.doCreateMatch = async function () {
-  const today = getAdminDate();
-  const court = Number(document.getElementById('newMatchCourt')?.value);
-  const a1 = document.getElementById('teamAP1')?.value;
-  const a2 = document.getElementById('teamAP2')?.value;
-  const b1 = document.getElementById('teamBP1')?.value;
-  const b2 = document.getElementById('teamBP2')?.value;
-
-  if (!a1 || !a2 || !b1 || !b2) { alert("Please select all 4 players."); return; }
-  const all = [a1, a2, b1, b2];
-  if (new Set(all).size !== 4) { alert("Each player can only appear once."); return; }
-
-  try {
-    const [checkInMap, matches] = await Promise.all([
-      loadCheckIns(today),
-      loadMatches(today)
-    ]);
-    const limit = getMaxMatchInfo(checkInMap, matches);
-    if (!limit.canCreateMore) {
-      alert(
-        `🛑 Match limit reached (${limit.currentCount} / ${limit.maxMatches})\n\n` +
-        `All ${limit.activeCheckedInCount} checked-in players are already in a match.\n\n` +
-        `Finish a match first to open a new slot.`
-      );
-      await renderAdminTournament();
-      return;
-    }
-
-    await createMatch(today, court, [a1, a2], [b1, b2]);
-    await renderAdminTournament();
-    await renderLiveBoard();
-  } catch (error) { alert("Failed to create match: " + error.message); }
-};
-
-window.adminDeclareWinner = async function (matchId, team) {
-  if (!confirm(`Declare Team ${team} as winner?`)) return;
-  try {
-    await declareWinner(matchId, team);
-    await renderAdminTournament();
-    await renderLiveBoard();
-  } catch (error) { alert("Failed: " + error.message); }
-};
-
-window.adminCancelMatch = async function (matchId) {
-  if (!confirm("Cancel this match? It will be deleted permanently.")) return;
-  try {
-    await cancelMatch(matchId);
-    await renderAdminTournament();
-    await renderLiveBoard();
-  } catch (error) { alert("Failed: " + error.message); }
-};
-
-// ====================
-// PAGE NAVIGATION
-// ====================
-
-window.showPage = function (pageId) {
-  document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
-  const target = document.getElementById('page-' + pageId);
-  if (target) {
-    target.classList.add('active');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-
-    if (pageId === 'live') {
-      renderLiveBoard();
-    } else if (pageId === 'players') {
-      loadOpenPlay();
-    } else if (pageId === 'booking') {
-      loadBookings();
-    } else if (pageId === 'chat') {
-      setTimeout(() => {
-        const el = document.getElementById('chatMessages');
-        if (el) el.scrollTop = el.scrollHeight;
-      }, 100);
-    }
-  }
-};
-
-// ====================
-// CLUB CHAT
-// ====================
-
-async function loadChatMessages() {
-  const container = document.getElementById("chatMessages");
-  if (!container) return;
-  if (document.visibilityState !== 'visible') return;
-  try {
-    const rows = await supabaseFetch("/rest/v1/chat_messages?select=player_name,message,created_at&order=created_at.asc&limit=50");
-    if (!rows || rows.length === 0) {
-      container.innerHTML = "<p style='text-align:center;color:#aaa;'>No messages yet today. Be the first to say hi! 👋</p>";
-      return;
-    }
-    const currentScroll = container.scrollTop + container.clientHeight;
-    const wasAtBottom = currentScroll >= container.scrollHeight - 50;
-    container.innerHTML = rows.map(msg => {
-      const time = new Date(msg.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-      return `
-        <div style="margin-bottom:12px;padding:10px;background:#2a2a4a;border-radius:8px;border-left:3px solid #7c3aed;">
-          <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-            <strong style="color:#a78bfa;">${escapeHtml(msg.player_name)}</strong>
-            <small style="color:#aaa;">${time}</small>
-          </div>
-          <div style="word-wrap:break-word;font-size:1.05em;color:#fff;">${escapeHtml(msg.message)}</div>
-        </div>
-      `;
-    }).join("");
-    if (wasAtBottom) container.scrollTop = container.scrollHeight;
-  } catch (error) {
-    console.error("Chat load error:", error);
-    container.innerHTML = "<p style='text-align:center;color:#ef4444;'>Unable to load chat. Please refresh.</p>";
-  }
-}
-
-async function sendChatMessage() {
-  const nameInput = document.getElementById("chatName");
-  const messageInput = document.getElementById("chatInput");
-  const name = nameInput?.value.trim();
-  const message = messageInput?.value.trim();
-  if (!name) { alert("Please enter your name first."); nameInput?.focus(); return; }
-  if (!message) { alert("Please type a message."); return; }
-  if (message.length > 500) { alert("Message is too long. Maximum is 500 characters."); return; }
-  try { localStorage.setItem("zinja_chat_name", name); } catch {}
-  try {
-    const sendBtn = document.getElementById("sendChatBtn");
-    if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = "..."; }
-    await supabaseFetch("/rest/v1/chat_messages", {
-      method: "POST",
-      headers: { Prefer: "return=representation" },
-      body: JSON.stringify({ player_name: name, message: message })
-    });
-    messageInput.value = "";
-    messageInput.focus();
-    await loadChatMessages();
-    if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = "Send"; }
-  } catch (error) {
-    console.error("Send chat error:", error);
-    alert("Failed to send message: " + error.message);
-    const sendBtn = document.getElementById("sendChatBtn");
-    if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = "Send"; }
-  }
-}
-
-function insertEmoji(emoji) {
-  const input = document.getElementById("chatInput");
-  if (!input) return;
-  input.value += emoji;
-  input.focus();
-}
-
-function setupChatEmojiPicker() {
-  const emojiBtn = document.getElementById("emojiBtn");
-  const emojiPicker = document.getElementById("emojiPicker");
-  if (!emojiBtn || !emojiPicker) return;
-  emojiBtn.addEventListener("click", () => {
-    emojiPicker.style.display = emojiPicker.style.display === "none" ? "block" : "none";
-  });
-  document.addEventListener("click", (e) => {
-    if (!emojiPicker.contains(e.target) && !emojiBtn.contains(e.target)) {
-      emojiPicker.style.display = "none";
-    }
-  });
-}
-
-function setupChatName() {
-  const nameInput = document.getElementById("chatName");
-  if (!nameInput) return;
-  try {
-    const savedName = localStorage.getItem("zinja_chat_name");
-    if (savedName) nameInput.value = savedName;
-  } catch {}
-}
-
-function setupChat() {
-  const chatSection = document.getElementById("page-chat");
-  if (!chatSection) return;
-  setupChatName();
-  setupChatEmojiPicker();
-  announceClosureInChat();
-  loadChatMessages();
-}
-
-// ====================
-// ADMIN PANEL
-// ====================
-
-async function loadAdminData() {
-  const pw = document.getElementById('adminPassword')?.value;
-  const resultDiv = document.getElementById('adminResult');
-  const dataDiv = document.getElementById('adminData');
-
-  if (pw !== ADMIN_PASSWORD) {
-    if (resultDiv) resultDiv.innerHTML = '<p style="color: red; font-weight: bold;">❌ Invalid password.</p>';
-    return;
-  }
-  if (resultDiv) resultDiv.innerHTML = '';
-  if (dataDiv) dataDiv.style.display = 'block';
-
-  try {
-    const bkRes = await supabaseFetch('/rest/v1/bookings?select=id,customer_name,mobile,booking_date,start_time,court,duration_hours,price,created_at&order=created_at.desc');
-    adminData.bookings = bkRes || [];
-    const opRes = await supabaseFetch('/rest/v1/open_play?select=id,player_name,mobile,play_date,skill_level&order=created_at.desc');
-    adminData.openplay = opRes || [];
-    renderAdminContent();
-  } catch (err) {
-    if (resultDiv) resultDiv.innerHTML = `<p style="color: red;">❌ Failed to load data: ${err.message}</p>`;
-  }
-}
-
-function switchAdminTab(tab) {
-  currentAdminTab = tab;
-  const tabIds = { bookings: 'tabBookings', openplay: 'tabOpenPlay', tournament: 'tabTournament' };
-  Object.keys(tabIds).forEach(t => {
-    const btn = document.getElementById(tabIds[t]);
-    if (btn) {
-      if (t === tab) {
-        btn.style.background = 'linear-gradient(135deg, #7c3aed, #6d28d9)';
-        btn.style.color = '#ffffff';
-        btn.style.border = '2px solid #6d28d9';
-      } else {
-        btn.style.background = '#ffffff';
-        btn.style.color = '#333333';
-        btn.style.border = '2px solid #dddddd';
-      }
-    }
-  });
-  renderAdminContent();
-}
-
-function renderAdminContent() {
-  const container = document.getElementById('adminContent');
-  if (!container) return;
-
-  if (currentAdminTab === 'tournament') { renderAdminTournament(); return; }
-
-  let html = '';
-  if (currentAdminTab === 'bookings') {
-    if (adminData.bookings.length === 0) {
-      html = '<p style="color:#6b7280;">No court bookings yet.</p>';
-    } else {
-      html = adminData.bookings.map(b => `
-        <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; margin-bottom:12px; box-shadow:0 2px 8px rgba(0,0,0,0.06); position:relative;">
-          <button onclick="deleteBooking('${b.id}')" style="position:absolute; top:12px; right:12px; background:#ef4444; color:#fff; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:0.85em; font-weight:600;">🗑 Delete</button>
-          <h4 style="margin:0 0 8px 0; color:#7c3aed;">🏓 ${escapeHtml(b.customer_name || 'Unknown')}</h4>
-          <p style="margin:4px 0; font-size:0.92em; color:#374151;">📱 ${escapeHtml(b.mobile || 'No phone')}</p>
-          <p style="margin:4px 0; font-size:0.92em; color:#374151;">📅 ${escapeHtml(b.booking_date || 'No date')} at ${escapeHtml(b.start_time || 'No time')}</p>
-          <p style="margin:4px 0; font-size:0.92em; color:#374151;">🏟️ Court ${escapeHtml(b.court || '?')} • ⏱️ ${escapeHtml(b.duration_hours || '?')} hour(s)</p>
-          <p style="margin:4px 0; font-size:0.92em; color:#374151;">💰 ₱${Number(b.price || 0).toLocaleString()}</p>
-        </div>
-      `).join('');
-    }
-  } else if (currentAdminTab === 'openplay') {
-    if (adminData.openplay.length === 0) {
-      html = '<p style="color:#6b7280;">No Open Play registrations yet.</p>';
-    } else {
-      html = adminData.openplay.map(o => `
-        <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; margin-bottom:12px; box-shadow:0 2px 8px rgba(0,0,0,0.06); position:relative;">
-          <button onclick="deleteOpenPlay('${o.id}')" style="position:absolute; top:12px; right:12px; background:#ef4444; color:#fff; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:0.85em; font-weight:600;">🗑 Delete</button>
-          <h4 style="margin:0 0 8px 0; color:#7c3aed;">🏓 ${escapeHtml(o.player_name || 'Unknown')}</h4>
-          <p style="margin:4px 0; font-size:0.92em; color:#374151;">📱 ${escapeHtml(o.mobile || 'No phone')}</p>
-          <p style="margin:4px 0; font-size:0.92em; color:#374151;">📅 ${escapeHtml(o.play_date || 'No date')}</p>
-          <p style="margin:4px 0; font-size:0.92em; color:#374151;">🎯 Skill Level: ${escapeHtml(o.skill_level || 'Not specified')}</p>
-        </div>
-      `).join('');
-    }
-  }
-  container.innerHTML = html;
-}
-
-async function deleteBooking(id) {
-  const pw = prompt("Enter admin password to delete this booking:");
-  if (pw !== ADMIN_PASSWORD) { alert("❌ Invalid password"); return; }
-  if (!confirm("Delete this booking? Cannot be undone.")) return;
-  try {
-    await supabaseFetch(`/rest/v1/bookings?id=eq.${id}`, { method: "DELETE" });
-    alert("✅ Booking deleted.");
-    await loadAdminData();
-    await loadBookings();
-  } catch (error) { alert("❌ Delete failed: " + error.message); }
-}
-
-async function deleteOpenPlay(id) {
-  const pw = prompt("Enter admin password to delete this player:");
-  if (pw !== ADMIN_PASSWORD) { alert("❌ Invalid password"); return; }
-  if (!confirm("Delete this player registration? Cannot be undone.")) return;
-  try {
-    await supabaseFetch(`/rest/v1/open_play?id=eq.${id}`, { method: "DELETE" });
-    alert("✅ Player removed.");
-    await loadAdminData();
-  } catch (error) { alert("❌ Delete failed: " + error.message); }
-}
-
-// ====================
-// START
-// ====================
-
-document.addEventListener("DOMContentLoaded", async () => {
-  const bookingForm = document.getElementById("bookingForm");
-  const playForm = document.getElementById("playForm");
-  if (bookingForm) bookingForm.addEventListener("submit", handleBookingSubmit);
-  if (playForm) playForm.addEventListener("submit", handleOpenPlaySubmit);
-
-  createCancellationBoxes();
-  setupPriceDisplay();
-  setupAvailabilityCheck();
-  setupOpenPlayInfo();
-  setupChat();
-  loadBookings();
-  loadOpenPlay();
-  updateLiveClosureStatus();
-
-  await autoCleanupOldData();
-  renderLiveBoard();
-
-  const refreshBookingsBtn = document.getElementById("refreshBookingsBtn");
-  if (refreshBookingsBtn) {
-    refreshBookingsBtn.addEventListener("click", async () => {
-      refreshBookingsBtn.disabled = true;
-      refreshBookingsBtn.textContent = "⏳ Loading...";
-      await loadBookings();
-      refreshBookingsBtn.disabled = false;
-      refreshBookingsBtn.textContent = "🔄 Refresh Bookings";
-    });
-  }
-
-  const refreshOpenPlayBtn = document.getElementById("refreshOpenPlayBtn");
-  if (refreshOpenPlayBtn) {
-    refreshOpenPlayBtn.addEventListener("click", async () => {
-      refreshOpenPlayBtn.disabled = true;
-      refreshOpenPlayBtn.textContent = "⏳ Loading...";
-      await loadOpenPlay();
-      refreshOpenPlayBtn.disabled = false;
-      refreshOpenPlayBtn.textContent = "🔄 Refresh List";
-    });
-  }
-
-  setInterval(async () => {
-    if (document.visibilityState === 'visible') {
-      const livePage = document.getElementById('page-live');
-      if (livePage && livePage.classList.contains('active')) {
-        await renderLiveBoard();
-      }
-      const adminDataEl = document.getElementById('adminData');
-      const adminPage = document.getElementById('page-admin');
-      if (currentAdminTab === 'tournament' && adminPage && adminPage.classList.contains('active') && adminDataEl && adminDataEl.style.display !== 'none') {
-        await renderAdminTournament();
-      }
-    }
-  }, LIVE_MATCH_POLL_MS);
-
-  let lastChatLoad = 0;
-  let lastDataLoad = 0;
-  let lastStatusUpdate = 0;
-
-  function smartLoop(timestamp) {
-    if (document.visibilityState === 'visible') {
-      if (timestamp - lastChatLoad >= CHAT_POLL_MS) {
-        lastChatLoad = timestamp;
-        const chatPage = document.getElementById('page-chat');
-        if (chatPage && chatPage.classList.contains('active')) {
-          loadChatMessages();
-        }
-      }
-      if (timestamp - lastDataLoad >= DATA_POLL_MS) {
-        lastDataLoad = timestamp;
-        loadBookings();
-        loadOpenPlay();
-      }
-      if (timestamp - lastStatusUpdate >= STATUS_POLL_MS) {
-        lastStatusUpdate = timestamp;
-        updateLiveClosureStatus();
-      }
-    }
-    requestAnimationFrame(smartLoop);
-  }
-  requestAnimationFrame(smartLoop);
-
-  document.addEventListener("visibilitychange", async () => {
-    if (document.visibilityState === "visible") {
-      loadBookings();
-      loadOpenPlay();
-      updateLiveClosureStatus();
-      await autoCleanupOldData();
-      const livePage = document.getElementById('page-live');
-      if (livePage && livePage.classList.contains('active')) {
-        renderLiveBoard();
-      }
-      const chatPage = document.getElementById('page-chat');
-      if (chatPage && chatPage.classList.contains('active')) {
-        loadChatMessages();
-      }
-    }
-  });
-});
+          <p style="font-size:0.8em;color:#6b7280;margin:8px 
