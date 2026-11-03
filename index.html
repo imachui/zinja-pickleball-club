@@ -16,15 +16,7 @@
     }
 
     /* ==================== NAVBAR ==================== */
-    .navbar {
-      position: sticky; top: 0; z-index: 100;
-      background: rgba(10, 26, 58, 0.95);
-      backdrop-filter: blur(10px);
-      padding: 10px 20px;
-      display: flex; align-items: center; justify-content: space-between;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-      border-bottom: 1px solid rgba(168,85,247,0.2);
-    }
+    .navbar { position: sticky; top: 0; z-index: 100; background: rgba(10, 26, 58, 0.95); backdrop-filter: blur(10px); padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 8px rgba(0,0,0,0.3); border-bottom: 1px solid rgba(168,85,247,0.2); }
     .nav-logo { display: flex; align-items: center; gap: 12px; text-decoration: none; }
     .nav-logo img { height: 52px; width: auto; display: block; }
     .nav-logo-text { display: flex; flex-direction: column; line-height: 1; color: #fff; }
@@ -161,10 +153,8 @@
     #adminData strong, #adminData b { color: #111827 !important; }
     #adminData p { color: #374151 !important; }
     #adminData small { color: #6b7280 !important; }
-    /* Preserve white text inside colored badges */
     #adminData span[style*="color:#fff"] { color: #fff !important; }
     #adminData button[style*="color:#fff"] { color: #fff !important; }
-    /* Preserve explicit color overrides from JS */
     #adminData [style*="color:#92400e"] { color: #92400e !important; }
     #adminData [style*="color:#78350f"] { color: #78350f !important; }
     #adminData [style*="color:#1e40af"] { color: #1e40af !important; }
@@ -207,6 +197,16 @@
     /* ==================== FOOTER ==================== */
     footer { text-align: center; padding: 30px 24px; color: #c7d2fe; font-size: 0.85em; background: rgba(10,26,58,0.8); border-top: 1px solid rgba(168,85,247,0.2); }
     footer a { color: #c7d2fe; text-decoration: none; }
+
+    /* ==================== MODAL FOR PAYMENT ==================== */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 500; display: none; align-items: center; justify-content: center; padding: 20px; }
+    .modal-overlay.open { display: flex; }
+    .modal-content { background: #fff; border-radius: 16px; padding: 24px; max-width: 400px; width: 100%; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.5); color: #111; }
+    .modal-content h3 { color: #7c3aed; margin-bottom: 8px; font-size: 1.3em; }
+    .modal-content .amount { font-size: 2em; font-weight: 900; color: #10b981; margin: 10px 0; }
+    .modal-content .gcash-info { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 12px; margin-bottom: 16px; text-align: left; }
+    .modal-content .gcash-info p { color: #1e3a8a; margin: 4px 0; font-size: 0.95em; }
+    .modal-content .refund-note { font-size: 0.8em; color: #dc2626; background: #fef2f2; padding: 10px; border-radius: 8px; margin-bottom: 16px; text-align: left; }
 
     /* ==================== RESPONSIVE ==================== */
     @media (max-width: 640px) {
@@ -271,6 +271,32 @@
 
   <div class="weekly-banner">
     📢 <strong>Weekly Schedule:</strong> Courts and Open Play are closed every <strong>Friday 5:00 PM to Saturday 5:00 PM</strong> (Philippine Time).
+  </div>
+
+  <!-- ==================== PAYMENT MODAL ==================== -->
+  <div id="paymentModal" class="modal-overlay">
+    <div class="modal-content">
+      <h3>💳 GCash Payment</h3>
+      <p>Amount to pay:</p>
+      <div class="amount" id="modalAmount">₱0</div>
+      
+      <div class="gcash-info">
+        <p><strong>GCash Number:</strong> <span id="modalGcashNumber">09761415950</span></p>
+        <p><strong>Account Name:</strong> <span id="modalGcashName">ZINJA Pickleball Club</span></p>
+      </div>
+
+      <p style="font-size:0.9em; margin-bottom:8px; color:#374151; text-align:left;">Enter your GCash Reference No. to confirm:</p>
+      <input id="modalGcashRef" type="text" placeholder="e.g. 1234567890123" style="text-align:center; font-weight:bold; font-size:1.1em; border-color:#10b981; margin-bottom:16px;">
+      
+      <div class="refund-note">
+        ⚠️ <strong>Refund Policy:</strong> Full refunds are only processed if the game is cancelled due to bad weather or valid emergencies. Contact the admin.
+      </div>
+
+      <div style="display:flex; gap:8px;">
+        <button class="btn" type="button" onclick="closePaymentModal()" style="flex:1; background:#6b7280; box-shadow:none;">Cancel</button>
+        <button class="btn alt" type="button" id="modalConfirmBtn" onclick="confirmPayment()" style="flex:2;">I Have Paid</button>
+      </div>
+    </div>
   </div>
 
   <section id="page-home" class="page active">
@@ -439,7 +465,7 @@
             <div id="rateNote" style="font-size:0.8em; opacity:0.85; margin-top:6px; text-align:right;"></div>
           </div>
           <div id="availabilityInfo" style="margin:10px 0;"></div>
-          <button class="btn" type="submit" style="width:100%;">Prepare Booking</button>
+          <button class="btn" type="submit" style="width:100%;">Tap to Proceed to Payment</button>
         </form>
         <div id="bookingResult"></div>
       </div>
@@ -472,7 +498,7 @@
             <option value="Any level">Any level</option>
           </select>
           <div id="openPlayInfo" style="margin:10px 0;"></div>
-          <button class="btn" type="submit" style="width:100%;">Join Open Play</button>
+          <button class="btn" type="submit" style="width:100%;">Tap to Proceed to Payment</button>
         </form>
         <div id="playResult"></div>
       </div>
@@ -624,7 +650,7 @@
     © <span id="year"></span> ZINJA Pickleball Club · Malusay, Guihulngan City
   </footer>
 
-  <script src="zinja-app.js?v=48"></script>
+  <script src="zinja-app.js?v=51"></script>
   <script>
     document.getElementById('year').textContent = new Date().getFullYear();
 
