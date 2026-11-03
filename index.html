@@ -339,7 +339,7 @@
         <span class="ico">🏓</span>
         <div class="txt">
           <span class="num">₱150 / hour</span>
-          <span class="lbl">Court Rental</span>
+          <span class="lbl">Evening Rate</span>
         </div>
       </div>
       <div class="stat-card purple">
@@ -428,7 +428,7 @@
       </div>
       <div class="card">
         <p style="text-align:center; color:#831843; font-size:0.92em; margin:0 0 14px 0;">
-          <strong>₱100/hour</strong> (6AM–4PM) · <strong>₱150/hour</strong> (5PM–12AM)
+          <strong>₱100/hour</strong> (5AM–4PM) · <strong>₱150/hour</strong> (5PM–11PM)
         </p>
         <form id="bookingForm">
           <input id="name" placeholder="Full Name" required>
@@ -465,7 +465,8 @@
             <div id="rateNote" style="font-size:0.8em; opacity:0.85; margin-top:6px; text-align:right;"></div>
           </div>
           <div id="availabilityInfo" style="margin:10px 0;"></div>
-          <button class="btn" type="submit" style="width:100%;">Tap to Proceed to Payment</button>
+          <!-- Pinalitan ng type="button" para hindi mag-submit agad -->
+          <button class="btn" type="button" onclick="handleBookingSubmit(event)" style="width:100%;">Tap to Proceed to Payment</button>
         </form>
         <div id="bookingResult"></div>
       </div>
@@ -484,7 +485,7 @@
         <h2>🎯 Join Open Play</h2>
       </div>
       <div class="card">
-        <p style="text-align:center; color:#831843;"><strong>₱50 per player</strong> · 6:00 PM to 12:00 AM daily</p>
+        <p style="text-align:center; color:#831843;"><strong>₱50 per player</strong> · 6:00 PM to 11:00 PM daily</p>
         <p style="font-size:0.85em; text-align:center; color:#9d174d;">Admin picks teams each night. Walk-ins welcome on-site.</p>
         <form id="playForm" style="margin-top:14px;">
           <input id="player" placeholder="Full Name" required>
@@ -498,7 +499,8 @@
             <option value="Any level">Any level</option>
           </select>
           <div id="openPlayInfo" style="margin:10px 0;"></div>
-          <button class="btn" type="submit" style="width:100%;">Tap to Proceed to Payment</button>
+          <!-- Pinalitan ng type="button" para hindi mag-submit agad -->
+          <button class="btn" type="button" onclick="handleOpenPlaySubmit(event)" style="width:100%;">Tap to Proceed to Payment</button>
         </form>
         <div id="playResult"></div>
       </div>
@@ -637,9 +639,9 @@
         <h3 style="margin-top:0;">ZINJA Pickleball Club</h3>
         <p>📍 Malusay, Guihulngan City, Negros Oriental</p>
         <h3>Court Rental Rates</h3>
-        <p>💵 ₱100/hour (6:00 AM – 4:00 PM)<br>💵 ₱150/hour (5:00 PM – 12:00 AM)</p>
+        <p>💵 ₱100/hour (5:00 AM – 4:00 PM)<br>💵 ₱150/hour (5:00 PM – 11:00 PM)</p>
         <h3>Open Play</h3>
-        <p>🎯 ₱50 per player · 6:00 PM – 12:00 AM</p>
+        <p>🎯 ₱50 per player · 6:00 PM – 11:00 PM</p>
         <h3>Weekly Rest Period</h3>
         <p>🔴 Closed Friday 5:00 PM to Saturday 5:00 PM (PHT)</p>
       </div>
@@ -650,7 +652,7 @@
     © <span id="year"></span> ZINJA Pickleball Club · Malusay, Guihulngan City
   </footer>
 
-  <script src="zinja-app.js?v=51"></script>
+  <script src="zinja-app.js?v=52"></script>
   <script>
     document.getElementById('year').textContent = new Date().getFullYear();
 
@@ -683,13 +685,13 @@
     }, 400);
 
     const scheduleData = {
-      MON: { title: 'Monday', hours: '6:00 AM – 12:00 AM', morning: 'Available (6AM–4PM)', evening: 'Available (5PM–12AM)', status: 'open' },
-      TUE: { title: 'Tuesday', hours: '6:00 AM – 12:00 AM', morning: 'Available (6AM–4PM)', evening: 'Available (5PM–12AM)', status: 'open' },
-      WED: { title: 'Wednesday', hours: '6:00 AM – 12:00 AM', morning: 'Available (6AM–4PM)', evening: 'Available (5PM–12AM)', status: 'open' },
-      THU: { title: 'Thursday', hours: '6:00 AM – 12:00 AM', morning: 'Available (6AM–4PM)', evening: 'Available (5PM–12AM)', status: 'open' },
-      FRI: { title: 'Friday', hours: '6:00 AM – 5:00 PM', morning: 'Available (6AM–4PM)', evening: '🔴 Closed from 5:00 PM', status: 'partial' },
-      SAT: { title: 'Saturday', hours: '5:00 PM – 12:00 AM', morning: '🔴 Closed until 5:00 PM', evening: 'Available (5PM–12AM)', status: 'partial' },
-      SUN: { title: 'Sunday', hours: '6:00 AM – 12:00 AM', morning: 'Available (6AM–4PM)', evening: 'Available (5PM–12AM)', status: 'open' }
+      MON: { title: 'Monday', hours: '5:00 AM – 11:00 PM', morning: 'Available (5AM–4PM)', evening: 'Available (5PM–11PM)', status: 'open' },
+      TUE: { title: 'Tuesday', hours: '5:00 AM – 11:00 PM', morning: 'Available (5AM–4PM)', evening: 'Available (5PM–11PM)', status: 'open' },
+      WED: { title: 'Wednesday', hours: '5:00 AM – 11:00 PM', morning: 'Available (5AM–4PM)', evening: 'Available (5PM–11PM)', status: 'open' },
+      THU: { title: 'Thursday', hours: '5:00 AM – 11:00 PM', morning: 'Available (5AM–4PM)', evening: 'Available (5PM–11PM)', status: 'open' },
+      FRI: { title: 'Friday', hours: '5:00 AM – 5:00 PM', morning: 'Available (5AM–4PM)', evening: '🔴 Closed from 5:00 PM', status: 'partial' },
+      SAT: { title: 'Saturday', hours: '5:00 PM – 11:00 PM', morning: '🔴 Closed until 5:00 PM', evening: 'Available (5PM–11PM)', status: 'partial' },
+      SUN: { title: 'Sunday', hours: '5:00 AM – 11:00 PM', morning: 'Available (5AM–4PM)', evening: 'Available (5PM–11PM)', status: 'open' }
     };
 
     const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
@@ -714,9 +716,9 @@
       panel.innerHTML = `
         <h4>${d.title}${isToday ? ' <span style="color:#10b981; font-size:0.7em;">● TODAY</span>' : ''}</h4>
         <div class="schedule-row"><span class="label">🕐 Operating Hours</span><span class="value">${d.hours}</span></div>
-        <div class="schedule-row"><span class="label">☀️ Day Rate (6AM–4PM)</span><span class="value ${d.morning.includes('Closed') ? 'closed' : ''}">${d.morning}</span></div>
-        <div class="schedule-row"><span class="label">🌙 Evening Rate (5PM–12AM)</span><span class="value ${d.evening.includes('Closed') ? 'closed' : ''}">${d.evening}</span></div>
-        <div class="schedule-row"><span class="label">🎯 Open Play (6PM–12AM)</span><span class="value ${d.status === 'open' ? '' : 'closed'}">${d.status === 'open' ? '₱50 per player' : 'See above'}</span></div>
+        <div class="schedule-row"><span class="label">☀️ Day Rate (5AM–4PM)</span><span class="value ${d.morning.includes('Closed') ? 'closed' : ''}">${d.morning}</span></div>
+        <div class="schedule-row"><span class="label">🌙 Evening Rate (5PM–11PM)</span><span class="value ${d.evening.includes('Closed') ? 'closed' : ''}">${d.evening}</span></div>
+        <div class="schedule-row"><span class="label">🎯 Open Play (6PM–11PM)</span><span class="value ${d.status === 'open' ? '' : 'closed'}">${d.status === 'open' ? '₱50 per player' : 'See above'}</span></div>
       `;
     }
 
