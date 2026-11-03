@@ -147,7 +147,7 @@
     const el = $("groupSummary"); if (!el) return;
     const n = parseNames().length;
     el.innerHTML = playMode === "group"
-      ? `<div class="group-sum">👥 <b>${n}</b> player${n === 1 ? "" : "s"} × ₱${OPEN_PLAY_FEE} = <b>₱${(n * OPEN_PLAY_FEE).toLocaleString()}</b> <small>(isang bayad lang)</small></div>` : "";
+      ? `<div class="group-sum">👥 <b>${n}</b> player${n === 1 ? "" : "s"} × ₱${OPEN_PLAY_FEE} = <b>₱${(n * OPEN_PLAY_FEE).toLocaleString()}</b> <small>(one payment only)</small></div>` : "";
   }
   function setMode(m) {
     playMode = m;
@@ -236,6 +236,29 @@
       await supabaseFetch(`/rest/v1/open_play?${q}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ payment_status: "Verified" }) });
       await window.loadAdminData();
     } catch (e) { alert("Failed: " + e.message); }
+  };
+
+  // 9b) Open Play slot info (fixes "1 slots left" grammar)
+  window.updateOpenPlayInfo = async function () {
+    const d = $("playDate")?.value, box = $("openPlayInfo");
+    if (!box) return;
+    if (!d) { box.innerHTML = ""; return; }
+    const red = (t, m) => `<div style="background:#ffebee;color:#7f1d1d;padding:12px;border-radius:10px;border-left:4px solid #ef4444"><strong>${t}</strong><p style="margin:6px 0 0;font-size:.9em;color:#7f1d1d">${m}</p></div>`;
+    try {
+      const cl = checkClosureForOpenPlay(d);
+      if (cl.closed) { box.innerHTML = red("🚫 Closed on " + formatDate(d), cl.message); return; }
+      box.innerHTML = "<p>⏳ Checking available slots...</p>";
+      const cap = await checkOpenPlayCapacity(d);
+      if (cap.noCourts) { box.innerHTML = red("❌ Open Play is unavailable on " + formatDate(d), "Both courts are booked during Open Play hours (6 PM – 11 PM)."); return; }
+      const left = Math.max(cap.spotsLeft, 0);
+      const color = cap.isFull ? "#ef4444" : left < 5 ? "#ff9800" : "#4caf50";
+      const bg = cap.isFull ? "#ffebee" : left < 5 ? "#fff3e0" : "#e8f5e9";
+      const courts = cap.availableCourts.length === 2 ? "🏓 2 courts available" : `🏓 1 court available (Court ${cap.availableCourts[0]})`;
+      box.innerHTML = `<div style="background:${bg};color:#1f2937;padding:12px;border-radius:10px;border-left:4px solid ${color}">
+        <strong>Open Play on ${formatDate(d)} (6 PM – 11 PM)</strong>
+        <p style="margin:6px 0;font-size:.95em;color:#1f2937">${courts}</p>
+        <p style="margin:6px 0;font-size:.95em;color:#1f2937"><strong>${cap.currentCount}/${cap.maxSlots}</strong> spots taken — ${cap.isFull ? "<strong>FULL</strong>" : `<strong>${left}</strong> ${left === 1 ? "spot" : "spots"} left`}</p></div>`;
+    } catch (e) { console.error(e); box.innerHTML = ""; }
   };
 
   // 8) No past dates in the date pickers
