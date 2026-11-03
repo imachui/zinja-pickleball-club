@@ -93,9 +93,12 @@
   };
   const _rb = window.renderLiveBoard;
   window.renderLiveBoard = async function () {
+    const c = document.getElementById("matchupsContainer");
+    const st = c ? c.scrollTop : 0;
     await _rb();
     if (!window.__zinjaAdmin)
       document.querySelectorAll('#matchupsContainer button[onclick^="reportMatchWin"]').forEach(b => b.parentElement.remove());
+    if (c) c.scrollTop = st;
   };
   const _rw = window.reportMatchWin;
   window.reportMatchWin = function (id, team) { if (!window.__zinjaAdmin) return alert("Admin only."); return _rw(id, team); };
@@ -104,6 +107,7 @@
   const _rac = window.renderAdminContent;
   window.renderAdminContent = function () {
     if (currentAdminTab === "tournament") return _rac();
+    if (currentAdminTab === "openplay") return renderOpenPlayAdmin();
     const c = document.getElementById("adminContent");
     const isB = currentAdminTab === "bookings";
     const rows = isB ? adminData.bookings : adminData.openplay;
@@ -126,6 +130,110 @@
     if (!window.__zinjaAdmin) return alert("Admin only.");
     try {
       await supabaseFetch(`/rest/v1/${table}?id=eq.${id}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ payment_status: "Verified" }) });
+      await window.loadAdminData();
+    } catch (e) { alert("Failed: " + e.message); }
+  };
+
+  // 9) OPEN PLAY: Solo or Group (one payment, one GCash ref)
+  const $ = id => document.getElementById(id);
+  let playMode = "solo";
+  function parseNames() {
+    let names = [($("player")?.value || "").trim()];
+    if (playMode === "group") names = names.concat(($("groupNames")?.value || "").split("\n").map(x => x.trim()).filter(Boolean));
+    const seen = new Set();
+    return names.filter(n => n && !seen.has(n.toLowerCase()) && seen.add(n.toLowerCase()));
+  }
+  function updateGroupSummary() {
+    const el = $("groupSummary"); if (!el) return;
+    const n = parseNames().length;
+    el.innerHTML = playMode === "group"
+      ? `<div class="group-sum">👥 <b>${n}</b> player${n === 1 ? "" : "s"} × ₱${OPEN_PLAY_FEE} = <b>₱${(n * OPEN_PLAY_FEE).toLocaleString()}</b> <small>(isang bayad lang)</small></div>` : "";
+  }
+  function setMode(m) {
+    playMode = m;
+    document.querySelectorAll("#playMode .seg-btn").forEach(b => b.classList.toggle("active", b.dataset.mode === m));
+    $("groupBox").style.display = m === "group" ? "block" : "none";
+    $("player").placeholder = m === "group" ? "Your Name (group leader / contact person)" : "Full Name";
+    updateGroupSummary();
+  }
+  document.addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll("#playMode .seg-btn").forEach(b => b.addEventListener("click", () => setMode(b.dataset.mode)));
+    ["groupNames", "player"].forEach(i => $(i)?.addEventListener("input", updateGroupSummary));
+  });
+
+  window.handleOpenPlaySubmit = async function (ev) {
+    if (ev) ev.preventDefault();
+    const res = $("playResult"), mobile = $("playerPhone").value.trim(), playDate = $("playDate").value, lvl = $("level").value;
+    const names = parseNames();
+    if (!names.length || !mobile || !playDate || !lvl) return showResult(res, "Please complete all Open Play fields.", false);
+    if (playMode === "group" && names.length < 2) return showResult(res, "Group mode: add at least one more name, or choose Solo.", false);
+    if (names.length > 16) return showResult(res, "Maximum of 16 players per group.", false);
+    const cl = checkClosureForOpenPlay(playDate);
+    if (cl.closed) return showResult(res, "🚫 Facility Closed — " + cl.message, false);
+    try {
+      showResult(res, "⏳ Checking Open Play availability...", true);
+      const cap = await checkOpenPlayCapacity(playDate);
+      if (cap.noCourts) return showResult(res, `❌ Open Play unavailable on ${formatDate(playDate)}. Both courts are booked.`, false);
+      if (cap.spotsLeft < names.length) return showResult(res, `❌ Only ${Math.max(cap.spotsLeft, 0)} slot(s) left on ${formatDate(playDate)}, but you are registering ${names.length}.`, false);
+      const ex = await supabaseFetch(`/rest/v1/open_play?select=player_name&play_date=eq.${encodeURIComponent(playDate)}`);
+      const taken = new Set((ex || []).map(r => String(r.player_name).trim().toLowerCase()));
+      const dup = names.filter(n => taken.has(n.toLowerCase()));
+      if (dup.length) return showResult(res, `⚠️ Already registered on this date: ${dup.join(", ")}. Add a last initial if it's a different person.`, false);
+      res.innerHTML = "";
+      openPaymentModal("openplay", { name: names[0], mobile, playDate, skillLevel: lvl, names }, names.length * OPEN_PLAY_FEE);
+    } catch (e) { showResult(res, "Something went wrong. " + (e.message || "Please try again."), false); }
+  };
+
+  // show "6 players x P50" inside the payment modal
+  const _opm = window.openPaymentModal;
+  window.openPaymentModal = function (type, data, amount) {
+    _opm(type, data, amount);
+    const n = type === "openplay" && data.names ? data.names.length : 0;
+    $("modalNote").textContent = n > 1 ? `👥 ${n} players × ₱${OPEN_PLAY_FEE}` : "";
+  };
+
+  // one payment -> one row per player (same ref + same code)
+  window.processOpenPlayWithPayment = async function (data, ref) {
+    const code = generateCancelCode();
+    const names = data.names && data.names.length ? data.names : [data.name];
+    await supabaseFetch("/rest/v1/open_play", {
+      method: "POST", headers: { Prefer: "return=minimal" },
+      body: JSON.stringify(names.map(n => ({
+        player_name: n, mobile: data.mobile, play_date: data.playDate, play_time: OPEN_PLAY_START_TIME,
+        skill_level: data.skillLevel, cancellation_code: code, gcash_ref: ref, payment_status: "Pending Verification"
+      })))
+    });
+    saveCancellation("open_play", { mobile: data.mobile, code });
+    showResult($("playResult"), `✅ Thank you, ${data.name}! ${names.length} player${names.length > 1 ? "s" : ""} registered (Total ₱${(names.length * OPEN_PLAY_FEE).toLocaleString()}).\nPlease wait for the admin to verify your GCash payment (Ref: ${ref}).\nCancellation code: ${code}`, true);
+    $("playForm").reset(); setMode("solo");
+    const info = $("openPlayInfo"); if (info) info.innerHTML = "";
+    await loadOpenPlay();
+  };
+
+  // admin: one card per group, verify everyone at once
+  function renderOpenPlayAdmin() {
+    const c = $("adminContent"), rows = adminData.openplay || [];
+    if (!rows.length) { c.innerHTML = "<p>No Open Play registrations yet.</p>"; return; }
+    const groups = new Map();
+    rows.forEach(r => { const k = r.gcash_ref ? r.play_date + "|" + r.gcash_ref : "id" + r.id; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); });
+    c.innerHTML = [...groups.values()].map(g => {
+      const f = g[0], n = g.length, ok = g.every(r => r.payment_status === "Verified");
+      const members = g.map(r => `<li><span>${escapeHtml(r.player_name)}</span><button class="btn danger sm" onclick="deleteOpenPlay('${r.id}')">🗑</button></li>`).join("");
+      return `<div class="admin-card">
+        <h4>${n > 1 ? "👥 Group of " + n : "🏓 Solo"}</h4>
+        <p>📱 ${escapeHtml(f.mobile || "-")} · 📅 ${escapeHtml(f.play_date)} · 🎯 ${escapeHtml(f.skill_level || "-")}</p>
+        <p>💰 Total: <b>₱${(n * OPEN_PLAY_FEE).toLocaleString()}</b> · 💳 Ref: <b>${escapeHtml(f.gcash_ref || "—")}</b></p>
+        <p style="color:${ok ? "#10b981" : "#f59e0b"};font-weight:700">${ok ? "✅ Verified" : "⏳ " + escapeHtml(f.payment_status || "Pending")}</p>
+        <ul class="member-list">${members}</ul>
+        ${ok ? "" : `<div class="row-btns"><button class="btn alt sm" data-ref="${escapeHtml(f.gcash_ref || "")}" data-date="${escapeHtml(f.play_date)}" data-id="${f.id}" onclick="verifyOpenPlay(this)">✅ Verify ${n > 1 ? "all " + n : "payment"}</button></div>`}
+      </div>`;
+    }).join("");
+  }
+  window.verifyOpenPlay = async function (b) {
+    if (!window.__zinjaAdmin) return alert("Admin only.");
+    const q = b.dataset.ref ? `gcash_ref=eq.${encodeURIComponent(b.dataset.ref)}&play_date=eq.${encodeURIComponent(b.dataset.date)}` : `id=eq.${b.dataset.id}`;
+    try {
+      await supabaseFetch(`/rest/v1/open_play?${q}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ payment_status: "Verified" }) });
       await window.loadAdminData();
     } catch (e) { alert("Failed: " + e.message); }
   };
