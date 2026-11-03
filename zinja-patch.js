@@ -80,6 +80,34 @@
         return;
       }
     }
+    // Do not let a booking squeeze out players who already registered for Open Play
+    const bDate = document.getElementById("date")?.value, bCourt = Number(document.getElementById("court")?.value);
+    if (t && d && bDate && bCourt) {
+      const s = timeToMinutes(t);
+      if (s < OPEN_PLAY_END_MIN && OPEN_PLAY_START_MIN < s + d * 60) {
+        try {
+          const enc = encodeURIComponent(bDate);
+          const [regs, bks] = await Promise.all([
+            supabaseFetch(`/rest/v1/open_play?select=id&play_date=eq.${enc}`),
+            supabaseFetch(`/rest/v1/public_bookings?select=court,start_time,duration_hours&booking_date=eq.${enc}`)
+              .catch(() => supabaseFetch(`/rest/v1/bookings?select=court,start_time,duration_hours&booking_date=eq.${enc}`))
+          ]);
+          const players = (regs || []).length;
+          const used = new Set([bCourt]);
+          (bks || []).forEach(b => {
+            const bs = timeToMinutes(b.start_time);
+            if (bs < OPEN_PLAY_END_MIN && OPEN_PLAY_START_MIN < bs + Number(b.duration_hours) * 60) used.add(Number(b.court));
+          });
+          const courtsLeft = TOTAL_COURTS - used.size, maxPlayers = courtsLeft * PLAYERS_PER_COURT;
+          if (players > maxPlayers) {
+            if (ev) ev.preventDefault();
+            showResult(document.getElementById("bookingResult"),
+              `❌ Open Play on ${formatDate(bDate)} already has ${players} registered players. Booking Court ${bCourt} between 6 PM and 11 PM would leave ${courtsLeft} court${courtsLeft === 1 ? "" : "s"} (max ${maxPlayers} players). Please choose a different date or time.`, false);
+            return;
+          }
+        } catch (e) { console.warn("Open Play check skipped:", e); }
+      }
+    }
     return _hb(ev);
   };
 
