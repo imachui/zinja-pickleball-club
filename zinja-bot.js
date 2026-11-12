@@ -246,5 +246,18 @@
     if (d && d !== lang) setLang(d, false);
     reply(pick(text));
   });
+  // Keep the chat window above the phone keyboard
+  if (window.visualViewport) {
+    const vv = window.visualViewport, p = $("zbotPanel");
+    const fit = () => {
+      if (p.hidden) return;
+      const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      if (kb > 80) { p.style.bottom = (kb + 8) + "px"; p.style.height = Math.min(540, vv.height - 16) + "px"; }
+      else { p.style.bottom = ""; p.style.height = ""; }
+      msgs.scrollTop = msgs.scrollHeight;
+    };
+    vv.addEventListener("resize", fit);
+    vv.addEventListener("scroll", fit);
+  }
   paintLang();
 })();
